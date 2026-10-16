@@ -96,10 +96,10 @@ def diagnostic_error(exc, scope):
     if 'no configurada' in msg:
         category = 'NOT_CONFIGURED'
         hint = 'Configura la URL de este MCP en Environment de Render.'
-    elif 'https' in msg and 'url' in msg:
+    elif 'url debe usar https' in msg or ': url debe usar https' in msg or 'invalid url' in msg or 'invalid scheme' in msg:
         category = 'INVALID_URL'
         hint = 'Revisa el esquema HTTPS y la ruta /mcp.'
-    elif any(word in name.lower() for word in ('timeout','cancel')) or 'timed out' in msg:
+    elif any(word in name.lower() for word in ('timeout','cancel')) or 'timed out' in msg or 'timeout' in msg:
         category = 'TIMEOUT'
         hint = 'La conexión expiró. Verifica si el servicio MCP está activo y el timeout de Gunicorn.'
     elif any(word in msg for word in ('401','403','unauthorized','forbidden')):
@@ -117,7 +117,7 @@ def diagnostic_error(exc, scope):
     else:
         category = 'MCP_ERROR'
         hint = 'Consulta los logs de Render usando el identificador de error.'
-    return {'code': category, 'message': hint, 'error_id': error_id}
+    return {'code': category, 'message': hint, 'error_id': error_id, 'exception_type': name}
 
 def pretty_error(exc):
     if isinstance(exc, RuntimeError) and ('no configurada' in str(exc) or 'debe usar HTTPS' in str(exc)):
@@ -744,7 +744,7 @@ def mode_page(slug):
 
 @app.route('/health')
 def health():
-    return jsonify({'status':'UP','service':'Kairos Web','version':'3.9','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
+    return jsonify({'status':'UP','service':'Kairos Web','version':'4.0.1','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
 
 @app.route('/api/portfolio')
 def portfolio():
@@ -760,6 +760,22 @@ def mcp_status():
     return jsonify({'binance_configured':bool(os.getenv('BINANCE_MCP_URL')),
                     'hyperliquid_configured':bool(os.getenv('HYPERLIQUID_MCP_URL')),
                     'hyperliquid_usage':'Macro HYPE only; no Binance/HYPE price fallback'})
+
+@app.route('/api/mcp-config-check')
+def mcp_config_check():
+    checks={}
+    for name, env in [('binance','BINANCE_MCP_URL'),('hyperliquid','HYPERLIQUID_MCP_URL')]:
+        endpoint=os.getenv(env,'').strip()
+        parsed=urlsplit(endpoint) if endpoint else None
+        checks[name]={
+            'configured':bool(endpoint),
+            'https':bool(parsed and parsed.scheme=='https'),
+            'host_present':bool(parsed and parsed.hostname),
+            'path_is_mcp':bool(parsed and parsed.path.rstrip('/')=='/mcp'),
+            'contains_quotes':('\"' in endpoint or "'" in endpoint),
+            'contains_whitespace':any(c.isspace() for c in endpoint),
+        }
+    return jsonify({'status':'OK','checks':checks,'note':'El diagnóstico no revela URLs, contraseñas ni tokens.'})
 
 @app.route('/api/mcp-diagnostics')
 def mcp_diagnostics():

@@ -6,3 +6,7 @@
 - Todas las propuestas son simulaciones. No se ejecutan órdenes ni se presume inventario libre de reservas sin conciliación.
 
 Despliegue: reemplazar archivos raíz del repositorio, conservar variables Environment y desplegar en Render.
+
+
+## v4.0.1 hotfix
+La heurística de INVALID_URL ahora sólo aplica a errores realmente relacionados con el formato de la URL. El diagnóstico informa exception_type sin incluir secretos. Nueva ruta autenticada `/api/mcp-config-check` para comprobar esquema, host, path y comillas sin revelar direcciones. No modifica reglas de inversión ni datos.
