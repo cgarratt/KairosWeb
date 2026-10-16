@@ -1,0 +1,712 @@
+{
+  "schema_version": "4.0",
+  "kairos_version": "4.0.6",
+  "policy_revision": "2026-10-15.BSI-GAIN50-01",
+  "effective_date": "2026-10-15",
+  "status": "BSI_50PCT_RELATIVE_GAIN_POLICY_APPROVED; OCT05_HISTORICAL_ANCHORS; ACTIVATION_BASELINE_NOT_YET_CERTIFIED",
+  "source_hierarchy": [
+    "LATEST_USER_CONFIRMED_SNAPSHOT_AND_EXECUTED_FILLS",
+    "LATEST_EXPLICIT_USER_APPROVED_RULE",
+    "THIS_V4_MACHINE_POLICY",
+    "OLDER_ARCHIVED_REPORTS_REFERENCE_ONLY"
+  ],
+  "universe": [
+    {
+      "symbol": "BTC",
+      "aliases": [],
+      "tier": "T1",
+      "target": 0.2
+    },
+    {
+      "symbol": "ETH",
+      "aliases": [],
+      "tier": "T1",
+      "target": 0.15
+    },
+    {
+      "symbol": "SOL",
+      "aliases": [],
+      "tier": "T1",
+      "target": 0.15
+    },
+    {
+      "symbol": "LINK",
+      "aliases": [],
+      "tier": "T1",
+      "target": 0.1
+    },
+    {
+      "symbol": "HYPE",
+      "aliases": [],
+      "tier": "T1",
+      "target": 0.1
+    },
+    {
+      "symbol": "HBAR",
+      "aliases": [],
+      "tier": "T2",
+      "target": 0.05
+    },
+    {
+      "symbol": "SUI",
+      "aliases": [],
+      "tier": "T2",
+      "target": 0.05
+    },
+    {
+      "symbol": "ONDO",
+      "aliases": [],
+      "tier": "T2",
+      "target": 0.05
+    },
+    {
+      "symbol": "PUMPFUN",
+      "aliases": [
+        "PUMP"
+      ],
+      "tier": "T2",
+      "target": 0.05
+    },
+    {
+      "symbol": "VIRTUAL",
+      "aliases": [],
+      "tier": "T3",
+      "target": 0.025
+    },
+    {
+      "symbol": "PEPE",
+      "aliases": [],
+      "tier": "T3",
+      "target": 0.025
+    },
+    {
+      "symbol": "PLUME",
+      "aliases": [],
+      "tier": "T2",
+      "target": 0.05
+    }
+  ],
+  "classification": {
+    "band_pp": 1.0,
+    "infraponderado": "actual_target_diff_pp<-1",
+    "ok": "-1<=diff_pp<=+1",
+    "sobreponderado": "diff_pp>1",
+    "before_rounding": true,
+    "basis": "Kairos crypto sleeve excluding USDT and separately confirmed Trading inventory"
+  },
+  "architecture": {
+    "targets": {
+      "core": 0.4,
+      "exchange_crypto": 0.2,
+      "kairos_usdt": 0.3,
+      "trading_reserve": 0.1
+    },
+    "crypto_total_target_fraction": 0.6,
+    "total_usdt_target_fraction": 0.4,
+    "basis": "CURRENT TOTAL portfolio market value P; confirmed Kairos crypto+actual consolidated USDT including Trading reserve counted ONCE",
+    "core_exchange_actual": "value of REAL units in each custody category at contemporaneous spot",
+    "targets_are_not_custody_transfers": true,
+    "extra_Kairos_USDT_floor": 0
+  },
+  "budgets": {
+    "bags_fraction_of_P": {
+      "C1": 0.15,
+      "C2": 0.1,
+      "Balancer": 0.05
+    },
+    "globally_separate": true,
+    "no_auto_reallocation_between_bags": true,
+    "extra_liquidity_above_total_usdt_target_goes_to": "Balancer",
+    "extra_liquidity_formula": "max(0, physical consolidated USDT - 0.40*current P)",
+    "balancer_capacity": "5%P unspent + excess above40%P, capped at real uncommitted Kairos cash after preserving unused C1/C2 budgets and fees",
+    "structural_buy_assignment": "HYPE existing orders belong to structural C1/C2 25%P aggregate, NOT Balancer; individual tranche allocation pending exchange reconciliation",
+    "no_fills_inferred": true,
+    "recalculate_on_confirmed_fill": true
+  },
+  "liquidity": {
+    "confirmed_venues_USDT": {
+      "Binance": 16375.0,
+      "KuCoin": 4650.0,
+      "Hyperliquid": 3000.0,
+      "Quantfury": 7225.0,
+      "MEXC": 0.0,
+      "Metamask": 0.0,
+      "Phantom": 0.0
+    },
+    "confirmed_consolidated_USDT": 31250.0,
+    "confirmed_at": "2026-10-15",
+    "includes_quantfury": true,
+    "trading_real_fixed_USDT": 7225.0,
+    "trading_real_source": "user screenshot 2026-10-15, exact clock time unverified",
+    "trading_real_update_only": [
+      "new_user_confirmed_Quantfury_or_Trading_snapshot",
+      "verified_EXECUTED_TradingBot_fill_affecting_reserve"
+    ],
+    "trading_target_10pct_not_real_balance": true,
+    "operating_USDT_at_confirmed_snapshot": 24025.0,
+    "operating_formula": "physical consolidated USDT - current confirmed Quantfury reserve",
+    "active_buy_commitment_effect": "subtract from spendable operating Kairos cash, not from physical consolidated balance",
+    "unfilled_sell_effect": "NO proceeds until verified fill",
+    "never_double_count_quantfury": true,
+    "capture_time_precision": "DATE_ONLY_SCREENSHOT"
+  },
+  "purchases": {
+    "C1_fib_retracement": 0.5,
+    "C2_fib_retracement": 0.618,
+    "reference_fibs": [
+      0.382,
+      0.782
+    ],
+    "C1_fraction_P": 0.15,
+    "C2_fraction_P": 0.1,
+    "composition_filter": "INFRA below -1pp on current real crypto sleeve",
+    "allocation": "proportional to real deficit, cap at real deficit and verified cash, never force spending",
+    "structural_gate": "O1 confirmed by closed daily candle OR scoped manually approved valid anchors; O4 requires confirmed O3 high",
+    "invalid_structure_action": "SUSPEND_NEW_PROPOSALS, review existing orders manually",
+    "post_fill": "deduplicate verified exchange fill; update holdings net, cash fees, weights, P, bags, O1/SL fib references; flag misaligned pending orders",
+    "new_units_custody": "100pct Exchange/Disponible even BTC unless confirmed custody transfer",
+    "no_additional_10pct_floor": true,
+    "proposals_only": true
+  },
+  "balancer": {
+    "timeframe": "1D",
+    "base_target_fraction_P": 0.05,
+    "extra_above_40pct_USDT_eligible": true,
+    "buy_filter": "INFRA only; real eligible cash AFTER all structural reserved bags, BUY commitments, fees",
+    "sell_filter": "Conventional SOBRE >+1pp only Exchange free units; BSI >20 capture 50pct eligible relative gain is bounded EXCEPTION to SOBRE, still Exchange-only, BTC NEVER SELL, Core/HODL protected",
+    "allowed_funds": "real verified Balancer allocation + surplus40%; confirmed own net sales AFTER fill",
+    "pending_orders_do_not_cover_deficit": true,
+    "price_zones": "ADVICE ONLY, no gate with RSI or 1D/4H",
+    "avoid_duplicate_actionable_at_1930": true,
+    "alerts_daily_section": "FULL_DAILY_BALANCER_ANALYSIS_AND_PROPOSALS_NOT_JUST_INFORMATIONAL",
+    "proposals_only": true,
+    "btc_strength_index": {
+      "enabled": true,
+      "name": "BTC Strength Index",
+      "applies_to": "ALL 11 altcoins in universe except BTC",
+      "formula_pct": "100 * ((P_alt_t/P_alt_anchor)/(P_BTC_t/P_BTC_anchor)-1)",
+      "anchor": "LEGACY_APPROVED_REFERENCE_FROZEN_UNTIL_EXPLICIT_APPROVAL_OF_BINANCE_MCP_OCT05_ANCHORS; see state/BSI_OCT05_MCP_ANCHOR_CANDIDATES_v5.3.5.json",
+      "missing_anchor_or_quote_action": "BSI_DATA_ERROR; do not invent or propose sale",
+      "trigger_strictly_gt_pct": 20.0,
+      "sale_fraction_first_of_real_unreserved_exchange": "DEPRECATED_v5.3.3: fraction now multiplies TOTAL ALT units, then capped to free Exchange.",
+      "sale_fraction_incremental_of_real_unreserved_exchange": "DEPRECATED_v5.3.3: fraction now multiplies TOTAL ALT units, then capped to free Exchange.",
+      "deduplication": "Per-token activation BSI + fully reconciled high-water mark; guard pending/partially filled BSI SELL plan by ID until reconciliation. Partial fills credited once and never raise full high-water mark by themselves.",
+      "sale_inventory": "real Exchange units MINUS outstanding SELL reservations, NEVER Core/HODL and NEVER BTC",
+      "surplus_proceeds_destination": "100pct net confirmed ALT SELL proceeds to PROPOSED BTC BUY, NOT USDT retained as strategic destination",
+      "btc_purchase_requires": "confirmed ALT sell fill, liquidity 40% protected, BTC quote freshness and separate confirmed BUY fill before BTC units update",
+      "btc_custody": "100pct Exchange/Disponible until actual confirmed transfer",
+      "if_liquidity_below_40pct": "DEFER BTC CONVERSION; retain proceeds temporarily unconverted pending 40pct protection and clearly label status",
+      "does_not_spend": "C1, C2, Quantfury Trading reserve or unverified sale proceeds",
+      "execution": "PROPOSALS_ONLY",
+      "historical_anchor_ref": "state/BSI_HISTORICAL_ANCHORS.json",
+      "historical_anchor_utc": "2026-10-05T00:00:00Z",
+      "historical_reference_confirmation": "2026-10-15 USER CONFIRMED reference October 5 2026",
+      "signal_activation_as_of": "2026-10-14T22:35:00-05:00",
+      "post_approval_baseline_status": "PENDING_VERIFIED_SIMULTANEOUS_QUOTES_AFTER_RULE_APPROVAL; first Oct15 morning reading informative not synchronized/certified",
+      "historical_vs_new_policy": "Oct05->activation historical excess reported INFO ONLY. Only BSI increase verified after eligibility-baseline timestamp can trigger NEW_BSI_EXCESS; independent HWM of truly monetized fills. Do not classify historical BSI>20 as new signal.",
+      "incremental_sale_threshold_pct": "BSI>20 trigger and BSI>max(0,activation_BSI,last_confirmed_monetized_BSI) for eligible incremental gain; historical gain not monetizable.",
+      "source_caveats": "Current BSI quotes exclusively synchronized Binance Spot 4H; historical Oct05 legacy cross-venue anchors require MCP recertification review before new actionable SELL; DO NOT fallback to images.",
+      "relative_gain_capture_fraction": 0.5,
+      "capture_basis": "50pct of eligible relative BTC outperformance, not only gain above threshold; trigger strictly BSI>20; no retroactive historical gain",
+      "partial_fill_safety": "New BSI proposals BLOCKED while any BSI sell plan is pending or partially filled/unreconciled. Actual fill quantity and ID posted once; cancel/reconcile remainder before next plan. No duplicate sale of same relative gain.",
+      "bsi_gain50_quantity_basis": "TOTAL_CONFIRMED_ALT_UNITS_INCLUDING_HODL_CORE_STRATEGIC_EXCHANGE",
+      "bsi_gain50_quantity_rule": "min(total_ALT_units * (0.5*(BSI-max(0,activation_BSI,last_fill_monetized_BSI))/(100+BSI)), exchange_units - verified_reserved_SELL_units)",
+      "bsi_gain50_core_hodl": "INCLUDE_IN_BASE_NOT_ELIGIBLE_FOR_SALE",
+      "bsi_gain50_total_missing": "NO_BSI_ORDER_PROPOSAL_DATA_ERROR",
+      "bsi_capture_basis_revision": "2026-10-15.BSI-GAIN50-02-TOTAL-UNITS",
+      "bsi_source_migration_status": "PENDING_USER_APPROVAL_MCP_HISTORIC_ANCHOR_RECONCILIATION"
+    },
+    "execution_channel_daily": "ALERTAS_1D_1930_UNIFIED",
+    "daily_proposal_authority": "ALERTAS_1D_1930_BALANCEO_DE_PORTAFOLIO"
+  },
+  "sales": {
+    "never_sell": [
+      "BTC"
+    ],
+    "ordinary_default_total_usdt_fraction": 0.4,
+    "ordinary_override": "only explicitly GREATER target for that single run",
+    "ordinary_buy_allowed": false,
+    "ordinary_sales_when_cash_at_or_above_target": false,
+    "ordinary_sell_filter": "SOBRE >+1pp, only real Disponible, prioritize ALTA then NEUTRA then BAJA if explicit need; stop at target/available",
+    "O3": "structural wave-specific sales based on valid closed candles and available units; BTC NEVER SELL; net confirmed proceeds split 30pct proposed BTC purchase and 70pct retained USDT, subject to liquidity floor",
+    "O5": {
+      "sell_fraction_by_tier": {
+        "T1": 0.7,
+        "T2": 1.0,
+        "T3": 1.0
+      },
+      "BTC_never_sell_override": true,
+      "tranche_fractions": [
+        0.2,
+        0.2,
+        0.3,
+        0.3
+      ],
+      "frozen_basis": "confirmed entry units at O5 start; never re-freeze after sales",
+      "sell_confirmation": "closed-candle valid structural confirmation; touch alone no closure",
+      "T2_net_proceeds_to_BTC_fraction": 0.7,
+      "T2_net_proceeds_to_USDT_fraction": 0.3,
+      "T3_sale_fraction_confirmed": 1.0,
+      "t3_conversion_status": "CONFIRMED_70BTC_30USDT",
+      "sequential_tranche_bookkeeping": "cumulative fills are allocated against earlier quotas; per-tranche open orders separately subtracted",
+      "no_duplicate_fills_or_sales": true,
+      "close_only_after_structural_gate": true,
+      "BTC_from_T2_conversions": "BTC from verified O3/O5 ALT sells (T1/T2/T3 O5); BTC buy units ONLY after separately confirmed BTC buy fill; 100pct Exchange pending transfer",
+      "conversion_requires_fresh_btc_spot_seconds": 300,
+      "T3_net_proceeds_to_BTC_fraction": 0.7,
+      "T3_net_proceeds_to_USDT_fraction": 0.3,
+      "T3_net_proceeds_action": "SPLIT_AFTER_CONFIRMED_REAL_O5_SELL_70PCT_BTC_PURCHASE_PROPOSAL_30PCT_USDT_RETAINED",
+      "T3_conversion_policy_confirmed_on": "2026-10-14",
+      "T1_net_proceeds_to_BTC_fraction": 0.7,
+      "T1_net_proceeds_to_USDT_fraction": 0.3,
+      "net_proceeds_split_applicability": "ALL O5 eligible ALT tokens, including T1 excluding BTC",
+      "conversion_floor_protection": "40pct structural USDT floor; defer BTC acquisition if immediate split would violate floor; report deviation transparently"
+    },
+    "execution": "PROPOSALS_ONLY",
+    "O3_proceeds": {
+      "BTC_fraction": 0.3,
+      "USDT_fraction": 0.7,
+      "basis": "NET confirmed ALT sale proceeds",
+      "BTC_purchase_after_separate_fill": true,
+      "liquidity_40pct_floor_priority": true
+    }
+  },
+  "tradingbot": {
+    "timeframe": "4H",
+    "enabled_manual_only": true,
+    "exclusive_real_reserve": "Quantfury confirmed 7225 until newer valid update",
+    "weight_filter": false,
+    "max_open_lots": 4,
+    "max_allocation_fraction_of_reference_reserve_per_new_purchase": 0.25,
+    "max_leverage": "5x (if appropriately authorized by user and venue)",
+    "risk_limit_per_operation_fraction": 0.025,
+    "risk_limit_accumulated_fraction": 0.1,
+    "stop_loss_required": true,
+    "proposals_only": true,
+    "fill_accounting": "update reserve only for real TradingBot executed fill or confirmed new Quantfury snapshot; never inferred fill",
+    "no_auto_orders": true,
+    "scheduled_proposals_in_alertas_4H": true,
+    "manual_execution_only": true,
+    "scheduled_4H_section": "TradingBot — Oportunidades Long / Short",
+    "required_rr_minimum": 2.0,
+    "max_account_loss_per_trade_pct": 2.5,
+    "quantfury_fees_assumption": "no commissions; financing and slippage not assumed zero",
+    "instrument_availability_required": true,
+    "closed_4H_ohlc_required": true,
+    "current_open_positions_reconciliation_required_for_actionable_setups": true,
+    "risk_basis": "2.5% of actual account value as monetary loss at SL, not a mandatory 2.5% entry/stop price-distance",
+    "risk_amount_usd_reference_at_reserve_7225": 180.625,
+    "reserve_per_entry_usd_reference_at_7225": 1806.25,
+    "max_aggregate_risk_usd_reference_at_7225": 722.5
+  },
+  "market": {
+    "fresh_spot_required_for_current_valuation": true,
+    "1H_4H_1D_require_closed_OHLC": true,
+    "providers": [
+      "KAIROS_BINANCE_MCP",
+      "KAIROS_HYPERLIQUID_MCP"
+    ],
+    "source_policy": "POLITICA_FUENTES_MCP_v5.3.5.json",
+    "price_image_fallback_forbidden": true,
+    "purpose_based_routing": {
+      "portfolio_spot": {
+        "all_tokens": "KAIROS_BINANCE_MCP",
+        "tool": "get_kairos_spot_prices",
+        "markets": "spot_USDT"
+      },
+      "BSI_current_and_new_reference": {
+        "all_tokens": "KAIROS_BINANCE_MCP",
+        "tool": "get_kairos_bsi_4h_closes",
+        "timeframe": "4h",
+        "strict_same_close_utc": true,
+        "no_hyperliquid_fallback": true
+      },
+      "indicators_tradingbot_alerts": {
+        "all_tokens": "KAIROS_BINANCE_MCP",
+        "tool": "get_kairos_indicators",
+        "closed_only": true,
+        "require_sufficient_history": true
+      },
+      "macro_fibo_cycle_phase": {
+        "HYPE": "KAIROS_HYPERLIQUID_MCP",
+        "all_others": "KAIROS_BINANCE_MCP",
+        "hype_tool": "get_hype_spot_ohlcv",
+        "other_tool": "get_kairos_cycle_phase",
+        "hype_market": "HYPE/USDC Spot @107",
+        "other_market": "token/USDT Binance Spot",
+        "hype_aggregated_week": "UTC Monday-Sunday derived from 7 consecutive CLOSED daily candles",
+        "pivots": "5L/5R weekly, weekly-close BOS, Elliott",
+        "do_not_mix_sources_in_one_candle_series": true
+      },
+      "hype_intraday_operational": {
+        "source": "KAIROS_BINANCE_MCP",
+        "tool": "get_kairos_ohlcv",
+        "note": "Binance price analysis recent only; Hyperliquid may be used in an explicitly separate supplementary historical report"
+      }
+    },
+    "do_not_mix_HYPE_USDC_with_Binance_USDT": true,
+    "no_non_MCP_price_fallback": true,
+    "failure_status": "MCP DATA ERROR; NO UNVERIFIED PRICE/NO NEW TRADING PROPOSAL",
+    "machine_enforcement_across_legacy_modules": "NOT_FULLY_INTEGRATED"
+  },
+  "alerts": {
+    "hourly_at_minute": 15,
+    "timezone": "America/Lima",
+    "daily_at_local": "19:30",
+    "four_hour_at_local": [
+      "03:30",
+      "07:30",
+      "11:30",
+      "15:30",
+      "23:30"
+    ],
+    "other_hours": "1H at :15 excluding 4H 03/07/11/15/23 and 1D19",
+    "report_even_zero_alerts": true,
+    "distance_fraction": 0.01,
+    "prealert_fraction": 0.05,
+    "action_first_mobile_dashboard": true,
+    "one_hourly_task_only": false,
+    "daily_1930_balancer_section": "FULL_BALANCEO_DE_PORTAFOLIO_PROPOSALS_WITHOUT_SEPARATE_TASK",
+    "report_tables_1H_4H": 4,
+    "report_tables_1D": 5,
+    "daily_1930_bsi_section": "FULL_ANALISIS_BSI_DISTINCT_FROM_CONVENTIONAL_REBALANCING",
+    "report_sections_1D_required": [
+      "Resumen",
+      "Maestro de Unidades y Composición",
+      "Maestro O2 y Alertas 1D",
+      "Alertas accionables",
+      "Balanceo de Portafolio",
+      "Análisis BSI"
+    ],
+    "report_sections_1H_4H_exclude": [
+      "Balanceo de Portafolio",
+      "Análisis BSI"
+    ],
+    "one_timeframe_per_local_hour": true,
+    "one_hour_local_slots": [
+      "00:15",
+      "01:15",
+      "02:15",
+      "04:15",
+      "05:15",
+      "06:15",
+      "08:15",
+      "09:15",
+      "10:15",
+      "12:15",
+      "13:15",
+      "14:15",
+      "16:15",
+      "17:15",
+      "18:15",
+      "20:15",
+      "21:15",
+      "22:15"
+    ],
+    "report_sections_4H_required": [
+      "Resumen",
+      "Maestro de Unidades y Composición",
+      "Maestro O2 y Alertas 4H",
+      "Alertas accionables",
+      "TradingBot — Oportunidades Long / Short"
+    ],
+    "tradingbot_in_4H_always": true,
+    "tradingbot_in_1H": false,
+    "tradingbot_in_1D": false,
+    "tradingbot_4H_execution": "SCHEDULED_SCAN_AND_PROPOSALS_ONLY",
+    "schedule_revision": "2026-10-15.SCHEDULE-1H15-4H-TRADINGBOT-01"
+  },
+  "portfolio": {
+    "custody_snapshot_date": "2026-10-15",
+    "crypto_units_snapshot_date": "2026-10-15",
+    "core_actual_from_units_spot": true,
+    "exchange_actual_from_units_spot": true,
+    "VIRTUAL_units_mismatch": 0.0,
+    "VIRTUAL_policy": "Real Exchange=1776.35, Core=0, total=1776.35 confirmed by screenshot; old split discrepancy resolved; no inferred trade",
+    "HYPE_current_custody": {
+      "HODL": 100.0,
+      "Core": 50.0,
+      "Exchange": 32.5,
+      "total": 182.5
+    },
+    "HYPE_net_increase_vs_prior_units": 9.5,
+    "HYPE_delta_fill_status": "NOT_CONFIRMED_BY_TRANSACTION_EVIDENCE",
+    "user_snapshot_source": "evidence/SNAPSHOT_PORTAFOLIO_2026-10-15.png"
+  },
+  "unconfirmed_items": {
+    "exchange_orders": "8 BUY user-confirmed placed and pending with ZERO fills, reported commitment USDT13623.94. Three HYPE order IDs/venues/C1-C2 tags unknown; six SELL older report not reconfirmed.",
+    "alerts_balancer_duplicate": "Maintain existing approved Alertas 1D section informational; one Balancer daily task is authoritative for actionable rebalance",
+    "BSI_anchors": "Historical OPEN anchors 2026-10-05 verified via user charts for BTC+11ALT. Separate POST-APPROVAL activation snapshot BTC+11ALT remains pending timestamp certification; until that time no actionable BSI SELL.",
+    "HYPE_delta": "Net+9.5 HYPE vs prior, HODL-50/Core+50/Exchange+9.5; no transaction IDs, provenance not verified, do not infer fill or trading bucket",
+    "quantfury_delta": "-275 USDT from previous snapshot, no tradingbot trade inferred",
+    "hyperliquid_delta": "-760 USDT from previous snapshot, no fill inferred",
+    "snapshot_time": "2026-10-15 DATE_ONLY, user screenshot no exact exchange timestamp"
+  },
+  "modes": {
+    "balancer": {
+      "enabled": true,
+      "execution": "manual_and_unified_alertas_1D_1930_proposals",
+      "role": "1D composition rebalance"
+    },
+    "compras": {
+      "enabled": true,
+      "execution": "manual_only",
+      "role": "O2/O4 structural accumulation"
+    },
+    "ventas": {
+      "enabled": true,
+      "execution": "manual_only",
+      "role": "liquidity sales / O3-O5 structural sales"
+    },
+    "forecast": {
+      "enabled": true,
+      "execution": "manual_only",
+      "role": "O2→O5 price-path simulation + BTC net accumulation and scenario comparisons",
+      "scenarios": [
+        "KAIROS_BTC_OFICIAL",
+        "CONTROL_SIN_BSI",
+        "LEGADO_O5_50_50",
+        "BTC_ACELERADO_HIPOTETICO",
+        "HOLD_SIN_OPERAR"
+      ]
+    },
+    "resumen": {
+      "enabled": true,
+      "execution": "manual_and_scheduled_proposals",
+      "role": "portfolio/accounting audit"
+    },
+    "benchmark": {
+      "enabled": true,
+      "execution": "manual_only",
+      "role": "compare projected strategies"
+    },
+    "tradingbot": {
+      "enabled": true,
+      "execution": "manual_mode_and_scheduled_4H_alertas_SCAN_ONLY_no_trade_execution",
+      "role": "4H tactical spot/leveraged proposals"
+    },
+    "alertas": {
+      "enabled": true,
+      "execution": "scheduled_three_timeframe_tasks_and_manual_proposals_only",
+      "role": "1H :15, 4H :30 with TradingBot candidates, 1D 19:30 Balancer and BSI"
+    },
+    "rotation": {
+      "enabled": true,
+      "execution": "manual_only",
+      "role": "token replacements scenario"
+    },
+    "monte_carlo": {
+      "enabled": true,
+      "execution": "manual_only",
+      "role": "risk/distribution simulations"
+    }
+  },
+  "automation_policy": {
+    "one_hourly_alert": false,
+    "balancer_schedule": null,
+    "alerts_schedule": "three non-overlapping alert tasks: 1H eighteen non-reserved hours at :15; 4H at 03:30/07:30/11:30/15:30/23:30; 1D at 19:30 America/Lima",
+    "summary_schedule": "Sunday 20:00 America/Lima",
+    "no_duplicate_balancer_actions": true,
+    "tradingbot_schedule": false,
+    "alerts_daily_contains_balancer": true,
+    "alerts_daily_contains_bsi": true,
+    "balancer_no_separate_schedule": true,
+    "kairos_active_task_purposes": [
+      "ALERTAS_1H_AT_15_18_SLOTS",
+      "ALERTAS_4H_TRADINGBOT_5_SLOTS",
+      "ALERTAS_1D_BALANCER_BSI_AT_1930",
+      "RESUMEN_WEEKLY_SUNDAY_2000"
+    ],
+    "alerts_1H_schedule": "daily at 00:15,01:15,02:15,04:15,05:15,06:15,08:15,09:15,10:15,12:15,13:15,14:15,16:15,17:15,18:15,20:15,21:15,22:15 America/Lima",
+    "alerts_4H_schedule": "daily 03:30,07:30,11:30,15:30,23:30 America/Lima",
+    "alerts_1D_schedule": "daily 19:30 America/Lima",
+    "tradingbot_embedded_in_alerts_4H": true,
+    "active_alerts_tasks": 3,
+    "active_kairos_tasks_total": 4,
+    "timeframe_slots_per_day": {
+      "1H": 18,
+      "4H": 5,
+      "1D": 1
+    },
+    "schedule_revision": "2026-10-15.SCHEDULE-1H15-4H-TRADINGBOT-01"
+  },
+  "controls": {
+    "source_of_truth": "Confirmed user snapshot + verified exchange fills supersede historical ZIP snapshots",
+    "limit_price_touch_is_not_fill": true,
+    "no_custody_transfer_without_confirmation": true,
+    "no_orders_placed_or_modified_by_engine": true,
+    "order_reconciliation_blocks_execution_ready_recommendations": true,
+    "stale_spot_blocks_current_market_valuations": true,
+    "snapshot_prior_values_are_not_current_live_data": true,
+    "O5_T3_sale_proceeds_destination_confirmed": "70pct_to_BTC_purchase_proposal_30pct_retained_USDT",
+    "O5_conversion_never_automatic": true,
+    "tier3_target_core_fraction": 0.0,
+    "tier3_target_exchange_fraction": 1.0,
+    "O3_sale_proceeds_destination_confirmed": "30pct_to_BTC_purchase_proposal_70pct_retained_USDT",
+    "BSI_new_policy_priority": "2026-10-15.BSI-GAIN50-01"
+  },
+  "capital_history": {
+    "initial_total_usd": 150000,
+    "initial_kairos_usd": 135000,
+    "initial_trading_usd": 15000,
+    "trading_loss_realized_user_declared_usd": 9444,
+    "crypto_historical_loss_estimated_assumption_usd": 30485,
+    "do_not_double_count": true
+  },
+  "custody_target_by_tier": {
+    "T1": {
+      "core_total_fraction": 0.7,
+      "exchange_fraction": 0.3,
+      "core_blocked_fraction": "PRESERVE_ACTUAL_BLOCKED",
+      "core_strategic_fraction": "REMAINDER_TO_70PCT_WHEN_FEASIBLE",
+      "protected_blocked_floor": true
+    },
+    "T2": {
+      "core_blocked_fraction": 0.0,
+      "core_strategic_fraction": 0.3,
+      "exchange_fraction": 0.7
+    },
+    "T3": {
+      "core_blocked_fraction": 0.0,
+      "core_strategic_fraction": 0.0,
+      "exchange_fraction": 1.0,
+      "affected_tokens": [
+        "PEPE",
+        "VIRTUAL"
+      ]
+    }
+  },
+  "custody_target_rules": {
+    "basis": "PER_TOKEN_TOTAL_UNITS_NOT_TOTAL_PORTFOLIO_VALUE",
+    "new_fills_initial_exchange_fraction": 1.0,
+    "existing_core_units_move_automatically": false,
+    "T3_target_changed_on": "2026-10-14",
+    "T3_reclassification": "PROPOSAL_ONLY_AFTER_RECONCILED_CUSTODY_AND_EXPLICIT_USER_APPROVAL",
+    "architecture_global_remains_40_20_30_10": true,
+    "O5_T3_sale_and_proceeds_rules_unmodified": true
+  },
+  "forecast_btc": {
+    "enabled": true,
+    "analysis_only": true,
+    "policy_revision": "2026-10-14.FORECAST-BTC-01",
+    "source": "confirmed snapshot + explicitly supplied future price paths and simulated sales; never treat future prices as spot",
+    "stages": [
+      "O2",
+      "O3",
+      "O4",
+      "O5"
+    ],
+    "operational_reference": "KAIROS_BTC_OFICIAL",
+    "main_kpis": [
+      "BTC_final_units",
+      "BTC_added_units",
+      "BTC_growth_pct",
+      "portfolio_P_USDT",
+      "ending_USDT_pct",
+      "BTC_equivalent_wealth",
+      "drawdown_by_stages_pct",
+      "deferred_BTC_USDT",
+      "HODL_BTC_protected"
+    ],
+    "baseline_BTC_units": 0.10732267,
+    "BSI": {
+      "applies_all_altcoins": true,
+      "strict_trigger_pct": 20,
+      "anchor": "first simultaneously verified sample; simulations may use explicitly hypothetical O2 anchor NOT live",
+      "first_excess_fraction": "DEPRECATED: old (BSI-20)/(100+BSI) rule superseded by v4.0.6; DO NOT USE",
+      "incremental_high_water_mark_required": true,
+      "no_double_monetization": true,
+      "first_relative_gain_capture_fraction": "0.5 * max(0,BSI-max(0,activation_BSI)) / (100+BSI), ONLY if BSI>20",
+      "incremental_relative_gain_capture_fraction": "0.5 * max(0,BSI-max(0,activation_BSI,last_confirmed_monetized_BSI))/(100+BSI), ONLY if BSI>20",
+      "gain_capture_fraction": 0.5,
+      "historical_gain_block": "No monetization of historic gains from Oct05 until post-approval certified activation; simulated O2 anchor hypothetical only.",
+      "partial_fill_guard": "Do not count partial sell fills as full monetization HWM; block duplication pending reconciliation.",
+      "gain50_unit_basis": "TOTAL_ALT_HOLDINGS",
+      "execution_limit": "FREE_EXCHANGE_AFTER_SELL_RESERVATIONS"
+    },
+    "wave_destinations": {
+      "O3": {
+        "BTC": 0.3,
+        "USDT": 0.7
+      },
+      "O5": {
+        "BTC": 0.7,
+        "USDT": 0.3
+      }
+    },
+    "alt_sales_only_from_exchange": true,
+    "BTC_NEVER_SELL": true,
+    "BTC_new_units_custody": "Exchange; simulations are not actual fills",
+    "liquidity_minimum_total_usdt_fraction": 0.4,
+    "protect_commitments_and_trading_real": true,
+    "defer_conversion_when_floor_unavailable": true,
+    "scenario_controls": {
+      "CONTROL_SIN_BSI": "O3/O5 current splits without BSI to isolate indicator contribution",
+      "KAIROS_BTC_OFICIAL": "O3 30/70 O5 70/30 BSI>20 captures 50% eligible BTC-relative gain; USDT40 floor",
+      "LEGADO_O5_50_50": "O5 historical split50/50, O3 normalized to30/70, BSI off",
+      "BTC_ACELERADO_HIPOTETICO": "O3 50/50, O5 100/0, BSI>20; sensitivity ONLY; no policy change",
+      "HOLD_SIN_OPERAR": "passive existing basket; same starting capital, no trades"
+    },
+    "T2_custody_sensitivity": {
+      "preserve_live": "30Core/70Exchange",
+      "hypothetical_alternatives": [
+        "50Core/50Exchange",
+        "0Core/100Exchange"
+      ],
+      "same_price_path_and_fills": true,
+      "no_live_custody_changes": true
+    },
+    "no_actual_orders_or_custody_transfers": true,
+    "optional_capital_externo": "not assumed, report separately from existing P and USDT",
+    "required_market_data": "same timestamp per stage for all12 and explicit stages/fees, otherwise DATA_ERROR"
+  },
+  "sync_audit": {
+    "canonical_version": "4.0.6",
+    "canonical_policy_revision": "2026-10-15.BSI-GAIN50-01",
+    "all_modes_count": 10,
+    "all_modes_require_same_policy": true,
+    "bsi_historical_anchor_status": "ACCEPTED_BY_USER_ORIGINAL_CHARTS",
+    "bsi_postapproval_activation_status": "UNCERTIFIED_MISSING_SIMULTANEOUS_QUOTES",
+    "strict_bsi_sell_gate": "ACTIVATION_CERTIFIED_REQUIRED",
+    "regular_sales": "NO O3_O5 SPLIT",
+    "wave_O3_net_sale_to_BTC": 0.3,
+    "wave_O5_net_sale_to_BTC": 0.7,
+    "bsi_relative_gain_capture_fraction": 0.5,
+    "legacy_o5_50_50": "SIMULATION_ONLY",
+    "core_movement_auto": false,
+    "orders_auto": false
+  },
+  "unified_1D_reporting": {
+    "revision": "2026-10-15.UNIFIED-ALERTAS-BALANCER-BSI-01",
+    "same_kairos_version": "4.0.6",
+    "policy_reference": "2026-10-15.BSI-GAIN50-01",
+    "only_scheduled_execution": "ALERTAS at 19:30 America/Lima",
+    "no_balancer_separate_report": true,
+    "balanceo_section_title": "Balanceo de Portafolio",
+    "bsi_section_title": "Análisis BSI",
+    "mandatory_sections_even_zero_or_data_error": true,
+    "balanceo_execution": "complete rebalance analysis and proposal calculation, not informational cross-check",
+    "bsi_execution": "BSI per altcoin, separate from conventional SELL; no actionable SELL until postapproval activation baseline certified",
+    "inventory_deduplication": "Conventional SELL and BSI SELL must share the same real unreserved Exchange inventory; show conflict, do not propose same units twice",
+    "capital_controls": "Balancer 5% P + verified eligible >40% USDT, C1/C2 ring-fenced, real Quantfury reserve excluded",
+    "no_actual_trades": true,
+    "manual_balancer_remains_enabled": true,
+    "timeframe_1H_4H_do_not_include_new_sections": true,
+    "no_inferred_fills": true,
+    "4H_has_tradingbot_section": true,
+    "schedule_revision": "2026-10-15.SCHEDULE-1H15-4H-TRADINGBOT-01"
+  },
+  "execution_schedule_revision": "2026-10-15.SCHEDULE-1H15-4H-TRADINGBOT-01",
+  "version": "5.0.0",
+  "v5_reference": {
+    "mcp": "BINANCE_MCP_v5.md",
+    "baseline": "state/BSI_ACTIVATION_BASELINE_CERTIFIED.json",
+    "balancer": "BALANCER_PRESENTACION_Y_LIQUIDEZ_v5.md",
+    "priority": "v5 documents prevail"
+  },
+  "master_release_version": "5.3.3",
+  "latest_narrow_policy_revision": "2026-10-15.BSI-GAIN50-02-TOTAL-UNITS",
+  "legacy_policy_revision_note": "policy_revision retained for backwards-compatible v4 consumers; latest BSI capture policy is latest_narrow_policy_revision and balancer.btc_strength_index.bsi_capture_basis_revision",
+  "master_source_revision": "2026-10-16.MCP-SOURCES-ONLY-01",
+  "kairos_master_version": "5.3.5"
+}

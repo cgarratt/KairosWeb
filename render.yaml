@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: kairos-web
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers 2 --threads 4 --timeout 65 --bind 0.0.0.0:$PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: KAIROS_WEB_USER
+        value: kairos
+      - key: KAIROS_WEB_PASSWORD
+        sync: false
+      - key: BINANCE_MCP_URL
+        sync: false
+      - key: HYPERLIQUID_MCP_URL
+        sync: false
+      - key: BINANCE_MCP_TOKEN
+        sync: false
+      - key: HYPERLIQUID_MCP_TOKEN
+        sync: false
