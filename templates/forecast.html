@@ -166,6 +166,8 @@ function runCycle(){
  const tradeable=Math.max(0,cash0-qf);const pct=Number($('forecast-deploy').value);
  const requested=Math.min(tradeable,P*pct/100);const allocation=purchasePlan(requested,fc.tokens,Number(fc.current.crypto_value));
  const assets=fc.tokens.map((t,i)=>{const c=fc.custody[t.token]||[0,0,0], w=byToken.get(t.token);return {token:t.token,hodl:Number(c[0]),core:Number(c[1]),ex:Number(c[2]),prices:w&&w.values?w.values:null,spot:Number(t.price),o2alloc:(allocation.balance[i]+allocation.extra[i])*Number($('o2-budget').value)};});
+ const protectedHodl=new Map(assets.filter(a=>a.token==='BTC'||fc.tokens.find(t=>t.token===a.token)?.tier==='T1').map(a=>[a.token,a.hodl]));
+ const initialBtc=assets.find(a=>a.token==='BTC').hodl+assets.find(a=>a.token==='BTC').core+assets.find(a=>a.token==='BTC').ex;
  let cash=cash0,btcFromSales=0; const history=[];
  function valuation(step){let crypto=0,blocked=0; for(const a of assets){const price=a.prices?.[step]||a.spot;crypto+=(a.hodl+a.core+a.ex)*price;blocked+=a.hodl*price;}return {crypto,cash,total:crypto+cash,btc:assets.find(a=>a.token==='BTC').hodl+assets.find(a=>a.token==='BTC').core+assets.find(a=>a.token==='BTC').ex,blocked};}
  history.push(valuation(-1));
@@ -198,6 +200,14 @@ function runCycle(){
    btcAsset.ex+=gained;btcFromSales+=gained;
    cash+=finalProceeds-converted;
  }else{cash+=finalProceeds;}
+ // Invariantes de custodia y conservación del capital (sin comisiones).
+ for(const [symbol,qty] of protectedHodl){const a=assets.find(x=>x.token===symbol);if(Math.abs(a.hodl-qty)>1e-8)throw new Error('HODL T1 modificado: '+symbol)}
+ if(assets.find(a=>a.token==='BTC').hodl+assets.find(a=>a.token==='BTC').core+assets.find(a=>a.token==='BTC').ex < initialBtc-1e-8)throw new Error('BTC NEVER SELL incumplido');
+ for(const a of assets){if(a.token==='BTC')continue;const tier=fc.tokens.find(t=>t.token===a.token)?.tier;
+   if(Math.abs(a.core)>1e-8||Math.abs(a.ex)>1e-8||(tier!=='T1'&&Math.abs(a.hodl)>1e-8))throw new Error('Liquidación Post-O5 incompleta: '+a.token);
+ }
+ const assetsValue=assets.reduce((sum,a)=>sum+(a.hodl+a.core+a.ex)*(a.prices?.[5]||a.spot),0);
+ if(Math.abs((assetsValue+cash)-(valuation(5).total))>0.02)throw new Error('Diferencia de conciliación Post-O5');
  history.push(valuation(5));
  const last=history[5];$('o5-total').textContent=money(last.total);$('o5-btc').textContent=last.btc.toFixed(8)+' BTC';$('o5-cash').textContent=money(last.cash);$('o5-hodl').textContent=(last.crypto>0?(last.blocked/last.crypto*100).toFixed(1)+'%':'N/D');
  const entries=[['Cripto',x=>x.crypto],['USDT (incl. Trading)',x=>x.cash],['Patrimonio',x=>x.total],['BTC (unidades)',x=>x.btc]];

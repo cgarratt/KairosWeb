@@ -159,3 +159,9 @@ Campana global con contador rojo de notificaciones no leídas, bandeja Alertas 1
 - Control en orden O2, O3, O4, O5; proceeds SELL 0/25/30/50/70/75/100% BTC.
 - Columna Post-O5 liquida Core/Exchange no-BTC y HODL T2/T3; BTC y HODL T1 protegidos.
 - Escenario sin órdenes, comisiones ni anclas certificadas.
+
+
+## v4.2.5
+- TradingBot: tablas LONG/SHORT 4H exploratorias con datos OHLCV Binance bajo consulta explícita y simulador manual de entrada, SL, TP y R:R.
+- Forecast: comprobaciones de inventario protegido Tier 1, BTC NEVER SELL y liquidación Core/Exchange Post-O5.
+- Notificaciones: receptor existente conservado; nuevo diagnóstico de bridge, integración automática con ChatGPT pendiente por limitación de conectividad.

@@ -839,7 +839,7 @@ def mode_page(slug):
         return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master='5.3.5'), 503
     try:
         payload = build_mode_payload(slug, dashboard, observed)
-        return render_template('balancer.html' if slug=='balancer' else 'trade_sim.html' if slug in ('compras','ventas') else 'forecast.html' if slug=='forecast' else 'mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master='5.3.5')
+        return render_template('balancer.html' if slug=='balancer' else 'trade_sim.html' if slug in ('compras','ventas') else 'forecast.html' if slug=='forecast' else 'tradingbot.html' if slug=='tradingbot' else 'mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master='5.3.5')
     except Exception as exc:
         error_id = uuid.uuid4().hex[:10]
         app.logger.exception('Kairos MODE_RENDER slug=%s ID=%s',slug,error_id)
@@ -897,6 +897,28 @@ def notifications_ingest():
             conn.executemany('INSERT OR IGNORE INTO notifications (id,kind,severity,title,detail,token,observed_at,created_at) VALUES (?,?,?,?,?,?,?,?)',prepared)
             inserted=conn.total_changes-before
     return jsonify({'status':'OK','received':len(prepared),'inserted':inserted,'duplicates':len(prepared)-inserted}),202
+
+
+# Technical candidates based only on fully closed Binance Spot 4H candles.
+# Heuristic screening, never claim certified Kairos TradingBot signals.
+_TB_SET=('BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO')
+@app.route('/api/tradingbot/candidates')
+def tradingbot_candidates():
+    symbol=request.args.get('token','ETH').upper()
+    if symbol not in _TB_SET:return jsonify({'status':'INVALID_TOKEN'}),400
+    try:
+        response=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',{'symbol':symbol+'USDT','interval':'4h','limit':100})
+        if response.get('status')!='OK':return jsonify({'status':'DATA_ERROR','reason':'OHLCV 4H no disponible'}),503
+        return jsonify({'status':'OK','source':'Binance MCP','interval':'4h','classification':'UNCONFIRMED_TECHNICAL_SCREEN','raw':response})
+    except Exception as exc:
+        diag=diagnostic_error(exc,'tradingbot:ohlcv:'+symbol)
+        return jsonify({'status':'DATA_ERROR','diagnostic':diag}),503
+
+@app.route('/api/notifications/bridge-status')
+def notifications_bridge_status():
+    # A ChatGPT automation does not automatically forward runs here.
+    return jsonify({'status':'AWAITING_EXTERNAL_SENDER','receiver_configured':bool(os.getenv('KAIROS_ALERTS_INGEST_TOKEN')),
+                    'message':'Connect an authorized external sender to the existing /api/notifications/ingest endpoint. ChatGPT tasks are not automatically synced.'})
 
 @app.route('/health')
 def health():

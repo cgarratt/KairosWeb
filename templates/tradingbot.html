@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block title %}Kairos TradingBot · Simulador{% endblock %}
+{% block content %}
+<section class="panel"><h2>TradingBot · LONG / SHORT</h2><p class="sub">Filtro técnico exploratorio 4H; entradas, SL y TP propuestos, sin señales certificadas ni órdenes.</p><div class="grid">
+<div class="span-6"><h3 style="color:#138b66">Candidatos LONG</h3><div style="overflow:auto"><table><thead><tr><th>Token</th><th>Entrada</th><th>SL</th><th>TP</th><th>R:R</th></tr></thead><tbody id="longrows"><tr><td colspan="5">Selecciona un token y consulta velas cerradas.</td></tr></tbody></table></div></div>
+<div class="span-6"><h3 style="color:#bd3454">Candidatos SHORT</h3><div style="overflow:auto"><table><thead><tr><th>Token</th><th>Entrada</th><th>SL</th><th>TP</th><th>R:R</th></tr></thead><tbody id="shortrows"><tr><td colspan="5">Selecciona un token y consulta velas cerradas.</td></tr></tbody></table></div></div></div>
+<p class="footer-note">Las tablas se llenan únicamente cuando las 100 velas cerradas 4H permiten calcular un candidato válido. Un mercado sin estructura clara devuelve SIN SEÑAL, no una recomendación inventada.</p></section>
+<section class="panel" style="margin-top:16px"><h2>Simulador de operación</h2><p class="sub">Entrada manual, riesgo por distancia al SL y relación R:R objetivo. Los niveles automáticos son matemáticos, no pivotes certificados.</p>
+<div class="tb-fields"><label>Token <select id="tb-token">{% for x in ['BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO'] %}<option value="{{x}}" {% if x=='ETH' %}selected{% endif %}>{{x}}</option>{% endfor %}</select></label><label>Dirección <select id="tb-side"><option>LONG</option><option>SHORT</option></select></label><label>Entrada USDT <input type="number" id="tb-entry" min="0" step="any" placeholder="Precio manual"></label><label>Riesgo SL <select id="tb-risk"><option value="0.01">Conservador · 1%</option><option value="0.02" selected>Moderado · 2%</option><option value="0.03">Agresivo · 3%</option></select></label><label>R:R objetivo <select id="tb-rr"><option value="1.5">1:1.5</option><option value="2" selected>1:2</option><option value="3">1:3</option></select></label></div>
+<button class="btn primary" type="button" id="tb-market">Consultar estructura 4H</button><p id="tb-source" class="sub">Sin consulta técnica · La entrada puede establecerse manualmente.</p>
+<div class="tb-results"><div class="kpi"><div class="label">Stop Loss</div><div class="value" id="tb-sl">—</div></div><div class="kpi"><div class="label">Take Profit</div><div class="value" id="tb-tp">—</div></div><div class="kpi"><div class="label">Riesgo / beneficio</div><div class="value" id="tb-out-rr">—</div></div></div><p class="footer-note">Simulación read-only. Apalancamiento, tamaño de posición, comisiones y P&L de Quantfury no incluidos.</p>
+</section>
+<style>.tb-fields{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:18px 0}.tb-fields label{font-size:12px;font-weight:700;color:#456}.tb-fields input,.tb-fields select{display:block;width:100%;margin-top:7px;border:1px solid #cfddec;border-radius:9px;padding:10px;background:white;color:#17365b}.tb-results{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0}@media(max-width:900px){.tb-fields{grid-template-columns:repeat(2,1fr)}}@media(max-width:580px){.tb-fields,.tb-results{grid-template-columns:1fr}}</style>
+<script>
+const tEl=id=>document.getElementById(id);const tf=n=>Number(n).toLocaleString('en-US',{maximumFractionDigits:8});
+function tbCalc(){const e=Number(tEl('tb-entry').value),r=Number(tEl('tb-risk').value),rr=Number(tEl('tb-rr').value),sign=tEl('tb-side').value==='LONG'?1:-1;
+if(!(e>0)){tEl('tb-sl').textContent=tEl('tb-tp').textContent=tEl('tb-out-rr').textContent='—';return;}
+const sl=e*(1-sign*r),tp=e*(1+sign*r*rr);tEl('tb-sl').textContent='$'+tf(sl);tEl('tb-tp').textContent=tp>0?'$'+tf(tp):'No válido';tEl('tb-out-rr').textContent=tp>0?'1:'+rr:'N/D';}
+['tb-token','tb-entry','tb-risk','tb-rr','tb-side'].forEach(id=>tEl(id).addEventListener('input',tbCalc));
+tEl('tb-market').addEventListener('click',async()=>{const sym=tEl('tb-token').value;tEl('tb-source').textContent='Consultando velas cerradas 4H…';
+try{let res=await fetch('/api/tradingbot/candidates?token='+encodeURIComponent(sym));let data=await res.json();if(!res.ok||data.status!=='OK')throw Error('Datos OHLCV no disponibles');
+const raw=data.raw;let candidates=raw.candles||raw.records||raw.data||raw.ohlcv||[];
+if(!Array.isArray(candidates)||candidates.length<30)throw Error('Respuesta sin suficientes velas');
+const vals=candidates.map(c=>Array.isArray(c)?{o:+c[1],h:+c[2],l:+c[3],c:+c[4]}:{o:+(c.open??c.o),h:+(c.high??c.h),l:+(c.low??c.l),c:+(c.close??c.c)}).filter(x=>x.c>0&&x.h>=x.l);
+if(vals.length<30)throw Error('Velas insuficientes');const last=vals[vals.length-1],prev=vals.slice(-21,-1),ma=prev.reduce((n,c)=>n+c.c,0)/prev.length;
+const low=Math.min(...prev.map(x=>x.l)),high=Math.max(...prev.map(x=>x.h));
+const long=last.c>ma&&last.c>prev[prev.length-1].c,short=last.c<ma&&last.c<prev[prev.length-1].c;
+const direction=long?'LONG':short?'SHORT':null;
+const sl=direction==='LONG'?low:high,dist=Math.abs(last.c-sl);
+const valid=direction&&dist>0&&(direction==='LONG'?sl<last.c:sl>last.c);
+let cells='<tr><td>'+sym+'</td><td>$'+tf(last.c)+'</td><td>$'+tf(sl)+'</td><td>$'+tf(direction==='LONG'?last.c+2*dist:last.c-2*dist)+'</td><td>1:2</td></tr>';
+tEl('longrows').innerHTML=valid&&long?cells:'<tr><td colspan="5">Sin candidato LONG confirmado.</td></tr>';
+tEl('shortrows').innerHTML=valid&&short?cells:'<tr><td colspan="5">Sin candidato SHORT confirmado.</td></tr>';
+tEl('tb-source').textContent=valid?'Filtro heurístico 4H · NO señal Kairos certificada · '+sym:'Sin estructura clara · '+sym;
+if(valid){tEl('tb-side').value=direction;tEl('tb-entry').value=last.c;tbCalc();}
+}catch(e){tEl('tb-source').textContent='DATA ERROR: '+e.message;tEl('longrows').innerHTML=tEl('shortrows').innerHTML='<tr><td colspan="5">Sin datos técnicos verificables.</td></tr>';}});
+</script>
+{% endblock %}
