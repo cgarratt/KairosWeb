@@ -5,7 +5,7 @@
 .liq-labels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}.liq-labels>div{display:flex;flex-direction:column;gap:6px;background:#f6f9fe;border:1px solid #dce7f6;border-radius:13px;padding:12px}.liq-labels i{width:13px;height:13px;border-radius:3px}.liq-labels strong{font-size:20px;color:#154a94}.liq-labels small{color:#60758a}.allocation-track{height:26px}@media(max-width:750px){.liq-labels{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:450px){.liq-labels{grid-template-columns:1fr}}
 </style>{% endblock %}
 {% block content %}
-<div class="grid"><section class="panel span-12 hero"><div><h2>Balancer</h2><p>Gestión de liquidez · Composición · Escenarios post-balance</p><div class="tabs"><a href="/" class="tab-link">Dashboard</a><a href="/modes" class="tab-link">Modos Kairos</a><a href="/mode/compras" class="tab-link">Compras</a><a href="/mode/ventas" class="tab-link">Ventas</a></div></div><span class="badge ok">● LIVE MCP · PRELIMINAR</span></section>
+<div class="grid"><section class="panel span-12 hero"><div><h2>Balancer</h2><p>Gestión de liquidez · Composición · Escenarios post-balance</p></div><span class="badge ok">● LIVE MCP · PRELIMINAR</span></section>
 <section class="panel span-12"><div class="liquidity-head"><div><h2>1. Gestión de liquidez y reserva Balancer</h2><p class="sub">Desglose del patrimonio P, piso estructural del 40% y asignación de bolsas.</p></div><span class="badge info">No ejecuta órdenes</span></div>
 <div class="liq-flow">
 <div class="liq-step"><small>◈ Patrimonio P</small><strong>{{ '${:,.0f}'.format(payload.current.P) }}</strong><small>Cripto + USDT consolidado</small></div>

@@ -42,7 +42,7 @@
   </section>
   <section class="panel span-6">
     <h3>Top 5 · Rentabilidad del portafolio</h3>
-    <p class="sub">P&L no realizado (%) contra costo promedio de adquisición verificado</p>
+    <p class="sub">P&L no realizado (%) contra costo promedio declarado en snapshot</p>
     <div class="bar-list" id="profit-bars"><div class="muted">Calculando…</div></div>
     <p class="footer-note" id="profit-note">No se estiman costos de adquisición faltantes.</p>
   </section>
@@ -174,8 +174,8 @@ const bsi=(d.bsi_historical?.rows||[]).filter(x=>x.bsi!==null).slice(0,6);setBar
 const profit=d.profitability||{};
 const winners=profit.top5||[];
 if(winners.length){setBars('profit-bars', winners.map(x=>({label:x.token,value:Math.abs(x.pnl_pct),display:(x.pnl_pct>=0?'+':'')+num(x.pnl_pct,1)+'% · '+money(x.pnl_usdt),tone:x.pnl_pct>=0?'ok':'danger'})));}
-else {$('profit-bars').textContent='Sin costos promedio certificados. Registrar costos de adquisición para calcular rentabilidad real.';}
-$('profit-note').textContent=`${profit.verified_count||0} de ${d.rows.length} tokens con costos certificados · Ranking solo entre datos disponibles.`;
+else {$('profit-bars').textContent='No hay costos promedio declarados disponibles para calcular P&L.';}
+$('profit-note').textContent=`${profit.verified_count||0} de ${d.rows.length} tokens con costos declarados · Estimación sin conciliación independiente.`;
 const btcPrice=rows.find(r=>r.token==='BTC')?.price; if(!Number.isFinite(btcPrice)||btcPrice<=0)throw Error('Precio BTC inválido');
 $('positions').innerHTML=rows.map(r=>`<tr><td>${tokenHtml(r.token)}<div class="muted">${r.tier}</div></td><td>${num(r.units,r.units>100000?0:5)}</td><td>${num(r.hodl_units,r.units>100000?0:5)}</td><td>${num(r.core_units,r.units>100000?0:5)}</td><td>${num(r.exchange_units,r.units>100000?0:5)}</td><td>${r.price>=1?money(r.price,2):money(r.price,6)}</td><td>${money(r.value)}</td><td>${num(r.value / btcPrice,8)} BTC</td><td>${pct(r.weight*100)}</td><td>${pct(r.target*100)}</td><td><span class="pill ${r.status}">${r.status}</span></td></tr>`).join('');
 $('positions-total').innerHTML=`<tr style="font-weight:800;background:#edf4fc"><td colspan="6">Total patrimonio (incluye USDT)</td><td>${money(d.total_value)}</td><td>${num(d.total_value/btcPrice,8)} BTC</td><td>100% patrimonio</td><td colspan="2">Snapshot + MCP</td></tr>`;

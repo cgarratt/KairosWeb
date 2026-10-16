@@ -6,12 +6,7 @@
     <div>
       <h2>{{ mode.name }}</h2>
       <p>{{ mode.subtitle }} · {{ mode.description }}</p>
-      <div class="tabs">
-        <a href="/" class="tab-link">Volver al dashboard</a>
-        {% for slug,name in [('balancer','Balancer'),('compras','Compras'),('ventas','Ventas'),('forecast','Forecast')] %}
-        <a href="/mode/{{ slug }}" class="tab-link {% if mode.slug==slug %}active{% endif %}">{{ name }}</a>
-        {% endfor %}
-      </div>
+      
     </div>
     <div class="badge {% if error %}danger{% else %}ok{% endif %}">{% if error %}● DATA ERROR{% else %}● {{ payload.status_badge }}{% endif %}</div>
   </section>

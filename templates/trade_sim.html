@@ -6,7 +6,7 @@
 </style>{% endblock %}
 {% block content %}
 <div class="grid">
-<section class="panel span-12 hero"><div><h2>{{ mode.name }}</h2><p>{{ mode.description }}</p><div class="tabs"><a class="tab-link" href="/">Dashboard</a><a class="tab-link" href="/modes">Modos Kairos</a><a class="tab-link" href="/mode/balancer">Balancer</a><a class="tab-link {% if mode.slug=='compras' %}active{% endif %}" href="/mode/compras">Compras</a><a class="tab-link {% if mode.slug=='ventas' %}active{% endif %}" href="/mode/ventas">Ventas</a></div></div><div class="badge info">SIMULACIÓN · SIN ÓRDENES</div></section>
+<section class="panel span-12 hero"><div><h2>{{ mode.name }}</h2><p>{{ mode.description }}</p></div><div class="badge info">SIMULACIÓN · SIN ÓRDENES</div></section>
 <section class="panel span-12"><h2>{{ 'Despliegue de USDT para C1/C2' if mode.slug=='compras' else 'Objetivo de liquidez USDT' }}</h2><p class="sub">{{ 'Primero se atienden los déficits; el excedente se invierte entre todos los tokens, respetando la distribución objetivo.' if mode.slug=='compras' else 'Mover el slider vende primero activos sobreponderados y luego distribuye proporcionalmente entre los demás, hasta el límite de Exchange.' }}</p>
 <div class="sim-layout" style="margin:18px 0">
 <div class="sim-metric"><small>◉ Patrimonio estimado</small><b id="portfolio-metric">—</b><small>Spot MCP + snapshot</small></div>

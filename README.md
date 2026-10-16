@@ -127,3 +127,14 @@ La página /modes y /api/modes solo muestran Balancer, Compras, Ventas, TradingB
 - `/mode/portafolio` continúa independiente del MCP, mostrando exclusivamente cifras históricas confirmadas.
 - Se conservan las reglas de inversión y las demás páginas sin cambios.
 - Para mayor disponibilidad, Render Free puede requerir un plan sin suspensión o una fuente de mercado siempre activa.
+
+## v4.2.0 — Top 5 rentabilidad
+Se incorporan 12 costos promedio declarados en captura del 16/10/2026, sin modificar saldos de unidades del snapshot ni las fuentes MCP. El indicador es P&L no realizado estimado y no incluye pérdidas realizadas del portafolio integral.
+
+
+## v4.2.1 — Cambios consolidados
+- Portafolio: capital inicial, capital vivo registrado, Spot opcional por custodia; montos sobre barras.
+- Forecast: trayectoria al inicio, elimina cuatro tramos, tabla de dos filas por token (precio y unidades/valor).
+- Selectores O2–O5 compartidos por tabla y gráfico, con cambios dinámicos.
+- Menú global consistente para ocho destinos (dashboard, modos y seis modos activos).
+- Sin ejecución de órdenes. Spot ausente -> N/D en Portafolio, conserva ledger histórico.

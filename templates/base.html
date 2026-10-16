@@ -25,6 +25,7 @@
     .list{margin:0;padding-left:18px}.list li{margin:7px 0;color:#334257;line-height:1.5}
     .footer-note{font-size:12px;color:var(--muted);margin-top:18px;line-height:1.5}.tabs{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}.tab-link{padding:10px 14px;border-radius:999px;background:#fff;border:1px solid var(--line);font-weight:700}.tab-link.active{background:var(--blue);color:#fff;border-color:var(--blue)}
     @media (max-width:1100px){.span-8,.span-6,.span-4,.span-3{grid-column:span 12}.kpis{grid-template-columns:repeat(2,1fr)}.mode-grid{grid-template-columns:1fr}}
+    .global-nav{display:flex;gap:9px;overflow-x:auto;white-space:nowrap;padding:5px 1px 14px;margin-bottom:10px;scrollbar-width:thin}.global-nav-link{display:inline-block;flex-shrink:0;padding:9px 15px;border:1px solid #d5e2f4;border-radius:24px;background:#fff;font-size:13px;font-weight:700}.global-nav-link.active{background:#205aaf;color:#fff;border-color:#205aaf}.topbar{margin-bottom:8px}
     @media (max-width:680px){.shell{padding:14px}.kpis{grid-template-columns:1fr}.bar-row{grid-template-columns:90px 1fr auto}.hero h2{font-size:26px}.topbar{align-items:flex-start;flex-direction:column}}
     .brand{min-width:0}.brand h1{letter-spacing:.015em}.brand .logo{flex-shrink:0}
     .mode-card:hover,.tab-link:hover{border-color:#89bff0;box-shadow:0 12px 25px rgba(27,82,148,.12)}
@@ -84,13 +85,12 @@
           <p>Master {{ master }} · Solo lectura · Datos Spot por MCP</p>
         </div>
       </div>
-      <div class="top-actions">
-        <a class="btn" href="/">Dashboard</a>
-        <a class="btn" href="/modes">Modos Kairos</a>
-        <a class="btn" href="/api/portfolio" target="_blank" rel="noreferrer">API Portfolio</a>
-        <a class="btn" href="/api/mcp-diagnostics" target="_blank" rel="noreferrer">MCP Status</a>
-      </div>
     </div>
+    <nav class="global-nav" aria-label="Navegación Kairos">
+      {% for url,title in [('/', 'Dashboard'),('/modes','Modos Kairos'),('/mode/portafolio','Portafolio'),('/mode/balancer','Balancer'),('/mode/compras','Compras'),('/mode/ventas','Ventas'),('/mode/tradingbot','TradingBot'),('/mode/forecast','Forecast')] %}
+      <a class="global-nav-link {{ 'active' if request.path == url else '' }}" href="{{ url }}">{{ title }}</a>
+      {% endfor %}
+    </nav>
     {% block content %}{% endblock %}
   </div>
 

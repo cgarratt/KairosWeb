@@ -238,7 +238,7 @@ def forecast_sensitivity(rows, usdt):
             'official_forecast':'NOT_CONNECTED','note':'NO es Forecast O2-O5 ni predicción. Falta motor y precios hipotéticos por onda.'}
 
 def portfolio_profitability(rows):
-    """Rank unrealized P&L by verified average acquisition cost. Missing != zero."""
+    """Rank indicative unrealized P&L by user-declared average acquisition cost. Missing != zero."""
     results=[]
     for row in rows:
         basis=COST_BASIS.get(row['token'])
@@ -248,7 +248,7 @@ def portfolio_profitability(rows):
         results.append({'token':row['token'],'cost_basis_usdt':basis,'pnl_usdt':round(pnl,2),
                         'pnl_pct':round((row['price']/basis-1)*100,2)})
     return {'status':'PARTIAL' if len(results)<len(rows) else 'OK',
-            'basis':'P&L no realizado vs costo promedio certificado',
+            'basis':'P&L no realizado estimado vs costo promedio declarado por usuario',
             'verified_count':len(results),'missing_count':len(rows)-len(results),
             'top5':sorted(results,key=lambda r:r['pnl_pct'],reverse=True)[:5]}
 
@@ -803,8 +803,24 @@ def integral_portfolio_page():
     alive = sum(x['actual_usdt'] for x in segments if x['key'] != 'lost')
     lost = next(x['actual_usdt'] for x in segments if x['key'] == 'lost')
     gain_to_recover = (base / alive - 1) * 100 if alive > 0 else None
+    # Spot figures are optional; historical reconciliation must remain available during MCP outages.
+    spot_breakdown = None
+    spot_observed = None
+    try:
+        spot_observed, live = load_live_dashboard()
+        by_name = {r['token']:r for r in live['rows']}
+        core_value = sum((r['hodl_units']+r['core_units'])*r['price'] for r in live['rows'])
+        exchange_value = sum(r['exchange_units']*r['price'] for r in live['rows'])
+        cash_total = live['usdt_total']
+        qf = live['trading_reserve']
+        spot_breakdown = {'core':core_value,'exchange':exchange_value,
+                          'liquidity':cash_total-qf,'trading':qf,
+                          'total':live['total_value'],'source':'Binance MCP + snapshot de unidades'}
+    except Exception as exc:
+        app.logger.info('Integral portfolio using historical ledger; live pricing unavailable: %s',type(exc).__name__)
     return render_template('portfolio_integral.html', master='5.3.5', segments=segments,
                            base=base, alive=alive, lost=lost, gain_to_recover=gain_to_recover,
+                           spot=spot_breakdown, spot_observed=spot_observed,
                            source_note=values['source_note'], total_recorded=sum(x['actual_usdt'] for x in segments),
                            total_target=sum(x['target_usdt'] for x in segments))
 
