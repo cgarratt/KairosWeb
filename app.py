@@ -7,6 +7,7 @@ import time
 import threading
 import uuid
 import logging
+import sqlite3
 import httpx
 from datetime import datetime, timezone
 from pathlib import Path
@@ -48,7 +49,7 @@ MCP_TIMEOUT_SECONDS = 35
 
 @app.before_request
 def authenticate():
-    if request.path == '/health':
+    if request.path in ('/health', '/api/notifications/ingest'):
         return None
     password = os.getenv('KAIROS_WEB_PASSWORD', '')
     if not password:
@@ -844,6 +845,58 @@ def mode_page(slug):
         app.logger.exception('Kairos MODE_RENDER slug=%s ID=%s',slug,error_id)
         diag = {'code':'MODE_RENDER','error_id':error_id, 'message':'Error interno al generar el reporte del modo (no es un error MCP).'}
         return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master='5.3.5'), 500
+
+
+# Alertas 1H + Quick Wins inbox. Never synthesizes notifications from price movement.
+# SQLite on Render Free is ephemeral unless a persistent disk/external DB is configured.
+_NOTIFICATION_DB = Path(os.getenv('KAIROS_NOTIFICATIONS_DB', str(BASE / 'data' / 'notifications.sqlite3')))
+_NOTIFICATION_LOCK = threading.Lock()
+
+def _notification_conn():
+    _NOTIFICATION_DB.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(_NOTIFICATION_DB), timeout=10)
+    conn.execute("CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, kind TEXT NOT NULL, severity TEXT NOT NULL, title TEXT NOT NULL, detail TEXT NOT NULL, token TEXT, observed_at TEXT NOT NULL, created_at TEXT NOT NULL)")
+    return conn
+
+@app.route('/api/notifications', methods=['GET'])
+def notifications_list():
+    with _NOTIFICATION_LOCK:
+        with _notification_conn() as conn:
+            records=conn.execute('SELECT id,kind,severity,title,detail,token,observed_at,created_at FROM notifications ORDER BY created_at DESC LIMIT 100').fetchall()
+    return jsonify({'status':'OK','source':'ALERTAS_1H_INGEST','records':[dict(zip(('id','kind','severity','title','detail','token','observed_at','created_at'),r)) for r in records], 'persistence':'EPHEMERAL_UNLESS_PERSISTENT_DISK'})
+
+@app.route('/api/notifications/ingest', methods=['POST'])
+def notifications_ingest():
+    expected=os.getenv('KAIROS_ALERTS_INGEST_TOKEN','').strip()
+    supplied=request.headers.get('X-Kairos-Token','')
+    if not expected:
+        return jsonify({'status':'CONFIG_REQUIRED','message':'Configure KAIROS_ALERTS_INGEST_TOKEN'}),503
+    if not supplied or not secrets.compare_digest(supplied,expected):
+        return jsonify({'status':'UNAUTHORIZED'}),401
+    payload=request.get_json(silent=True)
+    if not isinstance(payload,dict): return jsonify({'status':'INVALID_PAYLOAD'}),400
+    items=payload.get('notifications')
+    if not isinstance(items,list) or len(items)>50: return jsonify({'status':'INVALID_PAYLOAD'}),400
+    now=datetime.now(timezone.utc).isoformat()
+    allowed_kinds={'ALERTA','QUICK_WIN'}
+    allowed_severity={'INFO','WATCH','WARNING','CRITICAL'}
+    prepared=[]
+    for x in items:
+        if not isinstance(x,dict): return jsonify({'status':'INVALID_ITEM'}),400
+        key=x.get('id'); kind=x.get('kind'); severity=x.get('severity','INFO');title=x.get('title');detail=x.get('detail','');observed=x.get('observed_at')
+        if not all(isinstance(v,str) for v in (key,kind,severity,title,detail,observed)) or kind not in allowed_kinds or severity not in allowed_severity or not key or len(key)>128 or not title or len(title)>180 or len(detail)>1200:
+            return jsonify({'status':'INVALID_ITEM'}),400
+        try: datetime.fromisoformat(observed.replace('Z','+00:00'))
+        except ValueError: return jsonify({'status':'INVALID_TIMESTAMP'}),400
+        token=x.get('token')
+        if token is not None and (not isinstance(token,str) or len(token)>20):return jsonify({'status':'INVALID_TOKEN'}),400
+        prepared.append((key,kind,severity,title,detail,token,observed,now))
+    with _NOTIFICATION_LOCK:
+        with _notification_conn() as conn:
+            before=conn.total_changes
+            conn.executemany('INSERT OR IGNORE INTO notifications (id,kind,severity,title,detail,token,observed_at,created_at) VALUES (?,?,?,?,?,?,?,?)',prepared)
+            inserted=conn.total_changes-before
+    return jsonify({'status':'OK','received':len(prepared),'inserted':inserted,'duplicates':len(prepared)-inserted}),202
 
 @app.route('/health')
 def health():

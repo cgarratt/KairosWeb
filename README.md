@@ -146,3 +146,16 @@ Se incorporan 12 costos promedio declarados en captura del 16/10/2026, sin modif
 - Simulador exploratorio: parámetros porcentuales O3/O5, compra O4 y reparto BTC/USDT se identifican como SUPUESTOS, NO como políticas certificadas. Usa pivotes algebraicamente inferidos y omite operaciones para tokens sin niveles. No reconcilia LIMIT ni fees.
 - Totales por onda: USDT (incluyendo Trading una sola vez), Cripto, BTC, Patrimonio. Al final O5, inventario por HODL/Core/Exchange y valorización. No mueve nuevas compras a custodia Core/HODL.
 - Ninguna orden real; todo es lectura y simulación.
+
+
+## v4.2.3 Notificaciones
+Campana global con contador rojo de notificaciones no leídas, bandeja Alertas 1H/Quick Wins, refresco cada 60 segundos, lectura por navegador y deduplicación por id.
+**Integración:** crear `KAIROS_ALERTS_INGEST_TOKEN` como secreto en Render. `POST /api/notifications/ingest` con cabecera `X-Kairos-Token: <secret>`, `Content-Type: application/json` y cuerpo `{"notifications":[{"id":"alert-unique-20261016","kind":"ALERTA","severity":"WATCH","title":"Título","detail":"Detalle","token":"BTC","observed_at":"2026-10-16T20:30:00-05:00"}]}`. `kind` permite `ALERTA` y `QUICK_WIN`. Este endpoint **no está conectado automáticamente** a las tareas de ChatGPT: requiere un emisor autorizado (webhook/integración).
+**Persistencia:** SQLite local de Render Free es efímero y puede perder notificaciones al reiniciar o redeplegar. Para producción, usar almacenamiento persistente externo o Render Disk en un plan compatible. La lectura se guarda en `localStorage` por navegador/dispositivo. No se crean alertas ficticias ni órdenes.
+
+
+## v4.2.4 — Forecast O2 / Post-O5
+- O2 incorpora control 0,25,50,75,100% del monto calculado por slider superior.
+- Control en orden O2, O3, O4, O5; proceeds SELL 0/25/30/50/70/75/100% BTC.
+- Columna Post-O5 liquida Core/Exchange no-BTC y HODL T2/T3; BTC y HODL T1 protegidos.
+- Escenario sin órdenes, comisiones ni anclas certificadas.
