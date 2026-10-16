@@ -165,3 +165,23 @@ Campana global con contador rojo de notificaciones no leídas, bandeja Alertas 1
 - TradingBot: tablas LONG/SHORT 4H exploratorias con datos OHLCV Binance bajo consulta explícita y simulador manual de entrada, SL, TP y R:R.
 - Forecast: comprobaciones de inventario protegido Tier 1, BTC NEVER SELL y liquidación Core/Exchange Post-O5.
 - Notificaciones: receptor existente conservado; nuevo diagnóstico de bridge, integración automática con ChatGPT pendiente por limitación de conectividad.
+
+
+## v4.2.6 — Hotfix composición Post-O5
+- Corregido el desfase: el estado Post-O5 era history[6], pero KPIs y tabla final usaban history[5] (O5 antes de la liquidación).
+- Los KPIs y la tabla final ahora consultan el último estado de la simulación.
+- Comprobación patrimonial compara con la foto de O5 **antes** de la liquidación y comprueba que el patrimonio se preserve sin comisiones.
+- Mantiene BTC NEVER SELL, HODL bloqueado T1 y el reparto Proceeds SELL.
+
+## v4.2.7 TradingBot
+- LONG encima de SHORT, hasta 4 oportunidades cada uno ordenadas por score exploratorio 4H.
+- Validaciones por oportunidad y estado WATCH, sin señales certificadas.
+- Simulador SL % y R:R manuales, Poder de Trading QF configurable, tamaño, margen, P&L.
+
+
+## v4.2.8 — Campana retirada
+Se eliminó el botón y panel de notificaciones del encabezado global, incluido el polling del navegador. Se conservan los endpoints backend existentes sin alterar TradingBot, Forecast ni los MCP.
+
+
+## v4.2.9: Tablas ordenables
+Todas las tablas HTML de una sola fila de cabecera permiten alternar ascendente/descendente por columna, ordenando importes, porcentajes y texto sin consultas MCP adicionales. Las filas tfoot permanecen al final; las dos filas de cada token en la tabla de ondas Forecast se mantienen juntas. Las cabeceras agrupadas (multirow/colspan) se excluyen para evitar ordenar por columnas ambiguas.

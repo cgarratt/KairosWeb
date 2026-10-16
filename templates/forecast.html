@@ -179,6 +179,7 @@ function runCycle(){
  // O4 hypothetical buy allocation proportional to targets. BTC and other 11 eligible when wave price exists.
  const budget=Math.max(0,cash-qf)*Number($('o4-budget').value);let spent=0;const active=assets.filter(a=>a.prices&&a.prices[4]>0),weights=active.reduce((s,a)=>s+(fc.tokens.find(t=>t.token===a.token)?.target||0),0)||1;for(const a of active){const amount=budget*(fc.tokens.find(t=>t.token===a.token).target/weights);a.ex+=amount/a.prices[4];spent+=amount;}cash-=spent;history.push(valuation(4));
  doSales(5,Number($('o5-sell').value));history.push(valuation(5));
+ const preLiquidationValue=history[history.length-1].total;
  // Liquidación post-O5: BTC NEVER SELL. Tier 1 conserva HODL; los demás se liquidan.
  let finalProceeds=0;
  for(const a of assets){
@@ -207,9 +208,9 @@ function runCycle(){
    if(Math.abs(a.core)>1e-8||Math.abs(a.ex)>1e-8||(tier!=='T1'&&Math.abs(a.hodl)>1e-8))throw new Error('Liquidación Post-O5 incompleta: '+a.token);
  }
  const assetsValue=assets.reduce((sum,a)=>sum+(a.hodl+a.core+a.ex)*(a.prices?.[5]||a.spot),0);
- if(Math.abs((assetsValue+cash)-(valuation(5).total))>0.02)throw new Error('Diferencia de conciliación Post-O5');
+ if(Math.abs((assetsValue+cash)-preLiquidationValue)>0.02)throw new Error('Diferencia de conciliación Post-O5');
  history.push(valuation(5));
- const last=history[5];$('o5-total').textContent=money(last.total);$('o5-btc').textContent=last.btc.toFixed(8)+' BTC';$('o5-cash').textContent=money(last.cash);$('o5-hodl').textContent=(last.crypto>0?(last.blocked/last.crypto*100).toFixed(1)+'%':'N/D');
+ const last=history[history.length-1];$('o5-total').textContent=money(last.total);$('o5-btc').textContent=last.btc.toFixed(8)+' BTC';$('o5-cash').textContent=money(last.cash);$('o5-hodl').textContent=(last.crypto>0?(last.blocked/last.crypto*100).toFixed(1)+'%':'N/D');
  const entries=[['Cripto',x=>x.crypto],['USDT (incl. Trading)',x=>x.cash],['Patrimonio',x=>x.total],['BTC (unidades)',x=>x.btc]];
  $('cycle-summary').innerHTML=entries.map(([name,get])=>`<tr><td><b>${name}</b></td>${history.map(h=>`<td>${name.includes('unidades')?get(h).toFixed(8):money(get(h))}</td>`).join('')}</tr>`).join('');
  $('cycle-assets').innerHTML=assets.map(a=>{const p=a.prices?.[5]||a.spot,u=a.hodl+a.core+a.ex;return `<tr><td>${logo(a.token)}</td><td>${a.hodl.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${a.core.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${a.ex.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${u.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${price(p)}</td><td>${money(u*p)}</td></tr>`;}).join('');
