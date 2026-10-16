@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from flask import Flask, Response, jsonify, render_template, request, abort
+from flask import Flask, Response, jsonify, render_template, request, abort, redirect
 from fastmcp import Client
 
 BASE = Path(__file__).parent
@@ -23,7 +23,6 @@ TOKENS = [r['symbol'] for r in CONFIG['universe']]
 TARGETS = {r['symbol']: r['target'] for r in CONFIG['universe']}
 TIERS = {r['symbol']: r['tier'] for r in CONFIG['universe']}
 MODE_DEFS = [
-    {'slug':'resumen','name':'Resumen','subtitle':'Auditoría del portafolio','description':'Posiciones, liquidez, custodia y composición general del portafolio.'},
     {'slug':'balancer','name':'Balancer','subtitle':'Rebalanceo y liquidez','description':'Propuestas de rebalanceo, control de piso de liquidez y protección de Core.'},
     {'slug':'compras','name':'Compras','subtitle':'O2 / O4','description':'Candidatos estructurales C1 50% y C2 61.8%, priorizados por déficit.'},
     {'slug':'ventas','name':'Ventas','subtitle':'Objetivo USDT','description':'Propuestas solo SELL para acercarse a la meta de liquidez y reducir sobrepeso.'},
@@ -339,6 +338,7 @@ def build_mode_payload(slug, d, observed):
         }
 
     if slug == 'balancer':
+        return balancer_report(d, observed)
         return {
             **common,
             'metrics':[
@@ -625,6 +625,64 @@ def build_mode_payload(slug, d, observed):
 
     raise KeyError(slug)
 
+
+def balancer_report(d, observed):
+    """Read-only liquidity accounting and independent illustrative buy/sell projections.
+
+    Commitments cannot be inferred from this static snapshot; don't label theoretical
+    capacity as real executable cash.
+    """
+    rows=sorted(d['rows'],key=lambda r:r['value'],reverse=True)
+    p=d['total_value']; cash=d['usdt_total']; crypto=d['crypto_value']
+    floor=.40*p
+    excess=max(0,cash-floor)
+    gap=max(0,floor-cash)
+    reserve=.05*p
+    c1=.15*p; c2=.10*p
+    # Indicative ONLY; actual commitments and reserved bags are not reconciled.
+    theoretical_ceiling=min(excess,reserve+excess)
+    buy_candidates=[r for r in rows if r['drift_pp'] < -1]
+    sell_candidates=[r for r in rows if r['drift_pp'] > 1 and r['token']!='BTC']
+    tokens_to_exchange={k:float(v[2]) for k,v in SNAPSHOT['custody_core_blocked__core_strategic__exchange'].items()}
+    def free_declared(r):
+        key='PUMPFUN' if r['token']=='PUMP' else r['token']
+        return max(0,tokens_to_exchange.get(key,0))
+    # Previews use physical inventory ceilings but do not subtract unverified SELL reservations.
+    sale_preview=[]
+    for r in sell_candidates:
+        theoretical=max(0,crypto*(r['weight']-r['target']))
+        declared=free_declared(r)*r['price']
+        value=min(theoretical,declared)
+        sale_preview.append({'token':r['token'],'value':value,'units':value/r['price'] if r['price'] else 0,
+                             'weight':r['weight'],'target':r['target'],'drift':r['drift_pp']})
+    sale_total=sum(r['value'] for r in sale_preview)
+    # Never allocate hypothetical BUY while consolidated USDT is below 40%.
+    buy_preview=[]
+    weight_deficit=sum(max(0,r['target']-r['weight']) for r in buy_candidates)
+    for r in buy_candidates:
+        amount=theoretical_ceiling*(r['target']-r['weight'])/weight_deficit if weight_deficit else 0
+        buy_preview.append({'token':r['token'],'value':amount,'weight':r['weight'],'target':r['target'],'drift':r['drift_pp']})
+    buy_total=sum(r['value'] for r in buy_preview)
+    # Independent scenarios: BUY only and SELL only, no sequential fill assumption.
+    after_buy_crypto=crypto+buy_total
+    after_sell_crypto=max(0,crypto-sale_total)
+    buy_weights={r['token']:(r['value']+next((x['value'] for x in buy_preview if x['token']==r['token']),0))/after_buy_crypto if after_buy_crypto else 0 for r in rows}
+    sell_weights={r['token']:(r['value']-next((x['value'] for x in sale_preview if x['token']==r['token']),0))/after_sell_crypto if after_sell_crypto else 0 for r in rows}
+    return {'generated_at':observed,'snapshot_note':d['note'],'status_badge':'LIVE MCP',
+      'current':{'P':p,'cash':cash,'crypto':crypto,'floor':floor,'gap':gap,'excess':excess,
+                 'reserve':reserve,'c1':c1,'c2':c2,'trading':d['trading_reserve'],
+                 'operating':d['usdt_operating'],'buy_ceiling':theoretical_ceiling},
+      'metrics':[
+        {'label':'USDT físico','value':fmt_money(cash),'help':f"{cash/p*100:.1f}% del patrimonio" if p else '', 'tone':'primary'},
+        {'label':'Piso 40% USDT','value':fmt_money(floor),'help':'Protección de liquidez','tone':'neutral'},
+        {'label':'Reserva Balancer (teórica)','value':fmt_money(reserve),'help':'5% P, no equivale a USDT libre','tone':'warn'},
+        {'label':'Capacidad compra indicativa','value':fmt_money(theoretical_ceiling),'help':'Antes de compromisos C1/C2, LIMIT y fees','tone':'ok' if theoretical_ceiling>0 else 'danger'}],
+      'buys':buy_preview,'sells':sale_preview,'buy_total':buy_total,'sell_total':sale_total,
+      'buy_chart':[{'token':r['token'],'actual':r['weight']*100,'post':buy_weights[r['token']]*100,'target':r['target']*100} for r in buy_candidates],
+      'sell_chart':[{'token':r['token'],'actual':r['weight']*100,'post':sell_weights[r['token']]*100,'target':r['target']*100} for r in sell_candidates],
+      'buy_cash_after':cash-buy_total,'sell_cash_after':cash+sale_total,
+      'limitations':'Órdenes LIMIT/SELL pendientes, comisiones y reservas no reconciliadas: estas simulaciones NO son órdenes operativas.'}
+
 @app.route('/')
 def home():
     return render_template('index.html', modes=MODE_DEFS, master='5.3.5')
@@ -635,6 +693,8 @@ def modes_page():
 
 @app.route('/mode/<slug>')
 def mode_page(slug):
+    if slug == 'resumen':
+        return redirect('/')
     mode = MODES_BY_SLUG.get(slug)
     if not mode:
         abort(404)
@@ -645,7 +705,7 @@ def mode_page(slug):
         return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master='5.3.5'), 503
     try:
         payload = build_mode_payload(slug, dashboard, observed)
-        return render_template('mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master='5.3.5')
+        return render_template('balancer.html' if slug=='balancer' else 'mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master='5.3.5')
     except Exception as exc:
         error_id = uuid.uuid4().hex[:10]
         app.logger.exception('Kairos MODE_RENDER slug=%s ID=%s',slug,error_id)
@@ -654,7 +714,7 @@ def mode_page(slug):
 
 @app.route('/health')
 def health():
-    return jsonify({'status':'UP','service':'Kairos Web','version':'3.6','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
+    return jsonify({'status':'UP','service':'Kairos Web','version':'3.7','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
 
 @app.route('/api/portfolio')
 def portfolio():
