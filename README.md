@@ -138,3 +138,11 @@ Se incorporan 12 costos promedio declarados en captura del 16/10/2026, sin modif
 - Selectores O2–O5 compartidos por tabla y gráfico, con cambios dinámicos.
 - Menú global consistente para ocho destinos (dashboard, modos y seis modos activos).
 - Sin ejecución de órdenes. Spot ausente -> N/D en Portafolio, conserva ledger histórico.
+
+## v4.2.2 — Consolidado Portafolio y Forecast
+- Portafolio Integral: cinco KPIs en una fila de escritorio y montos a la derecha de cada barra.
+- Dashboard: conserva navegación global y retira menú de enlaces duplicado.
+- Forecast: escenarios O2/O3/O4/O5 encadenados sobre unidades del snapshot con compras C1/C2, recompra O4 y ventas en O3/O5 sobre Exchange no-BTC, más conversión configurable de proceeds a BTC/USDT.
+- Simulador exploratorio: parámetros porcentuales O3/O5, compra O4 y reparto BTC/USDT se identifican como SUPUESTOS, NO como políticas certificadas. Usa pivotes algebraicamente inferidos y omite operaciones para tokens sin niveles. No reconcilia LIMIT ni fees.
+- Totales por onda: USDT (incluyendo Trading una sola vez), Cripto, BTC, Patrimonio. Al final O5, inventario por HODL/Core/Exchange y valorización. No mueve nuevas compras a custodia Core/HODL.
+- Ninguna orden real; todo es lectura y simulación.

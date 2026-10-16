@@ -612,7 +612,7 @@ def build_mode_payload(slug, d, observed):
                                'cycle_low':pivots['cycle_low'], 'o1':pivots['o1'],
                                'anchor_state':pivots['status']})
         return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
-            'kind':'forecast', 'current':purchase_current,'tokens':purchase_tokens,
+            'kind':'forecast', 'current':purchase_current,'tokens':purchase_tokens, 'custody':{('PUMP' if k=='PUMPFUN' else k):v for k,v in SNAPSHOT['custody_core_blocked__core_strategic__exchange'].items()}, 'cash_total':d['usdt_total'], 'trading_reserve':d['trading_reserve'],
             'pivot_rows':pivot_rows, 'o2_source':O2_LEVELS['source'],
             'reference_type':'O2_REFERENCES_RECONSTRUCTED_UNCERTIFIED',
             'notes':['38.2% y 78.2% son referencias SIN presupuesto: USDT $0.',

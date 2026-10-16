@@ -68,6 +68,25 @@
 <p class="footer-note">Secuencia de Kairos H4: O3 = O2 + extensión × (O1 − Cycle Low); O4 = O3 − retroceso × (O3 − O2); O5 = O4 + extensión × (O3 − O2). No se aplica confirmación semanal 5L/5R + BOS; ningún nivel se declara pivot confirmado.</p>
 </section>
 
+
+<section class="panel span-12" id="cycle-strategy">
+<h2>Simulación integral O2 → O5 · Compras, ventas y acumulación BTC</h2>
+<p class="sub">Escenario hipotético no ejecutable: BTC NEVER SELL, HODL/Core protegidos, inventario Exchange limitado. Las reglas de ejecución O3/O5 no están íntegramente certificadas en este motor; ajusta explícitamente los siguientes supuestos.</p>
+<div class="fc-controls">
+<div class="fc-field"><label for="o4-budget">Recompra O4 · % de USDT libre en O4</label><select id="o4-budget"><option value="0">0% (sin compras)</option><option value="0.25">25% · supuesto</option><option value="0.5" selected>50% · supuesto</option><option value="1">100% · supuesto</option></select></div>
+<div class="fc-field"><label for="o3-sell">Venta O3 · % del Exchange vendible</label><select id="o3-sell"><option value="0">0%</option><option value="0.25" selected>25% · supuesto</option><option value="0.5">50% · supuesto</option><option value="0.75">75% · supuesto</option></select></div>
+<div class="fc-field"><label for="o5-sell">Venta O5 · % del Exchange vendible</label><select id="o5-sell"><option value="0">0%</option><option value="0.25" selected>25% · supuesto</option><option value="0.5">50% · supuesto</option><option value="0.75">75% · supuesto</option></select></div>
+<div class="fc-field"><label for="btc-share">Proceeds SELL destinados a BTC</label><select id="btc-share"><option value="0">0% · todo USDT</option><option value="0.5" selected>50% BTC / 50% USDT · supuesto</option><option value="1">100% BTC</option></select></div>
+</div>
+<div class="fc-warning">Supuestos exploratorios, NO porcentajes oficiales aprobados de ventas O3/O5. Los precios O1–O5 provienen de pivotes reconstruidos sin certificación; las compras usan presupuesto C1/C2 seleccionado y O4 hipotético. El capital Trading/QF se mantiene separado. Se excluyen comisiones y órdenes pendientes. Ninguna orden se transmite.</div>
+<div class="fc-metrics"><div class="fc-kpi"><small>Patrimonio proyectado O5</small><b id="o5-total">—</b></div><div class="fc-kpi"><small>BTC al cierre O5</small><b id="o5-btc">—</b></div><div class="fc-kpi"><small>USDT total O5</small><b id="o5-cash">—</b></div><div class="fc-kpi"><small>HODL bloqueado / Cripto</small><b id="o5-hodl">—</b></div></div>
+<h3 style="margin-top:18px">Evolución del portafolio por onda</h3>
+<div class="fc-tables"><table><thead><tr><th>Indicador</th><th>Inicio</th><th>O2</th><th>O3</th><th>O4</th><th>O5</th></tr></thead><tbody id="cycle-summary"></tbody></table></div>
+<h3 style="margin-top:20px">Composición proyectada al cierre de O5</h3>
+<div class="fc-tables"><table><thead><tr><th>Token</th><th>HODL (u.)</th><th>Core (u.)</th><th>Exchange (u.)</th><th>Total unidades</th><th>Precio O5</th><th>Valor USDT</th></tr></thead><tbody id="cycle-assets"></tbody><tfoot id="cycle-assets-total"></tfoot></table></div>
+<p class="footer-note" id="cycle-note"></p>
+</section>
+
 <section class="panel span-12"><div class="callout warn"><strong>Alcance y fuentes</strong>Este Forecast no activa órdenes ni sustituye el Forecast oficial de acumulación BTC. Las referencias O2 y sus pivotes algebraicamente reconstruidos deben revisarse contra anclas aprobadas; la progresión O3/O4/O5 es una simulación parametrizada, no una predicción ni un conteo Elliott confirmado. PEPE y VIRTUAL permanecen N/D.</div></section>
 </div>
 <script src="{{ url_for('static', filename='purchase_plan.js') }}"></script>
@@ -145,9 +164,36 @@ function drawCurve(waves){
  $('chart-info').textContent=`${choice.token} · Precios hipotéticos construidos con referencias O2 no certificadas. Distancia horizontal por etapa, no por fecha.`;
 }
 
-$('forecast-deploy').addEventListener('input',renderFib);
-['o2-choice','o3-choice','o4-choice','o5-choice'].forEach(id=>$(id).addEventListener('change',renderWaves));
+
+function runCycle(){
+ const waveRows=calcWaves();const byToken=new Map(waveRows.map(w=>[w.token,w]));
+ const P=Number(fc.current.P), cash0=Number(fc.cash_total), qf=Number(fc.trading_reserve);
+ const tradeable=Math.max(0,cash0-qf);const pct=Number($('forecast-deploy').value);
+ const requested=Math.min(tradeable,P*pct/100);const allocation=purchasePlan(requested,fc.tokens,Number(fc.current.crypto_value));
+ const assets=fc.tokens.map((t,i)=>{const c=fc.custody[t.token]||[0,0,0], w=byToken.get(t.token);return {token:t.token,hodl:Number(c[0]),core:Number(c[1]),ex:Number(c[2]),prices:w&&w.values?w.values:null,spot:Number(t.price),o2alloc:(allocation.balance[i]+allocation.extra[i])};});
+ let cash=cash0,btcFromSales=0; const history=[];
+ function valuation(step){let crypto=0,blocked=0; for(const a of assets){const price=a.prices?.[step]||a.spot;crypto+=(a.hodl+a.core+a.ex)*price;blocked+=a.hodl*price;}return {crypto,cash,total:crypto+cash,btc:assets.find(a=>a.token==='BTC').hodl+assets.find(a=>a.token==='BTC').core+assets.find(a=>a.token==='BTC').ex,blocked};}
+ history.push(valuation(-1));
+ // O2: 60% C1 and 40% C2, each tranche receives its own price.
+ for(const a of assets){if(!a.prices)continue;const b=Math.min(a.o2alloc,Math.max(0,cash-qf));const p=fc.pivot_rows.find(x=>x.token===a.token);if(!(p?.c1>0&&p?.c2>0))continue;a.ex+=b*.6/p.c1+b*.4/p.c2;cash-=b;}
+ history.push(valuation(2));
+ function doSales(wave,ratio){let proceeds=0;for(const a of assets){if(a.token==='BTC'||!a.prices)continue;let qty=a.ex*ratio;const price=a.prices[wave];if(!(price>0))continue;a.ex-=qty;proceeds+=qty*price;}const share=Number($('btc-share').value), btcPrice=assets.find(a=>a.token==='BTC').prices?.[wave];if(share>0&&btcPrice>0){const converted=proceeds*share;assets.find(a=>a.token==='BTC').ex+=converted/btcPrice;btcFromSales+=converted/btcPrice;cash+=proceeds-converted;}else{cash+=proceeds;}}
+ doSales(3,Number($('o3-sell').value));history.push(valuation(3));
+ // O4 hypothetical buy allocation proportional to targets. BTC and other 11 eligible when wave price exists.
+ const budget=Math.max(0,cash-qf)*Number($('o4-budget').value);let spent=0;const active=assets.filter(a=>a.prices&&a.prices[4]>0),weights=active.reduce((s,a)=>s+(fc.tokens.find(t=>t.token===a.token)?.target||0),0)||1;for(const a of active){const amount=budget*(fc.tokens.find(t=>t.token===a.token).target/weights);a.ex+=amount/a.prices[4];spent+=amount;}cash-=spent;history.push(valuation(4));
+ doSales(5,Number($('o5-sell').value));history.push(valuation(5));
+ const last=history[4];$('o5-total').textContent=money(last.total);$('o5-btc').textContent=last.btc.toFixed(8)+' BTC';$('o5-cash').textContent=money(last.cash);$('o5-hodl').textContent=(last.crypto>0?(last.blocked/last.crypto*100).toFixed(1)+'%':'N/D');
+ const entries=[['Cripto',x=>x.crypto],['USDT (incl. Trading)',x=>x.cash],['Patrimonio',x=>x.total],['BTC (unidades)',x=>x.btc]];
+ $('cycle-summary').innerHTML=entries.map(([name,get])=>`<tr><td><b>${name}</b></td>${history.map(h=>`<td>${name.includes('unidades')?get(h).toFixed(8):money(get(h))}</td>`).join('')}</tr>`).join('');
+ $('cycle-assets').innerHTML=assets.map(a=>{const p=a.prices?.[5]||a.spot,u=a.hodl+a.core+a.ex;return `<tr><td>${logo(a.token)}</td><td>${a.hodl.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${a.core.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${a.ex.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${u.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${price(p)}</td><td>${money(u*p)}</td></tr>`;}).join('');
+ $('cycle-assets-total').innerHTML=`<tr><td colspan="6">TOTAL CRIPTO</td><td>${money(last.crypto)}</td></tr><tr><td colspan="6">LIQUIDEZ USDT (incl. Trading)</td><td>${money(last.cash)}</td></tr><tr><td colspan="6">PATRIMONIO O5</td><td>${money(last.total)}</td></tr>`;
+ $('cycle-note').textContent=`BTC convertido desde ventas simuladas: ${btcFromSales.toFixed(8)} BTC. HODL bloqueado valorizado: ${money(last.blocked)}; representa ${last.crypto>0?(100*last.blocked/last.crypto).toFixed(1):0}% de la manga cripto. Todos los BTC adquiridos permanecen en Exchange. Sin fills reales, fees, reconciliación de LIMIT ni certeza de pivotes.`;
+}
+
+$('forecast-deploy').addEventListener('input',()=>{renderFib();runCycle();});
+['o2-choice','o3-choice','o4-choice','o5-choice'].forEach(id=>$(id).addEventListener('change',()=>{renderWaves();runCycle();}));
 $('chart-token').addEventListener('change',()=>drawCurve(calcWaves()));
-renderFib();renderWaves();
+['o4-budget','o3-sell','o5-sell','btc-share'].forEach(id=>$(id).addEventListener('change',runCycle));
+renderFib();renderWaves();runCycle();
 </script>
 {% endblock %}
