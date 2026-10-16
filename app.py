@@ -640,14 +640,21 @@ def mode_page(slug):
         abort(404)
     try:
         observed, dashboard = load_live_dashboard()
-        payload = build_mode_payload(slug, dashboard, observed)
-        return render_template('mode.html', mode=mode, payload=payload, error=None, master='5.3.5')
     except Exception as exc:
-        return render_template('mode.html', mode=mode, payload=None, error=pretty_error(exc), master='5.3.5'), 503
+        diag = diagnostic_error(exc, f'mode:{slug}:market')
+        return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master='5.3.5'), 503
+    try:
+        payload = build_mode_payload(slug, dashboard, observed)
+        return render_template('mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master='5.3.5')
+    except Exception as exc:
+        error_id = uuid.uuid4().hex[:10]
+        app.logger.exception('Kairos MODE_RENDER slug=%s ID=%s',slug,error_id)
+        diag = {'code':'MODE_RENDER','error_id':error_id, 'message':'Error interno al generar el reporte del modo (no es un error MCP).'}
+        return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master='5.3.5'), 500
 
 @app.route('/health')
 def health():
-    return jsonify({'status':'UP','service':'Kairos Web','version':'3.4','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
+    return jsonify({'status':'UP','service':'Kairos Web','version':'3.5','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
 
 @app.route('/api/portfolio')
 def portfolio():

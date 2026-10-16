@@ -32,3 +32,10 @@ Reemplaza los archivos del repositorio en GitHub por **el contenido** de esta ca
 - Panel de comparación por Tier contra target (peso sobre la manga cripto; USDT excluido).
 - Columna Valor BTC en la tabla ejecutiva: `valor_USDT / BTCUSDT` del mismo lote Binance MCP.
 - Conserva tratamiento DATA ERROR y políticas de solo lectura de v3.3.
+
+## v3.5
+- Separación de fallo de mercado y fallo interno del modo: `MODE_RENDER` ya no se confunde con fallo MCP.
+- Enlaces de logs mediante código e ID sin publicar secretos.
+- Donut de cripto/USDT, gráfico lineal **de escenarios** Forecast (no histórico), barras comparativas tiers.
+- Gráfico complementario tipo donut en vista Resumen (referencial).
+- Necesita desplegar en Render para validar el endpoint MCP remoto.

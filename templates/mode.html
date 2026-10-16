@@ -19,6 +19,7 @@
   {% if error %}
   <section class="panel span-12">
     <div class="callout danger"><strong>Conexión temporalmente no disponible</strong>{{ error }}. Esto no confirma que los MCP estén caídos: pueden estar despertando en Render.</div>
+    {% if diagnostic %}<p class="sub"><strong>Código: {{ diagnostic.code }} · ID: {{ diagnostic.error_id }}</strong></p>{% endif %}
     <p><button class="btn primary" type="button" onclick="location.reload()">↻ Reintentar carga</button> <a class="btn" href="/api/mcp-diagnostics">Diagnóstico MCP</a></p>
     <p class="sub">La vista de este modo permanece disponible; no se calcularán cifras sin datos confirmados.</p>
     <p class="footer-note">La página preliminar del modo existe, pero no puede renderizar métricas en ausencia de cotizaciones verificadas. Revisa <a href="/api/mcp-diagnostics" target="_blank">el diagnóstico detallado de Binance y Hyperliquid</a>.</p>

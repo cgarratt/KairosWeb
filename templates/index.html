@@ -27,7 +27,7 @@
   <section class="panel span-4">
     <h3>Composición general</h3>
     <p class="sub">Exposición cripto vs. liquidez</p>
-    <div class="bar-list" id="comp-bars"></div>
+    <div class="donut-layout"><div class="portfolio-donut" id="portfolio-donut"><div class="portfolio-donut-center" id="donut-value">—</div></div><div class="legend-col" id="comp-legend"><span class="muted">Esperando datos…</span></div></div>
     <p class="footer-note" id="snapshot-note">Snapshot base: esperando datos…</p>
   </section>
 
@@ -60,7 +60,7 @@
   <section class="panel span-6">
     <h3>Forecast de sensibilidad</h3>
     <p class="sub">Variación del patrimonio si solo cambia BTC</p>
-    <div class="bar-list" id="forecast-bars"><div class="muted">Calculando…</div></div>
+    <div class="line-chart" id="forecast-line"><div class="muted">Calculando…</div></div><p class="footer-note">Escenarios hipotéticos, no serie temporal ni Forecast oficial O2–O5.</p>
   </section>
 
   <section class="panel span-6">
@@ -136,20 +136,23 @@ const EXCHANGES = {Binance:'binance',KuCoin:'kucoin',Hyperliquid:'hyperliquid',Q
 function exchangeLabel(name){const slug=EXCHANGES[name];const img=slug?`<img class="entity-symbol" src="https://cdn.simpleicons.org/${slug}" alt="" onerror="this.style.display='none'">`:'';return img+name;}
 function setBars(id, items, maxValue){const wrap=$(id);wrap.innerHTML='';if(!items.length){wrap.innerHTML='<div class="muted">Sin datos</div>';return;}const max=maxValue||Math.max(...items.map(x=>Math.abs(x.value)||0),1);items.forEach(it=>{const row=document.createElement('div');row.className='bar-row';row.innerHTML=`<div class="bar-label">${TOKEN_LOGOS[it.label]?tokenHtml(it.label):it.label}</div><div class="bar-track"><div class="bar-fill ${it.tone||''}" style="width:${Math.max(3,Math.abs(it.value)/max*100)}%"></div></div><div class="bar-value">${it.display}</div>`;wrap.appendChild(row);});}
 async function loadSources(){try{const r=await fetch('/api/mcp-status',{cache:'no-store'});const d=await r.json();$('src-binance').textContent=d.binance_configured?'URL configurada y lista para consultas.':'URL NO configurada.';$('src-hl').textContent=d.hyperliquid_configured?'URL configurada para histórico macro HYPE.':'URL NO configurada.';}catch(e){$('src-binance').textContent='No se pudo verificar';$('src-hl').textContent='No se pudo verificar';}}
+function renderForecastLine(sc){const container=$('forecast-line'); if(!sc.length){container.textContent='Sin escenarios';return;}const v=sc.map(x=>x.portfolio_value),lo=Math.min(...v),hi=Math.max(...v),range=Math.max(1,hi-lo);const pts=sc.map((x,i)=>`${24+i*104},${142-(x.portfolio_value-lo)/range*118}`).join(' ');container.innerHTML=`<svg viewBox="0 0 470 170" role="img" aria-label="Sensibilidad del portafolio ante cinco escenarios BTC"><line x1="24" x2="440" y1="83" y2="83" stroke="#cad7e7" stroke-dasharray="5 4"/><polyline points="${pts}" fill="none" stroke="#246bd1" stroke-width="4" stroke-linejoin="round"/>${sc.map((x,i)=>{const y=142-(x.portfolio_value-lo)/range*118;return `<circle cx="${24+i*104}" cy="${y}" r="5" fill="#246bd1"/><text x="${24+i*104}" y="${Math.max(13,y-12)}" text-anchor="middle" font-size="10" fill="#334865">${x.portfolio_change_pct>0?'+':''}${num(x.portfolio_change_pct,2)}%</text>`}).join('')}</svg><div class="line-chart-labels">${sc.map(x=>`<span>${x.btc_change_pct>0?'+':''}${x.btc_change_pct}%</span>`).join('')}</div>`;}
 async function refreshData(){try{const r=await fetch('/api/portfolio',{cache:'no-store'});const d=await r.json();if(!r.ok||d.status!=='OK') throw new Error(d.reason||'Sin respuesta válida');$('live-badge').className='badge ok';$('live-badge').textContent='● LIVE MCP';$('total').textContent=money(d.total_value);$('crypto').textContent=money(d.crypto_value);$('crypto-help').textContent=`${pct(d.crypto_pct*100)} del patrimonio`; $('usdt').textContent=money(d.usdt_total);$('usdt-help').textContent=`${pct(d.usdt_pct*100)} del patrimonio · piso 40%`; $('reserve').textContent=money(d.trading_reserve);$('snapshot-note').textContent=`Snapshot ${d.snapshot_date} · Binance observado: ${new Date(d.observed_at).toLocaleString('es-PE',{timeZone:'America/Lima'})}`;
-setBars('comp-bars', [{label:'Cripto',value:d.crypto_pct*100,display:pct(d.crypto_pct*100),tone:'primary'},{label:'USDT',value:d.usdt_pct*100,display:pct(d.usdt_pct*100),tone:'ok'}],100);
+$('portfolio-donut').style.background=`conic-gradient(#246bd1 0 ${d.crypto_pct*100}%, #24a77e ${d.crypto_pct*100}% 100%)`;
+$('donut-value').textContent=pct(d.crypto_pct*100)+' cripto';
+$('comp-legend').innerHTML=`<div><span class="legend-dot" style="background:#246bd1"></span>Cripto ${pct(d.crypto_pct*100)}</div><div><span class="legend-dot" style="background:#24a77e"></span>USDT ${pct(d.usdt_pct*100)}</div>`;
 const rows=[...d.rows].sort((a,b)=>b.value-a.value);
 renderTiers(rows);
 setBars('token-bars', rows.slice(0,8).map(r=>({label:r.token,value:r.weight*100,display:pct(r.weight*100),tone:toneFromStatus(r.status)})), Math.max(...rows.slice(0,8).map(r=>r.weight*100),1));
 setBars('drift-bars', rows.sort((a,b)=>Math.abs(b.drift_pp)-Math.abs(a.drift_pp)).slice(0,8).map(r=>({label:r.token,value:Math.abs(r.drift_pp),display:(r.drift_pp>0?'+':'')+num(r.drift_pp,1)+' pp',tone:toneFromStatus(r.status)})));
 setBars('venue-bars', Object.entries(d.liquidity_venues).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({label:k,value:v,display:money(v),tone:'ok'})));
 const bsi=(d.bsi_historical?.rows||[]).filter(x=>x.bsi!==null).slice(0,6);setBars('bsi-bars', bsi.map(x=>({label:x.token,value:Math.abs(x.bsi),display:(x.bsi>0?'+':'')+num(x.bsi,1)+'%',tone:x.bsi>20?'warn':x.bsi>=0?'ok':'danger'})));
-const fc=d.forecast_sensitivity?.scenarios||[];setBars('forecast-bars', fc.map(x=>({label:(x.btc_change_pct>0?'+':'')+x.btc_change_pct+'% BTC', value:Math.abs(x.portfolio_change_pct), display:(x.portfolio_change_pct>0?'+':'')+num(x.portfolio_change_pct,2)+'%', tone:x.btc_change_pct<0?'danger':x.btc_change_pct>0?'ok':'primary'})), Math.max(...fc.map(x=>Math.abs(x.portfolio_change_pct)),1));
+const fc=d.forecast_sensitivity?.scenarios||[];renderForecastLine(fc);
 setBars('top-bars', rows.slice(0,5).map(r=>({label:r.token,value:r.weight*100,display:money(r.value),tone:'primary'})), Math.max(...rows.slice(0,5).map(r=>r.weight*100),1));
 const btcPrice=rows.find(r=>r.token==='BTC')?.price; if(!Number.isFinite(btcPrice)||btcPrice<=0)throw Error('Precio BTC inválido');
 $('positions').innerHTML=rows.map(r=>`<tr><td>${tokenHtml(r.token)}<div class="muted">${r.tier}</div></td><td>${r.price>=1?money(r.price,2):money(r.price,6)}</td><td>${money(r.value)}</td><td>${num(r.value / btcPrice,8)} BTC</td><td>${pct(r.weight*100)}</td><td>${pct(r.target*100)}</td><td><span class="pill ${r.status}">${r.status}</span></td></tr>`).join('');
 $('positions-total').innerHTML=`<tr style="font-weight:800;background:#edf4fc"><td colspan="2">Total patrimonio (incluye USDT)</td><td>${money(d.total_value)}</td><td>${num(d.total_value/btcPrice,8)} BTC</td><td>100% patrimonio</td><td colspan="2">Snapshot + MCP</td></tr>`;
-}catch(e){$('positions-total').innerHTML='';$('live-badge').className='badge danger';$('live-badge').textContent='● DATA ERROR';$('positions').innerHTML=`<tr><td colspan="7">Sin cotizaciones válidas: ${e.message}</td></tr>`;['comp-bars','token-bars','drift-bars','venue-bars','bsi-bars','forecast-bars','top-bars','tier-bars'].forEach(id=>$(id).innerHTML='<div class="muted">Sin datos válidos</div>');}}
+}catch(e){$('positions-total').innerHTML='';$('live-badge').className='badge danger';$('live-badge').textContent='● DATA ERROR';$('positions').innerHTML=`<tr><td colspan="7">Sin cotizaciones válidas: ${e.message}</td></tr>`;['token-bars','drift-bars','venue-bars','bsi-bars','top-bars','tier-bars'].forEach(id=>$(id).innerHTML='<div class="muted">Sin datos válidos</div>');}}
 loadSources();refreshData();
 </script>
 {% endblock %}
