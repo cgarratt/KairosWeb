@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="448" height="136" viewBox="0 0 448 136" role="img" aria-label="Kairos Horizon">
+<defs><linearGradient id="h" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#1961b8"/><stop offset=".55" stop-color="#3198ed"/><stop offset="1" stop-color="#7ce8ef"/></linearGradient></defs>
+<g transform="translate(6 6) scale(.93)"><path d="M6 107 54 18h31l-45 89Z" fill="url(#h)"/><path d="m54 107 24-43 21 43Z" fill="#103d88"/><path d="m81 47 41 60H95L68 66Z" fill="url(#h)"/><path d="m55 107 22-40 13 19-12 21Z" fill="#77ddeb"/></g>
+<text x="142" y="76" font-family="Segoe UI,Arial,sans-serif" letter-spacing="6" font-size="46" font-weight="700" fill="#102443">KAIROS</text><text x="145" y="100" font-family="Segoe UI,Arial,sans-serif" letter-spacing="2.8" font-size="12" fill="#277bbd">H O R I Z O N</text></svg>

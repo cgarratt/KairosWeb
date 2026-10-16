@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Kairos Horizon">
+<defs><linearGradient id="h" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#1961b8"/><stop offset=".55" stop-color="#3198ed"/><stop offset="1" stop-color="#7ce8ef"/></linearGradient></defs>
+<path d="M6 107 54 18h31l-45 89Z" fill="url(#h)"/>
+<path d="m54 107 24-43 21 43Z" fill="#103d88"/>
+<path d="m81 47 41 60H95L68 66Z" fill="url(#h)"/>
+<path d="m55 107 22-40 13 19-12 21Z" fill="#77ddeb"/>
+</svg>

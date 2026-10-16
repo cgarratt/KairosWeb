@@ -120,12 +120,20 @@
 </div>
 
 <script>
-const $=id=>document.getElementById(id);
+const $=id=>document.getElementById(id);const TOKEN_LOGOS = {"BTC": "https://cryptologos.cc/logos/bitcoin-btc-logo.png", "ETH": "https://cryptologos.cc/logos/ethereum-eth-logo.png", "SOL": "https://cryptologos.cc/logos/solana-sol-logo.png", "LINK": "https://cryptologos.cc/logos/chainlink-link-logo.png", "HYPE": "https://cryptologos.cc/logos/hyperliquid-hype-logo.png", "HBAR": "https://cryptologos.cc/logos/hedera-hbar-logo.png", "SUI": "https://cryptologos.cc/logos/sui-sui-logo.png", "ONDO": "https://cryptologos.cc/logos/ondo-finance-ondo-logo.png", "PUMP": "https://cryptologos.cc/logos/pump-fun-pump-logo.png", "PLUME": "https://cryptologos.cc/logos/plume-plume-logo.png", "PEPE": "https://cryptologos.cc/logos/pepe-pepe-logo.png", "VIRTUAL": "https://cryptologos.cc/logos/virtual-protocol-virtual-logo.png", "USDT": "https://cryptologos.cc/logos/tether-usdt-logo.png"};
+function tokenHtml(token){
+ const code=String(token||'').toUpperCase().replace('PUMPFUN','PUMP');
+ const safe=code.replace(/[^A-Z0-9]/g,'');
+ const src=TOKEN_LOGOS[safe];
+ const fallback=`<span class="coin-fallback">${safe.slice(0,2)}</span>`;
+ return `<span class="coin-tag"><span class="coin-icon">${src?`<img src="${src}" loading="lazy" alt="" onerror="this.style.display='none';this.parentElement.classList.add('missing')">`:''}${fallback}</span><span class="coin-text">${safe}</span></span>`;
+}
+
 const money=(v,d=0)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:d,minimumFractionDigits:d}).format(v);
 const num=(v,d=1)=>new Intl.NumberFormat('en-US',{maximumFractionDigits:d,minimumFractionDigits:d}).format(v);
 const pct=v=>num(v,1)+'%';
 function toneFromStatus(s){return s==='SOBRE'?'danger':s==='INFRA'?'warn':'ok';}
-function setBars(id, items, maxValue){const wrap=$(id);wrap.innerHTML='';if(!items.length){wrap.innerHTML='<div class="muted">Sin datos</div>';return;}const max=maxValue||Math.max(...items.map(x=>Math.abs(x.value)||0),1);items.forEach(it=>{const row=document.createElement('div');row.className='bar-row';row.innerHTML=`<div class="bar-label">${it.label}</div><div class="bar-track"><div class="bar-fill ${it.tone||''}" style="width:${Math.max(3,Math.abs(it.value)/max*100)}%"></div></div><div class="bar-value">${it.display}</div>`;wrap.appendChild(row);});}
+function setBars(id, items, maxValue){const wrap=$(id);wrap.innerHTML='';if(!items.length){wrap.innerHTML='<div class="muted">Sin datos</div>';return;}const max=maxValue||Math.max(...items.map(x=>Math.abs(x.value)||0),1);items.forEach(it=>{const row=document.createElement('div');row.className='bar-row';row.innerHTML=`<div class="bar-label">${TOKEN_LOGOS[it.label]?tokenHtml(it.label):it.label}</div><div class="bar-track"><div class="bar-fill ${it.tone||''}" style="width:${Math.max(3,Math.abs(it.value)/max*100)}%"></div></div><div class="bar-value">${it.display}</div>`;wrap.appendChild(row);});}
 async function loadSources(){try{const r=await fetch('/api/mcp-status',{cache:'no-store'});const d=await r.json();$('src-binance').textContent=d.binance_configured?'URL configurada y lista para consultas.':'URL NO configurada.';$('src-hl').textContent=d.hyperliquid_configured?'URL configurada para histórico macro HYPE.':'URL NO configurada.';}catch(e){$('src-binance').textContent='No se pudo verificar';$('src-hl').textContent='No se pudo verificar';}}
 async function refreshData(){try{const r=await fetch('/api/portfolio',{cache:'no-store'});const d=await r.json();if(!r.ok||d.status!=='OK') throw new Error(d.reason||'Sin respuesta válida');$('live-badge').className='badge ok';$('live-badge').textContent='● LIVE MCP';$('total').textContent=money(d.total_value);$('crypto').textContent=money(d.crypto_value);$('crypto-help').textContent=`${pct(d.crypto_pct*100)} del patrimonio`; $('usdt').textContent=money(d.usdt_total);$('usdt-help').textContent=`${pct(d.usdt_pct*100)} del patrimonio · piso 40%`; $('reserve').textContent=money(d.trading_reserve);$('snapshot-note').textContent=`Snapshot ${d.snapshot_date} · Binance observado: ${new Date(d.observed_at).toLocaleString('es-PE',{timeZone:'America/Lima'})}`;
 setBars('comp-bars', [{label:'Cripto',value:d.crypto_pct*100,display:pct(d.crypto_pct*100),tone:'primary'},{label:'USDT',value:d.usdt_pct*100,display:pct(d.usdt_pct*100),tone:'ok'}],100);
@@ -136,7 +144,7 @@ setBars('venue-bars', Object.entries(d.liquidity_venues).filter(x=>x[1]>0).sort(
 const bsi=(d.bsi_historical?.rows||[]).filter(x=>x.bsi!==null).slice(0,6);setBars('bsi-bars', bsi.map(x=>({label:x.token,value:Math.abs(x.bsi),display:(x.bsi>0?'+':'')+num(x.bsi,1)+'%',tone:x.bsi>20?'warn':x.bsi>=0?'ok':'danger'})));
 const fc=d.forecast_sensitivity?.scenarios||[];setBars('forecast-bars', fc.map(x=>({label:(x.btc_change_pct>0?'+':'')+x.btc_change_pct+'% BTC', value:Math.abs(x.portfolio_change_pct), display:(x.portfolio_change_pct>0?'+':'')+num(x.portfolio_change_pct,2)+'%', tone:x.btc_change_pct<0?'danger':x.btc_change_pct>0?'ok':'primary'})), Math.max(...fc.map(x=>Math.abs(x.portfolio_change_pct)),1));
 setBars('top-bars', rows.slice(0,5).map(r=>({label:r.token,value:r.weight*100,display:money(r.value),tone:'primary'})), Math.max(...rows.slice(0,5).map(r=>r.weight*100),1));
-$('positions').innerHTML=rows.map(r=>`<tr><td><strong>${r.token}</strong><div class="muted">${r.tier}</div></td><td>${r.price>=1?money(r.price,2):money(r.price,6)}</td><td>${money(r.value)}</td><td>${pct(r.weight*100)}</td><td>${pct(r.target*100)}</td><td><span class="pill ${r.status}">${r.status}</span></td></tr>`).join('');
+$('positions').innerHTML=rows.map(r=>`<tr><td>${tokenHtml(r.token)}<div class="muted">${r.tier}</div></td><td>${r.price>=1?money(r.price,2):money(r.price,6)}</td><td>${money(r.value)}</td><td>${pct(r.weight*100)}</td><td>${pct(r.target*100)}</td><td><span class="pill ${r.status}">${r.status}</span></td></tr>`).join('');
 }catch(e){$('live-badge').className='badge danger';$('live-badge').textContent='● DATA ERROR';$('positions').innerHTML=`<tr><td colspan="6">Sin cotizaciones válidas: ${e.message}</td></tr>`;['comp-bars','token-bars','drift-bars','venue-bars','bsi-bars','forecast-bars','top-bars'].forEach(id=>$(id).innerHTML='<div class="muted">Sin datos válidos</div>');}}
 loadSources();refreshData();
 </script>

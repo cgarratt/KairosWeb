@@ -4,11 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Kairos Web{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='kairos-horizon.svg') }}">
+  <meta name="theme-color" content="#103d88">
   <style>
-    :root{--bg:#f4f7fb;--panel:#ffffff;--line:#dbe3ef;--text:#0f1b2d;--muted:#617089;--blue:#214f9a;--blue2:#377fd3;--green:#1fa67a;--red:#c4465a;--amber:#d58d18;--soft:#eef4fb;--shadow:0 10px 24px rgba(14,28,61,.08)}
+    :root{--bg:#f4f8fc;--panel:#ffffff;--line:#dbe6f2;--text:#102443;--muted:#607792;--blue:#103d88;--blue2:#3293df;--green:#1fa67a;--red:#c4465a;--amber:#d58d18;--soft:#eef4fb;--shadow:0 10px 24px rgba(14,28,61,.08)}
     *{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:linear-gradient(180deg,#f8fbff 0%,var(--bg) 100%);color:var(--text)}a{text-decoration:none;color:inherit}
     .shell{max-width:1400px;margin:0 auto;padding:24px}
-    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}.brand{display:flex;gap:14px;align-items:center}.logo{width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));display:grid;place-items:center;color:#fff;font-weight:800;box-shadow:var(--shadow)}.brand h1{font-size:24px;margin:0}.brand p{margin:4px 0 0;color:var(--muted)}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}.brand{display:flex;gap:14px;align-items:center}.logo{width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#ebf6ff,#fff);display:grid;place-items:center;color:#fff;font-weight:800;box-shadow:var(--shadow)}.brand h1{font-size:24px;margin:0}.brand p{margin:4px 0 0;color:var(--muted)}
     .top-actions{display:flex;gap:10px;flex-wrap:wrap}.chip,.btn{border:1px solid var(--line);background:#fff;border-radius:999px;padding:10px 14px;font-weight:600;color:var(--text)}.btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
     .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:18px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:20px}.span-12{grid-column:span 12}.span-8{grid-column:span 8}.span-6{grid-column:span 6}.span-4{grid-column:span 4}.span-3{grid-column:span 3}
     .panel h2,.panel h3{margin:0 0 8px}.sub{color:var(--muted);font-size:14px;line-height:1.45}.muted{color:var(--muted)}
@@ -24,6 +26,26 @@
     .footer-note{font-size:12px;color:var(--muted);margin-top:18px;line-height:1.5}.tabs{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}.tab-link{padding:10px 14px;border-radius:999px;background:#fff;border:1px solid var(--line);font-weight:700}.tab-link.active{background:var(--blue);color:#fff;border-color:var(--blue)}
     @media (max-width:1100px){.span-8,.span-6,.span-4,.span-3{grid-column:span 12}.kpis{grid-template-columns:repeat(2,1fr)}.mode-grid{grid-template-columns:1fr}}
     @media (max-width:680px){.shell{padding:14px}.kpis{grid-template-columns:1fr}.bar-row{grid-template-columns:90px 1fr auto}.hero h2{font-size:26px}.topbar{align-items:flex-start;flex-direction:column}}
+    .brand{min-width:0}.brand h1{letter-spacing:.015em}.brand .logo{flex-shrink:0}
+    .mode-card:hover,.tab-link:hover{border-color:#89bff0;box-shadow:0 12px 25px rgba(27,82,148,.12)}
+    .btn.primary,.tab-link.active{background:linear-gradient(100deg,#103d88,#2677ce)}
+    .panel{transition:border-color .2s ease}
+    @media(max-width:680px){.brand p{font-size:12px}.brand h1{font-size:20px}}
+  </style>
+  <style>
+  .coin-tag{display:inline-flex;align-items:center;gap:8px;vertical-align:middle;white-space:nowrap;font-weight:750}
+  .coin-icon{position:relative;width:24px;height:24px;border-radius:50%;display:inline-grid;place-items:center;background:#e6edf6;flex-shrink:0;overflow:hidden}
+  .coin-icon img{width:100%;height:100%;object-fit:contain;position:absolute;inset:0;z-index:1;background:white}
+  .coin-fallback{font-size:9px;font-weight:900;color:#174a9e}
+  .coin-icon.missing .coin-fallback{display:block}
+  .chart-symbol .coin-text{display:none}
+  .bar-label:has(.coin-tag){display:flex;align-items:center;gap:4px}
+  @media(max-width:680px){.bar-row{grid-template-columns:80px 1fr auto}.chart-symbol .coin-icon{width:27px;height:27px}}
+    .brand{min-width:0}.brand h1{letter-spacing:.015em}.brand .logo{flex-shrink:0}
+    .mode-card:hover,.tab-link:hover{border-color:#89bff0;box-shadow:0 12px 25px rgba(27,82,148,.12)}
+    .btn.primary,.tab-link.active{background:linear-gradient(100deg,#103d88,#2677ce)}
+    .panel{transition:border-color .2s ease}
+    @media(max-width:680px){.brand p{font-size:12px}.brand h1{font-size:20px}}
   </style>
   {% block head %}{% endblock %}
 </head>
@@ -31,9 +53,9 @@
   <div class="shell">
     <div class="topbar">
       <div class="brand">
-        <div class="logo">K</div>
+        <div class="logo"><img src="{{ url_for('static', filename='kairos-horizon.svg') }}" width="45" height="45" alt="Kairos Horizon"></div>
         <div>
-          <h1>Kairos Web</h1>
+          <h1>Kairos <span style="font-size:12px;color:#2488c9;letter-spacing:.16em;font-weight:700">HORIZON</span></h1>
           <p>Master {{ master }} · Solo lectura · Datos Spot por MCP</p>
         </div>
       </div>
@@ -45,5 +67,6 @@
     </div>
     {% block content %}{% endblock %}
   </div>
+
 </body>
 </html>

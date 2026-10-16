@@ -1,40 +1,20 @@
-# Kairos Web v3
+# Kairos Web v3.2 · Horizon
 
-Kairos Web v3 añade:
+Actualización visual sobre v3.1: identidad **Kairos Horizon**, isotipo vectorial, versión horizontal y favicon SVG, nuevo estilo azul marino/celeste. Se conserva el soporte de logos para 12 tokens + USDT y todas las páginas por modo.
 
-- dashboard ejecutivo mejorado
-- menú visual de modos
-- una página preliminar por cada modo Kairos
-- vistas read-only con tarjetas, tablas y gráficos simples
-- conexión a MCP de Binance para valoración actual
-- conexión a Hyperliquid para HYPE macro vía endpoint dedicado
+## Despliegue
 
-## Despliegue en Render
+Reemplaza los archivos del repositorio en GitHub por **el contenido** de esta carpeta (sin crear una carpeta anidada), confirma los cambios en `main` y espera el deploy automático de Render. No cambies las variables de entorno o claves existentes.
 
-1. Reemplaza el contenido del repositorio con esta versión.
-2. Mantén `render.yaml`, `requirements.txt` y `data/`.
-3. Conserva las variables ya creadas:
-   - `KAIROS_WEB_USER`
-   - `KAIROS_WEB_PASSWORD`
-   - `BINANCE_MCP_URL`
-   - `HYPERLIQUID_MCP_URL`
-   - `BINANCE_MCP_TOKEN` si aplica
-   - `HYPERLIQUID_MCP_TOKEN` si aplica
-4. Haz push a `main` y espera el redeploy automático.
+## Archivos de marca
 
-## Rutas nuevas
+- `static/kairos-horizon.svg` — isotipo, favicon y header
+- `static/kairos-horizon-horizontal.svg` — logo horizontal
 
-- `/mode/resumen`
-- `/mode/balancer`
-- `/mode/compras`
-- `/mode/ventas`
-- `/mode/tradingbot`
-- `/mode/alertas`
-- `/mode/forecast`
-- `/mode/benchmark`
-- `/mode/rotation`
-- `/mode/montecarlo`
+## Importante
 
-## Nota
-
-Estas páginas son preliminares. Buscan reflejar visualmente el tipo de salida que Kairos entrega en ChatGPT, pero todavía no integran todos los motores formales ni las reglas completas de ejecución.
+- Versión de solo lectura. No envía órdenes.
+- Continúa con autenticación Basic del navegador: **no** existe una pantalla de login personalizable todavía.
+- Conexiones MCP e inventario heredados de v3.1. La caché/reintentos ayudan con cold starts pero no garantizan disponibilidad; para un DATA ERROR persistente revisar logs.
+- Los precios dinámicos no actualizan por sí solos el snapshot estático de unidades, USDT o fills.
+- Los logos de monedas se solicitan a un proveedor externo; para no depender de él convendría empaquetar iconos con licencias apropiadas más adelante.

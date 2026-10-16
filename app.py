@@ -1,8 +1,10 @@
-"""Kairos Web v3: read-only dashboard and preliminary mode pages backed by approved MCPs."""
+"""Kairos Web v3.2: read-only dashboard and preliminary mode pages backed by approved MCPs."""
 import asyncio
 import json
 import os
 import secrets
+import time
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -31,6 +33,12 @@ MODE_DEFS = [
     {'slug':'montecarlo','name':'MonteCarlo','subtitle':'Simulación probabilística','description':'Workbench preliminar para simulación de escenarios y dispersión de resultados.'},
 ]
 MODES_BY_SLUG = {m['slug']: m for m in MODE_DEFS}
+# Short TTL protects the MCP service from 10 simultaneous page loads, without
+# ever labeling cached observations as real-time without their original time.
+_MARKET_CACHE = {'stored': 0.0, 'observed': None, 'dashboard': None}
+_MARKET_LOCK = threading.Lock()
+CACHE_TTL_SECONDS = 30
+
 
 @app.before_request
 def authenticate():
@@ -62,7 +70,7 @@ async def call_mcp(env_name, tool, args=None):
     token = os.getenv(env_name.replace('_URL', '_TOKEN'), '').strip()
     from fastmcp.client.transports import StreamableHttpTransport
     transport = StreamableHttpTransport(endpoint, headers={'Authorization': f'Bearer {token}'} if token else None)
-    async with Client(transport, timeout=25) as client:
+    async with Client(transport, timeout=80) as client:
         result = await client.call_tool(tool, args or {})
     if result.is_error:
         raise RuntimeError(f'{tool}: error remoto')
@@ -175,7 +183,24 @@ def core_dashboard(prices):
     }
 
 def load_live_dashboard():
-    data = asyncio.run(call_mcp('BINANCE_MCP_URL', 'get_kairos_spot_prices'))
+    with _MARKET_LOCK:
+        if _MARKET_CACHE['dashboard'] is not None and (time.monotonic() - _MARKET_CACHE['stored']) < CACHE_TTL_SECONDS:
+            return _MARKET_CACHE['observed'], _MARKET_CACHE['dashboard']
+    # Retry one time on transient Render cold-start and MCP transport failure.
+    last_error = None
+    data = None
+    for attempt in range(2):
+        try:
+            data = asyncio.run(call_mcp('BINANCE_MCP_URL', 'get_kairos_spot_prices'))
+            if data.get('status') != 'OK':
+                raise RuntimeError('Binance MCP DATA_ERROR')
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt == 0:
+                time.sleep(1.5)
+    if data is None:
+        raise last_error or RuntimeError('MCP no disponible')
     if data.get('status') != 'OK':
         raise RuntimeError('Binance MCP DATA_ERROR')
     records = data.get('records')
@@ -199,6 +224,8 @@ def load_live_dashboard():
     if age < -60 or age > 180:
         raise RuntimeError('Stale MCP data')
     dashboard=core_dashboard(prices)
+    with _MARKET_LOCK:
+        _MARKET_CACHE.update(stored=time.monotonic(), observed=observed, dashboard=dashboard)
     return observed, dashboard
 
 def top_n(rows, key, n=5, reverse=True, predicate=None):
@@ -575,11 +602,11 @@ def mode_page(slug):
         payload = build_mode_payload(slug, dashboard, observed)
         return render_template('mode.html', mode=mode, payload=payload, error=None, master='5.3.5')
     except Exception as exc:
-        return render_template('mode.html', mode=mode, payload=None, error=pretty_error(exc), master='5.3.5')
+        return render_template('mode.html', mode=mode, payload=None, error=pretty_error(exc), master='5.3.5'), 503
 
 @app.route('/health')
 def health():
-    return jsonify({'status':'UP','service':'Kairos Web','version':'3.0','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
+    return jsonify({'status':'UP','service':'Kairos Web','version':'3.2','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
 
 @app.route('/api/portfolio')
 def portfolio():
