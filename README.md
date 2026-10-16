@@ -82,3 +82,13 @@ Se cargan niveles O2 de la tabla Kairos fechada 16/10/2026 en `data/o2_reference
 - PEPE y VIRTUAL sin anclas muestran precios O1–O5 N/D; su contribución al portafolio se mantiene al Spot actual y se indica como hipótesis neutra, no como objetivo.
 - Las fases se sincronizan artificialmente para comparabilidad: no son fechas reales ni eventos simultáneos de mercado. Los niveles O1/O2/O3/O4/O5 siguen siendo escenarios, sin confirmación semanal 5L/5R y BOS.
 - Test unitario `node tests/test_forecast_segments.js` y prueba visual local del HTML pre-renderizado superados.
+
+
+## v4.1.3 — Dashboard ejecutivo + limpieza Balancer
+- Dashboard reorganizado: fila superior con Patrimonio, Cripto Valuado y Composición General.
+- Liquidez USDT y Reserva Trading se movieron a la sección Gestión de liquidez, junto a Liquidez por Venue.
+- Balancer: se retiró el bloque 'Cómo se forma la capacidad del Balancer' y la fila duplicada de KPIs marcada para eliminar.
+
+
+## v4.1.4 — Modos activos
+La página /modes y /api/modes solo muestran Balancer, Compras, Ventas, TradingBot y Forecast. Se ocultaron Alertas, Benchmark, Rotation y MonteCarlo del menú y se inhabilitó su acceso directo; su código no se borra para una fase futura.

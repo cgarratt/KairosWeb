@@ -30,11 +30,7 @@ MODE_DEFS = [
     {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Simulación de compras en dos etapas; referencias Fibonacci y tabla C1/C2 en Forecast.'},
     {'slug':'ventas','name':'Ventas','subtitle':'Objetivo USDT','description':'Propuestas solo SELL para acercarse a la meta de liquidez y reducir sobrepeso.'},
     {'slug':'tradingbot','name':'TradingBot','subtitle':'Táctico 4H','description':'Vista táctica preliminar para la reserva de trading y activos de seguimiento.'},
-    {'slug':'alertas','name':'Alertas','subtitle':'Vigilancia 1H · 4H · 1D','description':'Watchlist visual de composición, BSI y liquidez. Motor horario aún pendiente.'},
     {'slug':'forecast','name':'Forecast','subtitle':'Cycle Low → O5','description':'Tabla de niveles Fibonacci C1/C2 y ondas/pivotes proyectados; todo es simulación.'},
-    {'slug':'benchmark','name':'Benchmark','subtitle':'Comparación estructural','description':'Base visual para comparar estructura actual vs. objetivos Kairos.'},
-    {'slug':'rotation','name':'Rotation','subtitle':'Rotación de activos','description':'Fuentes y destinos potenciales de rotación, en modo simulación.'},
-    {'slug':'montecarlo','name':'MonteCarlo','subtitle':'Simulación probabilística','description':'Workbench preliminar para simulación de escenarios y dispersión de resultados.'},
 ]
 MODES_BY_SLUG = {m['slug']: m for m in MODE_DEFS}
 # Short TTL protects the MCP service from 10 simultaneous page loads, without
@@ -782,7 +778,7 @@ def mode_page(slug):
 
 @app.route('/health')
 def health():
-    return jsonify({'status':'UP','service':'Kairos Web','version':'4.1.2','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
+    return jsonify({'status':'UP','service':'Kairos Web','version':'4.1.4','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
 
 @app.route('/api/portfolio')
 def portfolio():

@@ -16,11 +16,9 @@
   </section>
 
   <section class="span-8">
-    <div class="kpis">
+    <div class="kpis kpis-compact">
       <article class="kpi primary"><div class="label">{{ metric_icon("Patrimonio total") }}Patrimonio total</div><div class="value" id="total">—</div><div class="help">Cripto + USDT físico consolidado</div></article>
       <article class="kpi primary"><div class="label">{{ metric_icon("Cripto valuado") }}Cripto valuado</div><div class="value" id="crypto">—</div><div class="help" id="crypto-help">Esperando precios…</div></article>
-      <article class="kpi ok"><div class="label">{{ metric_icon("Liquidez USDT") }}Liquidez USDT</div><div class="value" id="usdt">—</div><div class="help" id="usdt-help">Piso estructural 40%</div></article>
-      <article class="kpi warn"><div class="label">{{ metric_icon("Reserva Trading") }}Reserva Trading</div><div class="value" id="reserve">—</div><div class="help">Bolsa fija separada (Quantfury)</div></article>
     </div>
   </section>
 
@@ -37,7 +35,7 @@
     <div class="token-comparison" id="token-comparison">Calculando…</div>
   </section>
   <section class="panel span-6">
-    <h3>Distribución por Tiers vs objetivo</h3>
+    <h3>Distribución por Tiers</h3>
     <p class="sub">Barras verticales de participación en la manga cripto (sin USDT)</p>
     <div class="tiers-vertical" id="tiers-vertical">Calculando…</div>
   </section>
@@ -47,11 +45,20 @@
     <div class="bar-list" id="bsi-bars"><div class="muted">Calculando…</div></div>
   </section>
 
-
-  <section class="panel span-6">
-    <h3>Liquidez por venue</h3>
-    <p class="sub">USDT físico confirmado por venue</p>
-    <div class="bar-list" id="venue-bars"><div class="muted">Calculando…</div></div>
+  <section class="panel span-12">
+    <h3>Gestión de liquidez</h3>
+    <p class="sub">USDT consolidado y distribución por exchange/venue.</p>
+    <div class="grid liquidity-grid" style="margin-top:10px">
+      <div class="span-7 liquidity-kpis">
+        <article class="kpi ok"><div class="label">{{ metric_icon("Liquidez USDT") }}Liquidez USDT</div><div class="value" id="usdt">—</div><div class="help" id="usdt-help">Piso estructural 40%</div></article>
+        <article class="kpi warn"><div class="label">{{ metric_icon("Reserva Trading") }}Reserva Trading</div><div class="value" id="reserve">—</div><div class="help">Bolsa fija separada (Quantfury)</div></article>
+      </div>
+      <div class="panel span-5 nested-panel">
+        <h3>Liquidez por Venue</h3>
+        <p class="sub">USDT físico confirmado por venue</p>
+        <div class="bar-list" id="venue-bars"><div class="muted">Calculando…</div></div>
+      </div>
+    </div>
   </section>
 
 
@@ -83,6 +90,7 @@
 </div>
 
 <style>
+.kpis-compact{grid-template-columns:repeat(2,minmax(0,1fr));}.liquidity-grid{align-items:stretch}.liquidity-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.nested-panel{background:#fff;border:1px solid #dce7f6;border-radius:18px;padding:18px}@media(max-width:900px){.liquidity-kpis{grid-template-columns:1fr}.kpis-compact{grid-template-columns:1fr}}
 .token-comparison{display:flex;flex-direction:column;gap:12px;margin-top:16px}.token-compare-item{display:grid;grid-template-columns:135px 1fr 190px;gap:12px;align-items:center;font-size:13px}.token-compare-track{height:27px;border-radius:7px;background:#f0f4fa;position:relative;overflow:hidden}.token-compare-actual,.token-compare-target{position:absolute;left:0;height:10px;border-radius:6px}.token-compare-actual{top:2px;background:#2876cc}.token-compare-target{bottom:2px;background:#b5c6de}.tiers-vertical{display:flex;justify-content:space-around;gap:25px;align-items:end;height:215px;padding:12px}.tier-col{width:30%;height:100%;display:flex;flex-direction:column;align-items:center;gap:6px}.tier-col-bars{display:flex;align-items:end;justify-content:center;gap:12px;flex:1;width:100%;border-bottom:1px solid #cbd7e5}.tier-col-bar{width:35px;border-radius:5px 5px 0 0}.tier-col-bar.actual{background:#2678ce}.tier-col-bar.goal{background:#c0cedf}.tier-col small{white-space:nowrap;color:#617089}@media(max-width:650px){.token-compare-item{grid-template-columns:85px 1fr;}.token-compare-item>span{grid-column:2}.tier-col-bar{width:24px}}
 </style>
 <script>
