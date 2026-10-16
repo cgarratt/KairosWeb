@@ -7,6 +7,7 @@ import time
 import threading
 import uuid
 import logging
+import httpx
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -38,6 +39,7 @@ MODES_BY_SLUG = {m['slug']: m for m in MODE_DEFS}
 # ever labeling cached observations as real-time without their original time.
 _MARKET_CACHE = {'stored': 0.0, 'observed': None, 'dashboard': None}
 _MARKET_LOCK = threading.Lock()
+_FETCH_LOCK = threading.Lock()
 CACHE_TTL_SECONDS = 30
 
 
@@ -88,36 +90,57 @@ async def call_mcp(env_name, tool, args=None):
                 return value
     raise RuntimeError(f'{tool}: respuesta MCP no reconocida')
 
+def _http_status(exc):
+    """Find real HTTP status through wrappers without logging URL or headers."""
+    seen=set()
+    pending=[exc]
+    while pending:
+        current=pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, httpx.HTTPStatusError):
+            return current.response.status_code
+        for nxt in (getattr(current, '__cause__', None), getattr(current,'__context__',None)):
+            if nxt is not None:
+                pending.append(nxt)
+        group=getattr(current, 'exceptions', None)
+        if group:
+            pending.extend(group)
+    return None
+
 def diagnostic_error(exc, scope):
-    error_id = uuid.uuid4().hex[:10]
-    app.logger.exception('Kairos MCP %s failure ID=%s', scope, error_id)
-    name = type(exc).__name__
-    msg = str(exc).lower()
-    if 'no configurada' in msg:
-        category = 'NOT_CONFIGURED'
-        hint = 'Configura la URL de este MCP en Environment de Render.'
-    elif 'url debe usar https' in msg or ': url debe usar https' in msg or 'invalid url' in msg or 'invalid scheme' in msg:
-        category = 'INVALID_URL'
-        hint = 'Revisa el esquema HTTPS y la ruta /mcp.'
-    elif any(word in name.lower() for word in ('timeout','cancel')) or 'timed out' in msg or 'timeout' in msg:
-        category = 'TIMEOUT'
-        hint = 'La conexión expiró. Verifica si el servicio MCP está activo y el timeout de Gunicorn.'
-    elif any(word in msg for word in ('401','403','unauthorized','forbidden')):
-        category = 'AUTH'
-        hint = 'Revisa el token Bearer del MCP; nunca lo compartas.'
-    elif any(word in msg for word in ('404','not found','405')):
-        category = 'ENDPOINT'
-        hint = 'Comprueba que la URL apunte al endpoint MCP correcto.'
+    error_id=uuid.uuid4().hex[:10]
+    http_status=_http_status(exc)
+    etype=type(exc).__name__
+    msg=str(exc).lower()
+    # Safe structured logging: never log exception text, headers, URLs or tokens.
+    app.logger.error('Kairos MCP failure ID=%s scope=%s exception=%s http_status=%s',
+                     error_id,scope,etype,http_status if http_status is not None else 'n/a')
+    if http_status in (401,403):
+        category='AUTH'; hint='El MCP respondió con un error de autorización.'
+    elif http_status in (404,405,406,415):
+        category='ENDPOINT'; hint='Revisa la ruta MCP o la negociación del protocolo HTTP.'
+    elif http_status == 429:
+        category='RATE_LIMIT'; hint='El MCP aplicó un límite de solicitudes.'
+    elif http_status is not None and http_status >= 500:
+        category='UPSTREAM_HTTP'; hint='El servicio MCP devolvió un error del servidor.'
+    elif http_status is not None:
+        category='UPSTREAM_HTTP'; hint='El servicio MCP devolvió una respuesta HTTP fallida.'
+    elif 'no configurada' in msg:
+        category='NOT_CONFIGURED'; hint='Falta configurar la URL MCP.'
+    elif 'url debe usar https' in msg:
+        category='INVALID_URL'; hint='La URL MCP debe usar HTTPS.'
+    elif isinstance(exc,(TimeoutError,httpx.TimeoutException)) or 'timeout' in etype.lower():
+        category='TIMEOUT';hint='Se agotó el tiempo de espera del servicio MCP.'
     elif 'stale' in msg:
-        category = 'STALE_DATA'
-        hint = 'La cotización no cumple el límite de frescura; vuelve a consultar.'
+        category='STALE_DATA';hint='Las cotizaciones no cumplen el límite de frescura.'
     elif 'missing one' in msg or 'invalid records' in msg:
-        category = 'INCOMPLETE_DATA'
-        hint = 'La respuesta del MCP no incluye los 12 tokens requeridos.'
+        category='INCOMPLETE_DATA';hint='La respuesta no contiene todas las cotizaciones requeridas.'
     else:
-        category = 'MCP_ERROR'
-        hint = 'Consulta los logs de Render usando el identificador de error.'
-    return {'code': category, 'message': hint, 'error_id': error_id, 'exception_type': name}
+        category='MCP_ERROR';hint='Consulta los logs privados usando el ID del error.'
+    return {'code':category,'message':hint,'error_id':error_id,
+            'exception_type':etype,'http_status':http_status}
 
 def pretty_error(exc):
     if isinstance(exc, RuntimeError) and ('no configurada' in str(exc) or 'debe usar HTTPS' in str(exc)):
@@ -220,7 +243,7 @@ def core_dashboard(prices):
         'forecast_sensitivity':forecast_sensitivity(rows,liquidity)
     }
 
-def load_live_dashboard():
+def _load_live_dashboard_uncached():
     with _MARKET_LOCK:
         if _MARKET_CACHE['dashboard'] is not None and (time.monotonic() - _MARKET_CACHE['stored']) < CACHE_TTL_SECONDS:
             return _MARKET_CACHE['observed'], _MARKET_CACHE['dashboard']
@@ -265,6 +288,12 @@ def load_live_dashboard():
     with _MARKET_LOCK:
         _MARKET_CACHE.update(stored=time.monotonic(), observed=observed, dashboard=dashboard)
     return observed, dashboard
+
+def load_live_dashboard():
+    # One in-flight market fetch per application process, shared by all pages.
+    # The cache contains a real timestamp and is never used beyond TTL.
+    with _FETCH_LOCK:
+        return _load_live_dashboard_uncached()
 
 def top_n(rows, key, n=5, reverse=True, predicate=None):
     items = rows
@@ -744,7 +773,7 @@ def mode_page(slug):
 
 @app.route('/health')
 def health():
-    return jsonify({'status':'UP','service':'Kairos Web','version':'4.0.1','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
+    return jsonify({'status':'UP','service':'Kairos Web','version':'4.0.2','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
 
 @app.route('/api/portfolio')
 def portfolio():
