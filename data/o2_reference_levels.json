@@ -1,0 +1,51 @@
+{
+  "source": "Tabla Kairos O2 existente (16/10/2026 03:26 UTC, recogida de reporte previo)",
+  "status": "REFERENCE_SNAPSHOT_NOT_LIVE",
+  "levels": {
+    "BTC": {
+      "c1": 72575.57,
+      "c2": 69076.45
+    },
+    "ETH": {
+      "c1": 2156.31,
+      "c2": 2002.78
+    },
+    "SOL": {
+      "c1": 92.54,
+      "c2": 84.8912
+    },
+    "LINK": {
+      "c1": 11.3865,
+      "c2": 10.3503
+    },
+    "HYPE": {
+      "c1": 59.2425,
+      "c2": 50.1005
+    },
+    "HBAR": {
+      "c1": 0.097625,
+      "c2": 0.089758
+    },
+    "SUI": {
+      "c1": 0.964825,
+      "c2": 0.887199
+    },
+    "ONDO": {
+      "c1": 0.40529,
+      "c2": 0.35729
+    },
+    "PUMP": {
+      "c1": 0.0039179,
+      "c2": 0.0032651
+    },
+    "PLUME": {
+      "c1": 0.0149565,
+      "c2": 0.0134373
+    }
+  },
+  "unavailable": [
+    "PEPE",
+    "VIRTUAL"
+  ],
+  "note": "Estos precios son referencias O2 del reporte previo; no se recalculan por MCP y no demuestran estado vigente de órdenes ni pivotes."
+}

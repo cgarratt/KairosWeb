@@ -62,3 +62,23 @@ Balancer: eliminación exclusiva de la columna USDT ref. en candidatos de compra
 - Compras C1/C2 y Ventas ya incluyen total USDT dinámico; se conservan.
 - La tabla ejecutiva del Dashboard conserva su fila de patrimonio consolidado.
 - No sumar porcentajes ni cantidades de tokens heterogéneos como si fueran USDT.
+
+
+## v4.1.0 — Referencias O2 C1/C2
+Se cargan niveles O2 de la tabla Kairos fechada 16/10/2026 en `data/o2_reference_levels.json` (10 tokens). PEPE y VIRTUAL N/D. Los niveles NO se recalculan en vivo ni se consideran órdenes ejecutables o pivotes nuevos. Revisar vigencia de anclas y reconciliación de órdenes antes de operar.
+
+
+## v4.1.1 — Forecast centralizado (escenarios)
+- Tabla de candidatos O2 trasladada desde Compras a `/mode/forecast`: precios 38.2%, C1 50%, C2 61.8%, 78.2%; ambos niveles de referencia llevan USDT $0.
+- Tabla Cycle Low (S0) → O1 → O2 → O3 → O4 → O5 simulados desde las referencias de O2, con selectores de extensiones/retracciones. Los pivotes S0/O1 invertidos algebraicamente NO tienen certificación Elliott.
+- Compras conserva sus sliders y totales, con enlace a la tabla de Forecast.
+
+## v4.1.2 — Forecast por tramos
+- Cuatro secciones independientes: O1→O2, O2→O3, O3→O4, O4→O5.
+- Cada una: tabla para los 12 tokens con unidades, precios de ambos extremos, valorización USD de cada extremo, delta, y fila TOTAL CRIPTO / LIQUIDEZ USDT / TOTAL PATRIMONIO.
+- Cada tabla acompañada por un gráfico SVG con tres líneas: cripto valorizado, USDT físico constante y patrimonio combinado, con interpolación lineal ilustrativa (sin fechas).
+- Al modificar los controles Fibonacci se recalculan los cuatro tramos; los presupuestos Fib en la tabla O2 son simulaciones *independientes* y no alteran las tenencias usadas en la proyección.
+- Supuesto explícito HOLD: unidades del snapshot inmóviles, USDT físico intacto, Reserva QF contada una vez, sin órdenes, fills, comisiones ni monetización O3/O5. No es Forecast oficial de acumulación de BTC.
+- PEPE y VIRTUAL sin anclas muestran precios O1–O5 N/D; su contribución al portafolio se mantiene al Spot actual y se indica como hipótesis neutra, no como objetivo.
+- Las fases se sincronizan artificialmente para comparabilidad: no son fechas reales ni eventos simultáneos de mercado. Los niveles O1/O2/O3/O4/O5 siguen siendo escenarios, sin confirmación semanal 5L/5R y BOS.
+- Test unitario `node tests/test_forecast_segments.js` y prueba visual local del HTML pre-renderizado superados.

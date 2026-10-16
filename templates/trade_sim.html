@@ -19,14 +19,18 @@
 <div style="display:flex;justify-content:space-between;gap:12px" class="sub"><span>{{ '0% de P' if mode.slug=='compras' else ('%.2f%% USDT actual'|format(payload.current.cash_pct)) }}</span><span>{{ 'Máximo: USDT físico menos Reserva Trading' if mode.slug=='compras' else '70% USDT objetivo máximo' }}</span></div>
 </div>
 <p class="sim-warn" id="caution"></p></section>
-<section class="panel span-12"><h2>{{ 'Candidatos C1 / C2' if mode.slug=='compras' else 'Candidatos SELL' }}</h2><p class="sub">{{ 'Asignación en dos etapas: corrección de déficits y compra proporcional a objetivos. Incluye los 12 tokens.' if mode.slug=='compras' else 'Ordenados por exceso de peso; BTC excluido. Límites de Exchange declarados, sin descontar órdenes pendientes.' }}</p>
-<div style="overflow-x:auto"><table><thead><tr>{% if mode.slug=='compras' %}<th>Token</th><th>Actual / Objetivo</th><th>Déficit inicial</th><th>Balanceo USDT</th><th>Proporcional USDT</th><th>Precio C1 · Fib 50%</th><th>Precio C2 · Fib 61.8%</th><th>C1 USDT</th><th>C2 USDT</th><th>Total USDT</th><th>Acción</th>{% else %}<th>Token</th><th>% Actual</th><th>% Objetivo</th><th>% Post-venta</th><th>Exchange ud.</th><th>USDT estimado</th><th>Unidades SELL</th><th>Acción</th>{% endif %}</tr></thead><tbody id="sim-body"></tbody><tfoot id="sim-foot" style="font-weight:800;background:#eaf3ff;border-top:2px solid #91b7e9"></tfoot></table></div></section>
-
+{% if mode.slug=='compras' %}
+<section class="panel span-12"><div class="hero" style="align-items:flex-start"><div><h2>Resumen de compras</h2><p class="sub">La asignación continúa calculándose aquí. La tabla detallada de precios C1/C2, Fibonacci de referencia y ondas simuladas ahora está en Forecast.</p></div><a id="forecast-detail-link" class="btn primary" href="/mode/forecast">Ver niveles y ondas en Forecast ↗</a></div><div class="sim-layout" style="margin-top:18px"><div class="sim-metric"><small>Etapa 1 · Balanceo</small><b id="buy-stage1">—</b></div><div class="sim-metric"><small>Etapa 2 · Proporcional</small><b id="buy-stage2">—</b></div><div class="sim-metric"><small>Fib C1 · 50% presupuesto</small><b id="buy-c1-total">—</b></div><div class="sim-metric"><small>Fib C2 · 61.8% presupuesto</small><b id="buy-c2-total">—</b></div></div><p class="footer-note">38.2% y 78.2%: referencias sin presupuesto; ver Forecast.</p></section>
+{% else %}
+<section class="panel span-12"><h2>Candidatos SELL</h2><p class="sub">Ordenados por exceso de peso; BTC excluido. Límites de Exchange declarados, sin descontar órdenes pendientes.</p>
+<div style="overflow-x:auto"><table><thead><tr><th>Token</th><th>% Actual</th><th>% Objetivo</th><th>% Post-venta</th><th>Exchange ud.</th><th>USDT estimado</th><th>Unidades SELL</th><th>Acción</th></tr></thead><tbody id="sim-body"></tbody><tfoot id="sim-foot" style="font-weight:800;background:#eaf3ff;border-top:2px solid #91b7e9"></tfoot></table></div></section>
+{% endif %}
 
 <section class="panel span-6"><h2>Distribución del escenario</h2><p class="sub">Asignación USDT referencial por token.</p><div id="alloc-chart" class="bar-list"></div></section>
 <section class="panel span-6"><h2>Liquidez post-escenario</h2><p class="sub">Comparativa de USDT antes vs después. Sin alterar saldos reales.</p><div class="sim-metric" style="margin:15px 0"><small>Situación actual</small><b id="before-cash">—</b><div class="sim-bar"><div id="before-bar"></div></div></div><div class="sim-metric"><small>Después (hipotético)</small><b id="after-cash">—</b><div class="sim-bar"><div id="after-bar"></div></div></div></section>
-<section class="panel span-12"><div class="callout warn"><strong>Alcance de la simulación</strong>El slider no modifica posiciones ni coloca órdenes. Los precios Fibonacci operativos, los compromisos LIMIT, comisiones y ventas reservadas requieren reconciliación. Snapshot: {{ payload.snapshot_note }}</div></section>
+<section class="panel span-12"><div class="callout warn"><strong>Alcance de la simulación</strong>El slider no modifica posiciones ni coloca órdenes. Los precios de referencia Fibonacci están en Forecast; su aprobación operativa, los compromisos LIMIT, comisiones y ventas reservadas requieren reconciliación. Snapshot: {{ payload.snapshot_note }}</div></section>
 </div>
+<script src="{{ url_for('static', filename='purchase_plan.js') }}"></script>
 <script>
 const mode={{ payload.kind|tojson }};
 const source={{ payload|tojson }};
@@ -41,29 +45,6 @@ function distribute(total, items, key){const out=items.map(()=>0);let remaining=
 // Calcula una cartera objetivo sin vender: capital necesario para diluir el mayor sobrepeso.
 // Con B por debajo de ese capital, distribuye entre déficits y conserva 100% del presupuesto.
 // Con B suficiente, consigue exactamente los targets y asigna el excedente a prorrata.
-function purchasePlan(budget,items,crypto){
-  const n=items.length, weights=items.map(x=>Number(x.target)), current=items.map(x=>Number(x.current_usdt));
-  const totals=weights.reduce((a,b)=>a+b,0);if(!(totals>0))return {balance:items.map(()=>0),extra:items.map(()=>0),required:0};
-  const targets=weights.map(w=>w/totals);
-  const required=Math.max(0,...items.map((x,i)=>targets[i]>0?current[i]/targets[i]-crypto:0));
-  const balance=Array(n).fill(0),extra=Array(n).fill(0);
-  const first=Math.min(budget,required);
-  if(first>1e-9){
-    if(budget>=required-1e-7){
-      // Llega al balance exacto; todos los activos cumplen su target al final de la etapa.
-      for(let i=0;i<n;i++) balance[i]=Math.max(0,targets[i]*(crypto+required)-current[i]);
-    }else{
-      // Balanceo parcial hacia la composición objetivo tras invertir el capital indicado.
-      // No compramos activos ya sobreponderados frente a ese total objetivo.
-      const gaps=items.map((x,i)=>Math.max(0,targets[i]*(crypto+first)-current[i]));
-      const total=gaps.reduce((a,b)=>a+b,0);
-      if(total>0) for(let i=0;i<n;i++)balance[i]=first*gaps[i]/total;
-    }
-  }
-  const second=Math.max(0,budget-first);
-  for(let i=0;i<n;i++)extra[i]=second*targets[i];
-  return {balance,extra,required};
-}
 function paint(){let target=Number(el('allocation-slider').value);el('slider-value').textContent=target.toFixed(1)+'%';el('portfolio-metric').textContent=dollar(P);el('cash-metric').textContent=dollar(cash);el('cash-pct').textContent=(100*cash/P).toFixed(1)+'% de P';let allocated=[],after=cash;
 if(mode==='compras'){
   const desired=P*target/100;
@@ -74,9 +55,12 @@ if(mode==='compras'){
   const sum=allocated.reduce((a,b)=>a+b,0);after=cash-sum;
   const initial=plan.balance.reduce((a,b)=>a+b,0),proportional=plan.extra.reduce((a,b)=>a+b,0);
   el('third-metric').textContent=dollar(trading);el('allocation-metric').textContent=dollar(sum);
-  el('caution').textContent='Etapa 1 (balanceo): '+dollar(initial)+'. Etapa 2 (todos los tokens): '+dollar(proportional)+'. Capital necesario para balanceo completo sin ventas: '+dollar(plan.required)+'. '+(sum>safeCapacity+0.01?'Por encima del piso estructural 40% (caja libre: '+dollar(safeCapacity)+'); simulación NO autorizada. ':'')+'No descuenta LIMIT ni comisiones. C1/C2 60%/40%; precios Fib pendientes de anclas aprobadas.';
-  el('sim-foot').innerHTML=`<tr><td colspan="3">TOTAL USDT</td><td>${dollar(initial)}</td><td>${dollar(proportional)}</td><td colspan="2">Niveles C1/C2 sin certificar</td><td>${dollar(sum*.6)}</td><td>${dollar(sum*.4)}</td><td>${dollar(sum)}</td><td>SIMULACIÓN</td></tr>`;
-  el('sim-body').innerHTML=source.tokens.map((x,i)=>{let a=allocated[i],c1=a*.6,c2=a*.4;let action=a>0?'BUY · SIMULAR':'WATCH';return `<tr><td>${token(x.token)}</td><td>${(x.weight*100).toFixed(1)}% / ${(x.target*100).toFixed(1)}%</td><td>${dollar(x.gap_usdt)}</td><td>${dollar(plan.balance[i])}</td><td>${dollar(plan.extra[i])}</td><td>${x.c1_price?dollar(x.c1_price):'Pendiente'}</td><td>${x.c2_price?dollar(x.c2_price):'Pendiente'}</td><td>${dollar(c1)}</td><td>${dollar(c2)}</td><td><b>${dollar(a)}</b></td><td><span class="sim-actions ${a?'':'watch'}">${action}</span></td></tr>`}).join('') || '<tr><td colspan="11">Sin posiciones.</td></tr>';
+  el('caution').textContent='Etapa 1 (balanceo): '+dollar(initial)+'. Etapa 2 (todos los tokens): '+dollar(proportional)+'. Capital necesario para balanceo completo sin ventas: '+dollar(plan.required)+'. '+(sum>safeCapacity+0.01?'Por encima del piso estructural 40% (caja libre: '+dollar(safeCapacity)+'); simulación NO autorizada. ':'')+'No descuenta LIMIT ni comisiones. C1/C2 60%/40%; tabla de precios referenciales y ondas hipotéticas en Forecast.';
+  el('buy-stage1').textContent=dollar(initial);
+  el('buy-stage2').textContent=dollar(proportional);
+  el('buy-c1-total').textContent=dollar(sum*.6);
+  el('buy-c2-total').textContent=dollar(sum*.4);
+  el('forecast-detail-link').href='/mode/forecast?deploy='+encodeURIComponent(target.toFixed(4));
 }else{
   const desired=Math.max(0,P*target/100-cash);
   // Etapa 1: vender sobreponderados hasta el menor entre su exceso y el Exchange libre declarado.

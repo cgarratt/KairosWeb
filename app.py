@@ -14,22 +14,24 @@ from urllib.parse import urlsplit
 
 from flask import Flask, Response, jsonify, render_template, request, abort, redirect
 from fastmcp import Client
+from forecast_math import derive_reference_anchors
 
 BASE = Path(__file__).parent
 app = Flask(__name__)
 SNAPSHOT = json.loads((BASE / 'data/snapshot_master_2026-10-15.json').read_text())
 CONFIG = json.loads((BASE / 'data/config.json').read_text())
 BSI_ANCHORS = json.loads((BASE / 'data/bsi_anchors.json').read_text())
+O2_LEVELS = json.loads((BASE / 'data/o2_reference_levels.json').read_text())
 TOKENS = [r['symbol'] for r in CONFIG['universe']]
 TARGETS = {r['symbol']: r['target'] for r in CONFIG['universe']}
 TIERS = {r['symbol']: r['tier'] for r in CONFIG['universe']}
 MODE_DEFS = [
     {'slug':'balancer','name':'Balancer','subtitle':'Rebalanceo y liquidez','description':'Propuestas de rebalanceo, control de piso de liquidez y protección de Core.'},
-    {'slug':'compras','name':'Compras','subtitle':'O2 / O4','description':'Candidatos estructurales C1 50% y C2 61.8%, priorizados por déficit.'},
+    {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Simulación de compras en dos etapas; referencias Fibonacci y tabla C1/C2 en Forecast.'},
     {'slug':'ventas','name':'Ventas','subtitle':'Objetivo USDT','description':'Propuestas solo SELL para acercarse a la meta de liquidez y reducir sobrepeso.'},
     {'slug':'tradingbot','name':'TradingBot','subtitle':'Táctico 4H','description':'Vista táctica preliminar para la reserva de trading y activos de seguimiento.'},
     {'slug':'alertas','name':'Alertas','subtitle':'Vigilancia 1H · 4H · 1D','description':'Watchlist visual de composición, BSI y liquidez. Motor horario aún pendiente.'},
-    {'slug':'forecast','name':'Forecast','subtitle':'Escenarios O2 → O5','description':'Escenarios preliminares y sensibilidad patrimonial, sin predicciones ni órdenes.'},
+    {'slug':'forecast','name':'Forecast','subtitle':'Cycle Low → O5','description':'Tabla de niveles Fibonacci C1/C2 y ondas/pivotes proyectados; todo es simulación.'},
     {'slug':'benchmark','name':'Benchmark','subtitle':'Comparación estructural','description':'Base visual para comparar estructura actual vs. objetivos Kairos.'},
     {'slug':'rotation','name':'Rotation','subtitle':'Rotación de activos','description':'Fuentes y destinos potenciales de rotación, en modo simulación.'},
     {'slug':'montecarlo','name':'MonteCarlo','subtitle':'Simulación probabilística','description':'Workbench preliminar para simulación de escenarios y dispersión de resultados.'},
@@ -404,12 +406,26 @@ def build_mode_payload(slug, d, observed):
             'callouts':[{'tone':'info','title':'Vista preliminar','text':'Equivale a un Balancer visual: muestra dónde están las desviaciones y qué zonas requerirían atención antes del cálculo final de propuestas.'}]
         }
 
-    if slug == 'compras':
+    if slug in ('compras','forecast'):
         p=d['total_value']; cash=d['usdt_total']; trading=d['trading_reserve']
-        max_percent=(100*max(0.0,cash-trading)/p) if p else 0.0 # Total liquidez USDT menos reserva Trading
+        max_percent=(100*max(0.0,cash-trading)/p) if p else 0.0
         reference_cap=max(0.0,cash-trading)
-        targets=[{'token':r['token'],'price':r['price'],'weight':r['weight'],'target':r['target'],'current_usdt':r['value'],'gap_usdt':max(0.0,(r['target']-r['weight'])*d['crypto_value']),'c1_price':None,'c2_price':None} for r in d['rows']]
-        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'], 'kind':'compras', 'current':{'P':p,'cash':cash,'trading':trading,'cash_pct':d['usdt_pct']*100,'floor':.40*p,'max_percent':max_percent,'reference_cap':reference_cap,'crypto_value':d['crypto_value']},'tokens':targets, 'notes':['C1=Fibonacci 50%; C2=61.8%. Etapa 1: corregir brechas de composición sin ventas. Etapa 2: invertir excedente proporcionalmente a los targets.','El slider es una SIMULACIÓN y no libera fondos bloqueados ni reemplaza órdenes LIMIT existentes.','La reserva Trading está separada y el piso mínimo de 40% USDT queda protegido al evaluar capacidad ejecutable.']}
+        purchase_tokens=[{'token':r['token'],'price':r['price'],'weight':r['weight'],'target':r['target'],
+            'current_usdt':r['value'],'units':r['units'],
+            'gap_usdt':max(0.0,(r['target']-r['weight'])*d['crypto_value']),
+            'c1_price':O2_LEVELS['levels'].get(r['token'],{}).get('c1'),
+            'c2_price':O2_LEVELS['levels'].get(r['token'],{}).get('c2')}
+            for r in d['rows']]
+        purchase_current={'P':p,'cash':cash,'trading':trading,'cash_pct':d['usdt_pct']*100,
+             'floor':.40*p,'max_percent':max_percent,'reference_cap':reference_cap,
+             'crypto_value':d['crypto_value']}
+    if slug == 'compras':
+        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
+            'kind':'compras', 'current':purchase_current, 'tokens':purchase_tokens,
+            'o2_level_reference':O2_LEVELS['source'],
+            'notes':['La tabla de precios C1/C2 y referencias 38.2%/78.2% se encuentra en Forecast.',
+             'Compras mantiene su slider y la simulación de balanceo + asignación proporcional.',
+             'La liquidez seleccionada es hipotética; no modifica órdenes LIMIT ni custodia.']}
         buy_rows=[]
         for r in under:
             share = abs(r['drift_pp'])/deficits_sum
@@ -552,33 +568,23 @@ def build_mode_payload(slug, d, observed):
         }
 
     if slug == 'forecast':
-        sc = d['forecast_sensitivity']['scenarios']
-        return {
-            **common,
-            'metrics':[
-                {'label':'Portafolio base','value':fmt_money(d['forecast_sensitivity']['base_portfolio']),'help':'Escenario actual del snapshot','tone':'primary'},
-                {'label':'BTC unidades','value':str(d['forecast_sensitivity']['btc_units']),'help':'Impacta la sensibilidad actual','tone':'neutral'},
-                {'label':'Escenario -30% BTC','value':fmt_money(sc[0]['portfolio_value']),'help':f"{sc[0]['portfolio_change_pct']:+.2f}% del portafolio",'tone':'danger'},
-                {'label':'Escenario +30% BTC','value':fmt_money(sc[-1]['portfolio_value']),'help':f"{sc[-1]['portfolio_change_pct']:+.2f}% del portafolio",'tone':'ok'},
-            ],
-            'highlights':[
-                'Este Forecast es solo una sensibilidad preliminar, no el Forecast oficial O2–O5.',
-                'No se proyectan acumulaciones, ventas parciales ni escenarios multi-activo.',
-                'Aun así, sirve como página visual preliminar para el modo Forecast.',
-            ],
-            'bars':[
-                bar_card('Sensibilidad del patrimonio','Variación del valor total ante cambios hipotéticos de BTC',[
-                    {'label':('+' if x['btc_change_pct']>0 else '')+str(x['btc_change_pct'])+'% BTC', 'value':abs(x['portfolio_value']-d['forecast_sensitivity']['base_portfolio']), 'display':f"{x['portfolio_change_pct']:+.2f}%", 'tone':'danger' if x['btc_change_pct']<0 else 'ok' if x['btc_change_pct']>0 else 'neutral'}
-                    for x in sc
-                ])
-            ],
-            'tables':[
-                as_table('Escenarios ilustrativos',['Shock BTC','Valor portafolio','Cambio portafolio'],[
-                    [('+' if x['btc_change_pct']>0 else '')+str(x['btc_change_pct'])+'%', fmt_money(x['portfolio_value']), f"{x['portfolio_change_pct']:+.2f}%"] for x in sc
-                ], 'No es una predicción; se usa solo para visualización.')
-            ],
-            'callouts':[{'tone':'warn','title':'Pendiente de integración','text':'Para igualar Forecast ChatGPT faltan los escenarios oficiales por onda, anchors aprobados y lógica de rotación/ventas del ciclo.'}]
-        }
+        pivot_rows=[]
+        for r in purchase_tokens:
+            pair=O2_LEVELS['levels'].get(r['token'],{})
+            pivots=derive_reference_anchors(pair.get('c1'),pair.get('c2'))
+            pivot_rows.append({'token':r['token'], 'c1':pair.get('c1'), 'c2':pair.get('c2'),
+                               'ref382':pivots['ref382'], 'ref782':pivots['ref782'],
+                               'cycle_low':pivots['cycle_low'], 'o1':pivots['o1'],
+                               'anchor_state':pivots['status']})
+        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
+            'kind':'forecast', 'current':purchase_current,'tokens':purchase_tokens,
+            'pivot_rows':pivot_rows, 'o2_source':O2_LEVELS['source'],
+            'reference_type':'O2_REFERENCES_RECONSTRUCTED_UNCERTIFIED',
+            'notes':['38.2% y 78.2% son referencias SIN presupuesto: USDT $0.',
+               'C1 (50%) y C2 (61.8%) utilizan una tabla O2 histórica, no pivotes recalculados en vivo.',
+               'Cycle Low y O1 se reconstruyen matemáticamente de C1/C2, NO están confirmados.',
+               'O2/O3/O4/O5 son escenarios hipotéticos con parámetros ajustables; no son señales Elliott ni objetivos aprobados.',
+               'La simulación de Forecast NO calcula BTC acumulado oficial ni probabilidades. Sin órdenes ni fills.']}
 
     if slug == 'benchmark':
         return {
@@ -767,7 +773,7 @@ def mode_page(slug):
         return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master='5.3.5'), 503
     try:
         payload = build_mode_payload(slug, dashboard, observed)
-        return render_template('balancer.html' if slug=='balancer' else 'trade_sim.html' if slug in ('compras','ventas') else 'mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master='5.3.5')
+        return render_template('balancer.html' if slug=='balancer' else 'trade_sim.html' if slug in ('compras','ventas') else 'forecast.html' if slug=='forecast' else 'mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master='5.3.5')
     except Exception as exc:
         error_id = uuid.uuid4().hex[:10]
         app.logger.exception('Kairos MODE_RENDER slug=%s ID=%s',slug,error_id)
@@ -776,7 +782,7 @@ def mode_page(slug):
 
 @app.route('/health')
 def health():
-    return jsonify({'status':'UP','service':'Kairos Web','version':'4.0.2','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
+    return jsonify({'status':'UP','service':'Kairos Web','version':'4.1.2','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
 
 @app.route('/api/portfolio')
 def portfolio():

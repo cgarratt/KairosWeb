@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+{% block title %}Kairos · Forecast de Ondas{% endblock %}
+{% block head %}
+<style>
+.fc-hero{display:flex;gap:18px;align-items:start;justify-content:space-between;flex-wrap:wrap}
+.fc-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.fc-kpi{border:1px solid #dce6f4;border-radius:16px;padding:14px;background:#f7fbff}
+.fc-kpi small{font-size:12px;color:#566a83}.fc-kpi b{font-size:21px;color:#164d94;display:block;margin:8px 0}
+.fc-controls{display:flex;gap:16px;flex-wrap:wrap;align-items:end;padding:16px;background:#eff5ff;border:1px solid #d1e2f8;border-radius:16px;margin:14px 0}
+.fc-field{flex:1;min-width:140px}.fc-field label{display:block;font-size:12px;font-weight:700;color:#536780;margin-bottom:6px}
+.fc-field select{font-size:14px;padding:9px;width:100%;border-radius:9px;border:1px solid #c9d9eb;background:white;color:#233b5c}
+.fc-tag{display:inline-flex;padding:4px 9px;font-size:11px;border-radius:999px;background:#fff5df;color:#916419;font-weight:700}
+.fc-tables{overflow:auto;width:100%}.fc-tables th{text-align:right;white-space:nowrap;background:#f6f9fe}.fc-tables td{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.fc-tables th:first-child,.fc-tables td:first-child{text-align:left;position:sticky;left:0;background:#fff;z-index:1}
+.fc-tables thead th:first-child{background:#f6f9fe}.fc-tables tfoot td{background:#e8f1ff;font-weight:800;border-top:2px solid #85afe8}
+.fc-tables tfoot td:first-child{background:#e8f1ff}
+.fc-muted{font-size:12px;color:#667993}.fc-warning{border:1px solid #f2d69e;border-radius:12px;background:#fff9e9;padding:12px 15px;color:#845700;font-size:13px;margin:12px 0}
+.fc-chart{width:100%;height:310px;border:1px solid #dfebf6;border-radius:15px;background:linear-gradient(#fafcff,#f1f7ff)}
+.fc-line{stroke:#3276cc;stroke-width:3;fill:none;stroke-linejoin:round}.fc-dot{fill:#2680d5;stroke:white;stroke-width:2}
+.fc-legend{font-size:12px;color:#536b8a;line-height:1.6}
+.fc-step{color:#2465b5;font-weight:800}
+.fc-slider{width:100%;accent-color:#266ac6}
+
+.fc-stage{border-top:5px solid #ccddf3}
+.fc-stage .fc-heading{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+.fc-stage .fc-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}
+.fc-stage .fc-summary .fc-kpi{min-width:0}
+.fc-stage .fc-chart-key{display:flex;gap:18px;flex-wrap:wrap;margin:12px 0;color:#3b536f;font-size:13px}
+.fc-stage .fc-chart-key span{display:inline-flex;align-items:center;gap:7px}
+.fc-stage .fc-chart-key i{display:inline-block;width:19px;height:4px;border-radius:3px}
+.fc-stage .fc-no-trades{font-size:12px;color:#6b7792;margin:8px 0}
+.fc-stage .fc-stage-chart{height:auto;aspect-ratio:860/295;min-height:200px;max-height:320px;width:100%;border:1px solid #d8e4f4;border-radius:15px;background:#fbfdff}
+.fc-stage .fc-table-holder{margin-top:18px}
+.fc-stage td.fc-positive{color:#14815f;font-weight:700}
+.fc-stage td.fc-negative{color:#b73f50;font-weight:700}
+.fc-stage td.fc-subdued{color:#6f7d91}
+@media(max-width:950px){.fc-stage .fc-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:540px){.fc-stage .fc-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.fc-stage .fc-summary .fc-kpi b{font-size:16px}}
+@media(max-width:800px){.fc-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:530px){.fc-metrics{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="grid">
+<section class="panel span-12"><div class="fc-hero"><div><h2>Forecast · Ondas y retrocesos</h2><p class="sub">Tabla de referencias O2 y simulador Cycle Low → O5. Datos históricos de referencia + escenarios hipotéticos. No representa pronósticos certificados.</p></div><span class="badge info">SIMULACIÓN · SIN ÓRDENES</span></div>
+<div class="tabs"><a href="/" class="tab-link">Dashboard</a><a href="/modes" class="tab-link">Modos Kairos</a><a href="/mode/compras" class="tab-link">Compras</a><a href="/mode/ventas" class="tab-link">Ventas</a><a href="/mode/forecast" class="tab-link active">Forecast</a></div>
+<p class="footer-note">Referencia de niveles: {{ payload.o2_source }} · Cotizaciones Spot observadas: {{ payload.generated_at }} · Unidades snapshot: {{ payload.snapshot_note }}</p></section>
+<section class="panel span-12">
+<h2>Asignación USDT para referencias Fibonacci O2</h2><p class="sub">La asignación reutiliza exactamente las dos etapas del modo Compras: balanceo inicial y distribución proporcional. C1 recibe 60% del despliegue y C2 el 40%; 38.2% y 78.2% siempre reciben <b>USDT $0</b>.</p>
+<div class="fc-controls"><div class="fc-field" style="min-width:230px;flex:2"><label for="forecast-deploy">Despliegue teórico · porcentaje del patrimonio</label><input class="fc-slider" id="forecast-deploy" type="range" min="0" max="{{ payload.current.max_percent }}" value="0" step="any"><div class="fc-legend">0% — Máximo basado en USDT menos Reserva QF: {{ '%.2f'|format(payload.current.max_percent) }}%</div></div><div class="fc-field"><label>Porcentaje seleccionado</label><b class="fc-step" style="font-size:26px" id="deploy-label">—</b></div></div>
+<div class="fc-metrics"><div class="fc-kpi"><small>USDT simulados</small><b id="deploy-total">—</b><small>Antes de verificar LIMIT</small></div><div class="fc-kpi"><small>Balanceo</small><b id="deploy-balance">—</b><small>Etapa 1</small></div><div class="fc-kpi"><small>C1 · 50%</small><b id="deploy-c1">—</b><small>60% del monto</small></div><div class="fc-kpi"><small>C2 · 61.8%</small><b id="deploy-c2">—</b><small>40% del monto</small></div></div>
+<div class="fc-warning">Los precios de referencia son de una tabla O2 histórica, no cotizaciones en vivo ni órdenes activas. Si faltan niveles (PEPE o VIRTUAL), el presupuesto simulado se muestra pero <b>no constituye una orden colocable</b>. Las órdenes LIMIT y el inventario siguen sujetos a reconciliación.</div>
+<div class="fc-tables"><table><thead><tr><th>Token</th><th>38.2% precio</th><th>USDT</th><th>C1 · 50% precio</th><th>C1 USDT</th><th>C2 · 61.8% precio</th><th>C2 USDT</th><th>78.2% precio</th><th>USDT</th><th>TOTAL USDT</th></tr></thead><tbody id="fib-body"></tbody><tfoot id="fib-total"></tfoot></table></div>
+<p class="footer-note">38.2% y 78.2% se estiman algebraicamente a partir de las referencias C1/C2; los pivotes de origen no están certificados. Los importes del pie suman los presupuestos simulados y no modifican la liquidez física.</p>
+</section>
+<section class="panel span-12">
+<h2>Ondas y precios pivote · Cycle Low a O5</h2><p class="sub">Escenario por token. Cycle Low/O1 son anclas <strong>inferidas</strong> a partir de C1/C2; O2–O5 son niveles hipotéticos según las extensiones y retrocesos elegidos.</p>
+<div class="fc-controls">
+<div class="fc-field"><label for="o2-choice">O2 · retroceso CL→O1</label><select id="o2-choice"><option value="0.618">61.8% · C2</option><option value="0.5">50% · C1</option></select></div>
+<div class="fc-field"><label for="o3-choice">O3 · extensión desde O2</label><select id="o3-choice"><option value="1.618">Fib 1.618</option><option value="2.618">Fib 2.618</option><option value="3.618">Fib 3.618</option><option value="4.618">Fib 4.618</option></select></div>
+<div class="fc-field"><label for="o4-choice">O4 · retroceso O2→O3</label><select id="o4-choice"><option value="0.5">Fib 50%</option><option value="0.382">Fib 38.2%</option><option value="0.618">Fib 61.8%</option></select></div>
+<div class="fc-field"><label for="o5-choice">O5 · extensión desde O4</label><select id="o5-choice"><option value="1.618">Fib 1.618</option><option value="2.618">Fib 2.618</option><option value="3.618">Fib 3.618</option><option value="4.618">Fib 4.618</option></select></div>
+</div>
+<div id="elliott-note" class="fc-warning"></div>
+<div class="fc-tables"><table><thead><tr><th>Token</th><th>Cycle Low (S0)</th><th>O1 (SH1)</th><th>O2 (SL1)</th><th>O3 (SH2)</th><th>O4 (SL2)</th><th>O5 (SH3)</th><th>Estado</th></tr></thead><tbody id="waves-body"></tbody></table></div>
+<p class="footer-note">Secuencia de Kairos H4: O3 = O2 + extensión × (O1 − Cycle Low); O4 = O3 − retroceso × (O3 − O2); O5 = O4 + extensión × (O3 − O2). No se aplica confirmación semanal 5L/5R + BOS; ningún nivel se declara pivot confirmado.</p>
+</section>
+
+<section class="panel span-12"><div class="fc-hero"><div><h2>Forecast por tramo · Valor del portafolio y liquidez</h2><p class="sub">Cuatro recorridos de O1→O2 hasta O4→O5. Cada tabla indica el precio proyectado de cada token y su valoración USDT al inicio y al final del tramo. En los gráficos: <b>cripto</b>, <b>liquidez USDT</b> y <b>patrimonio combinado</b>.</p></div><span class="badge info">4 TRAMOS · HOLD SIMULADO</span></div>
+<div class="fc-warning"><strong>Hipótesis importante:</strong> todos los tokens conservan sus unidades del snapshot y el USDT físico permanece fijo; no se incluyen fills hipotéticos C1/C2, ventas O3/O5, comisiones ni conversiones BTC. PEPE/VIRTUAL sin ondas se valorizan al Spot actual constante, <b>NO</b> a un precio proyectado. Los puntos intermedios de las curvas son interpolaciones entre ondas (no fechas ni probabilidades). Las fases de tokens distintos se alinean artificialmente para comparar escenarios; <b>no representan eventos simultáneos reales</b>.</div></section>
+{% for from_label,to_label,description in [('O1','O2','Corrección hacia O2'),('O2','O3','Impulso hacia O3'),('O3','O4','Corrección hacia O4'),('O4','O5','Impulso hacia O5')] %}
+<section class="panel span-12 fc-stage" id="forecast-stage-{{ loop.index0 }}">
+<div class="fc-heading"><div><h2>{{ loop.index }}. {{ from_label }} → {{ to_label }}</h2><p class="sub">{{ description }} · Valoración mark-to-market · Sin órdenes</p></div><span class="fc-tag" id="stage-status-{{ loop.index0 }}">PROYECCIÓN CONDICIONAL</span></div>
+<div class="fc-summary"><div class="fc-kpi"><small>Cripto al cierre {{ to_label }}</small><b id="stage-crypto-{{ loop.index0 }}">—</b></div><div class="fc-kpi"><small>Liquidez USDT</small><b id="stage-cash-{{ loop.index0 }}">—</b></div><div class="fc-kpi"><small>Patrimonio al cierre</small><b id="stage-total-{{ loop.index0 }}">—</b></div><div class="fc-kpi"><small>Variación del tramo</small><b id="stage-delta-{{ loop.index0 }}">—</b></div></div>
+<div class="fc-chart-key"><span><i style="background:#2773c9"></i> Cripto valorizado</span><span><i style="background:#1ba88c"></i> Liquidez USDT</span><span><i style="background:#7b59c9"></i> Cripto + USDT</span></div>
+<svg id="stage-chart-{{ loop.index0 }}" class="fc-stage-chart" viewBox="0 0 860 295" role="img" aria-label="Evolución simulada de cripto, liquidez y patrimonio para {{ from_label }} a {{ to_label }}"></svg>
+<p class="fc-no-trades" id="stage-note-{{ loop.index0 }}">Sin proyección hasta generar ondas.</p>
+<div class="fc-table-holder fc-tables"><table><thead><tr><th>Token</th><th>Unidades</th><th>Precio {{ from_label }}</th><th>Precio {{ to_label }}</th><th>Valor {{ from_label }} USDT</th><th>Valor {{ to_label }} USDT</th><th>Δ USDT</th><th>Estado</th></tr></thead><tbody id="stage-body-{{ loop.index0 }}"></tbody><tfoot id="stage-foot-{{ loop.index0 }}"></tfoot></table></div>
+</section>
+{% endfor %}
+<section class="panel span-12"><div class="fc-hero"><div><h2>Trayectoria hipotética por token</h2><p class="sub">Visualización de niveles por etapa, no eje temporal ni probabilidades.</p></div><div class="fc-field" style="flex:0 0 190px"><label for="chart-token">Token</label><select id="chart-token"></select></div></div><svg id="waves-chart" class="fc-chart" viewBox="0 0 740 310" role="img" aria-label="Precios hipotéticos por onda"></svg><p class="fc-legend" id="chart-info">Selecciona un token con referencias disponibles.</p></section>
+<section class="panel span-12"><div class="callout warn"><strong>Alcance y fuentes</strong>Este Forecast no activa órdenes ni sustituye el Forecast oficial de acumulación BTC. Las referencias O2 y sus pivotes algebraicamente reconstruidos deben revisarse contra anclas aprobadas; la progresión O3/O4/O5 es una simulación parametrizada, no una predicción ni un conteo Elliott confirmado. PEPE y VIRTUAL permanecen N/D.</div></section>
+</div>
+<script src="{{ url_for('static', filename='purchase_plan.js') }}"></script>
+<script src="{{ url_for('static', filename='forecast_segments.js') }}"></script>
+<script>
+const fc={{ payload|tojson }};
+const $=id=>document.getElementById(id);
+const money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
+const symbols={BTC:'bitcoin-btc',ETH:'ethereum-eth',SOL:'solana-sol',LINK:'chainlink-link',HYPE:'hyperliquid-hype',HBAR:'hedera-hbar',SUI:'sui-sui',ONDO:'ondo-finance-ondo',PUMP:'pump-fun-pump',PLUME:'plume-plume',PEPE:'pepe-pepe',VIRTUAL:'virtual-protocol-virtual'};
+function logo(t){return `<span class="coin-tag"><span class="coin-icon"><img loading="lazy" alt="" src="https://cryptologos.cc/logos/${symbols[t]||''}-logo.png" onerror="this.style.display='none'"><span class="coin-fallback">${t.slice(0,2)}</span></span><b>${t}</b></span>`}
+function price(n){if(!Number.isFinite(n)||n<=0)return 'N/D';const dec=n<.0001?10:n<.01?8:n<1?6:n<100?4:2;return '$'+new Intl.NumberFormat('en-US',{minimumFractionDigits:Math.min(2,dec),maximumFractionDigits:dec}).format(n)}
+const nums=fc.current;
+const params=new URLSearchParams(window.location.search);
+const custom=Number(params.get('deploy'));
+const defaultPct=(params.has('deploy')&&Number.isFinite(custom))?custom:Math.min(25,nums.max_percent);
+$('forecast-deploy').value=Math.min(nums.max_percent,Math.max(0,defaultPct));
+function renderFib(){
+ const pct=Number($('forecast-deploy').value);$('deploy-label').textContent=pct.toFixed(2)+'%';
+ const B=Math.min(nums.reference_cap,nums.P*pct/100);
+ const plan=purchasePlan(B,fc.tokens,nums.crypto_value);
+ const amounts=fc.tokens.map((x,i)=>plan.balance[i]+plan.extra[i]);
+ const total=amounts.reduce((a,b)=>a+b,0),balance=plan.balance.reduce((a,b)=>a+b,0);
+ $('deploy-total').textContent=money(total);$('deploy-balance').textContent=money(balance);
+ $('deploy-c1').textContent=money(.6*total);$('deploy-c2').textContent=money(.4*total);
+ const pivots=new Map(fc.pivot_rows.map(p=>[p.token,p]));
+ $('fib-body').innerHTML=fc.tokens.map((t,i)=>{
+  const p=pivots.get(t.token),a=amounts[i];
+  return `<tr><td>${logo(t.token)}</td><td>${price(p.ref382)}</td><td>${money(0)}</td><td>${price(p.c1)}</td><td>${money(.6*a)}</td><td>${price(p.c2)}</td><td>${money(.4*a)}</td><td>${price(p.ref782)}</td><td>${money(0)}</td><td><b>${money(a)}</b></td></tr>`;
+ }).join('');
+ $('fib-total').innerHTML=`<tr><td>TOTAL USDT</td><td>—</td><td>${money(0)}</td><td>—</td><td>${money(.6*total)}</td><td>—</td><td>${money(.4*total)}</td><td>—</td><td>${money(0)}</td><td>${money(total)}</td></tr>`;
+}
+function calcWaves(){
+ const o2f=Number($('o2-choice').value),o3e=Number($('o3-choice').value),o4f=Number($('o4-choice').value),o5e=Number($('o5-choice').value);
+ return fc.pivot_rows.map(p=>{
+  const cl=p.cycle_low, o1=p.o1;
+  if(cl==null||o1==null||!(o1>cl))return {token:p.token,values:null,state:'N/D'};
+  const rise=o1-cl, o2=o1-o2f*rise, o3=o2+o3e*rise;
+  const o4=o3-o4f*(o3-o2), o5=o4+o5e*(o3-o2);
+  const overlap=o4<=o1;
+  return {token:p.token,values:[cl,o1,o2,o3,o4,o5],state:overlap?'SOLAPAMIENTO O4 / O1':'ESCENARIO'};
+ });
+}
+function renderWaves(){
+ const result=calcWaves();
+ const overlap=result.filter(x=>x.state==='SOLAPAMIENTO O4 / O1').length;
+ $('elliott-note').textContent=overlap?`${overlap} activos presentan O4 ≤ O1 en este escenario, incompatible con una onda impulsiva convencional sin diagonal. Ajusta los parámetros o trata los niveles como escenarios no válidos.`:'Solo escenarios. La tabla no certifica Cycle Low, pivotes O1–O5, BOS, temporalidad ni reglas completas Elliott.';
+ $('waves-body').innerHTML=result.map(r=>{
+  const nums=r.values||[null,null,null,null,null,null];
+  return `<tr><td>${logo(r.token)}</td>${nums.map(n=>`<td>${price(n)}</td>`).join('')}<td><span class="fc-tag">${r.state}</span></td></tr>`;
+ }).join('');
+ const sel=$('chart-token'),active=sel.value;
+ sel.innerHTML=result.filter(x=>x.values).map(x=>`<option value="${x.token}">${x.token}</option>`).join('');
+ if(result.some(x=>x.token===active&&x.values))sel.value=active;
+ drawCurve(result);
+ renderStageSections(result);
+}
+function drawCurve(waves){
+ const choice=waves.find(w=>w.token===$('chart-token').value&&w.values),svg=$('waves-chart');
+ if(!choice){svg.replaceChildren();$('chart-info').textContent='No hay referencias suficientes para proyectar ondas.';return;}
+ const prices=choice.values,lo=Math.min(...prices),hi=Math.max(...prices),span=(hi-lo)||1;
+ const xx=i=>64+i*123, yy=n=>252-(n-lo)/span*190;
+ const points=prices.map((p,i)=>[xx(i),yy(p)]);
+ const names=['Cycle Low','O1','O2','O3','O4','O5'];
+ const ns='http://www.w3.org/2000/svg';svg.replaceChildren();
+ function node(tag,attrs,text){const e=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,String(v)));if(text!=null)e.textContent=text;svg.appendChild(e);return e}
+ for(let i=0;i<4;i++){let y=52+i*62;node('line',{x1:44,y1:y,x2:703,y2:y,stroke:'#e1eaf8','stroke-width':1})}
+ node('polyline',{points:points.map(p=>p.join(',')).join(' '),fill:'none',stroke:'#2877c8','stroke-width':3,'stroke-linecap':'round','stroke-linejoin':'round'});
+ points.forEach(([x,y],i)=>{node('circle',{cx:x,cy:y,r:6,fill:'#2877c8',stroke:'white','stroke-width':2});node('text',{x,y:286,'font-size':12,'text-anchor':'middle',fill:'#4a5e7e'},names[i]);node('text',{x,y:Math.max(18,y-13),'font-size':12,'text-anchor':'middle',fill:'#183e73','font-weight':700},price(prices[i]))});
+ $('chart-info').textContent=`${choice.token} · Precios hipotéticos construidos con referencias O2 no certificadas. Distancia horizontal por etapa, no por fecha.`;
+}
+
+// Tramos Forecast: valoración estática, SIN compras/ventas supuestas. Se recalculan al cambiar la onda.
+function renderStageSections(waves){
+ let stages;
+ try { stages=KairosForecastSegments.buildForecastSegments(waves,fc.tokens,nums.cash); }
+ catch(err){console.error('Forecast scenarios: invalid inputs',err.name);return;}
+ const change=d=>(d>0?'+':'')+money(d), ns='http://www.w3.org/2000/svg';
+ stages.forEach((stage,i)=>{
+  $('stage-crypto-'+i).textContent=money(stage.total.end_crypto);
+  $('stage-cash-'+i).textContent=money(stage.total.liquidity);
+  $('stage-total-'+i).textContent=money(stage.total.end_portfolio);
+  $('stage-delta-'+i).textContent=change(stage.total.delta);
+  $('stage-delta-'+i).style.color=stage.total.delta>=0?'#14815f':'#b73f50';
+  $('stage-status-'+i).textContent=stage.invalid.length?'RECUENTO INVÁLIDO · REVISAR':'SIMULACIÓN · NO CONFIRMADO';
+  $('stage-body-'+i).innerHTML=stage.rows.map(r=>{
+   const state=r.state==='SPOT_FIJO_ND'?'N/D · Spot fijo':r.state==='RECUENTO_INVALIDO'?'O4/O1 · revisar':'Simulado';
+   const deltaClass=r.delta_usdt>0?'fc-positive':r.delta_usdt<0?'fc-negative':'fc-subdued';
+   return `<tr><td>${logo(r.token)}</td><td>${new Intl.NumberFormat('en-US',{maximumFractionDigits:6}).format(r.units)}</td><td>${price(r.start_price)}</td><td>${price(r.end_price)}</td><td>${money(r.start_usdt)}</td><td>${money(r.end_usdt)}</td><td class="${deltaClass}">${change(r.delta_usdt)}</td><td><span class="fc-tag">${state}</span></td></tr>`;
+  }).join('');
+  const t=stage.total;
+  $('stage-foot-'+i).innerHTML=`<tr><td><b>TOTAL CRIPTO</b></td><td colspan="3">—</td><td>${money(t.start_crypto)}</td><td>${money(t.end_crypto)}</td><td>${change(t.end_crypto-t.start_crypto)}</td><td>Valorización</td></tr>
+   <tr><td>LIQUIDEZ USDT</td><td colspan="3">—</td><td>${money(t.liquidity)}</td><td>${money(t.liquidity)}</td><td>${money(0)}</td><td>Sin operaciones</td></tr>
+   <tr><td><b>TOTAL PATRIMONIO USDT</b></td><td colspan="3">—</td><td><b>${money(t.start_portfolio)}</b></td><td><b>${money(t.end_portfolio)}</b></td><td><b>${change(t.delta)}</b></td><td>Cripto + USDT</td></tr>`;
+  const missing=stage.missing.length?`Sin pivotes proyectables (${stage.missing.join(', ')}): Spot fijo solo para valorización. `:'';
+  const invalid=stage.invalid.length?`Recuento impulsivo convencional inválido para ${stage.invalid.join(', ')}: revisar parámetros. `:'';
+  $('stage-note-'+i).textContent=missing+invalid+'5 puntos interpolados entre extremos; no son fechas. USDT físico constante, reserva QF incluida una sola vez.';
+  drawStageChart($('stage-chart-'+i),stage,ns);
+ });
+}
+function drawStageChart(svg,stage,ns){
+ svg.replaceChildren();
+ const points=stage.points;
+ const series=[{key:'crypto_usdt',color:'#2773c9'}, {key:'liquidity_usdt',color:'#1ba88c'}, {key:'portfolio_usdt',color:'#7b59c9'}];
+ const all=series.flatMap(s=>points.map(p=>p[s.key]));
+ const low=Math.min(...all),high=Math.max(...all),pad=Math.max(100,(high-low)*.10),ymin=Math.max(0,low-pad),ymax=high+pad;
+ const xx=index=>92+index*173, yy=value=>245-(value-ymin)/(ymax-ymin)*194;
+ function elem(tag,props={},txt){const node=document.createElementNS(ns,tag);Object.entries(props).forEach(([k,v])=>node.setAttribute(k,String(v)));if(txt!==undefined)node.textContent=txt;svg.appendChild(node);return node;}
+ for(let tick=0;tick<=4;tick++){
+  const value=ymin+(ymax-ymin)*tick/4,y=yy(value);
+  elem('line',{x1:84,x2:813,y1:y,y2:y,stroke:'#dce7f6','stroke-width':1});
+  elem('text',{x:76,y:y+4,'text-anchor':'end','font-size':11,fill:'#5d718c'},'$'+new Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:1}).format(value));
+ }
+ points.forEach((p,index)=>elem('text',{x:xx(index),y:275,'text-anchor':'middle','font-size':12,fill:'#526985'},index===0?`Inicio ${stage.name.slice(0,2)}`:index===4?`Fin ${stage.name.slice(-2)}`:`${p.progress_pct}%`));
+ series.forEach(s=>{
+  const coords=points.map((p,index)=>[xx(index),yy(p[s.key])]);
+  elem('polyline',{points:coords.map(x=>x.join(',')).join(' '),fill:'none',stroke:s.color,'stroke-width':3,'stroke-linejoin':'round','stroke-linecap':'round'});
+  coords.forEach(([x,y],i)=>{const circle=elem('circle',{cx:x,cy:y,r:4,fill:s.color,stroke:'#fff','stroke-width':1.5});const title=document.createElementNS(ns,'title');title.textContent=`${stage.name} ${points[i].progress_pct}% · ${s.key}: ${money(points[i][s.key])}`;circle.appendChild(title);});
+ });
+}
+$('forecast-deploy').addEventListener('input',renderFib);
+['o2-choice','o3-choice','o4-choice','o5-choice'].forEach(id=>$(id).addEventListener('change',renderWaves));
+$('chart-token').addEventListener('change',renderWaves);
+renderFib();renderWaves();
+</script>
+{% endblock %}
