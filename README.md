@@ -1,11 +1,10 @@
-# Kairos Web v3.7 — Balancer visual
+# Kairos Web v3.8
 
-- El modo Resumen se retira del menú; `/mode/resumen` redirige al dashboard.
-- Balancer inicia con gestión de liquidez: USDT, 40% P, reserva teórica Balancer 5% P, bolsas C1/C2 separadas.
-- BSI retirado de la vista Balancer.
-- Tablas BUY y SELL con indicadores y cantidades referenciales, no ejecutables.
-- Dos gráficos independientes de peso actual vs posterior hipotético.
-- Limitación: faltan órdenes pendientes, fees, inventario libre conciliado y presupuestos ya gastados, por lo que no hay capacidad ejecutable certificada.
+Modificaciones del dashboard y Balancer sobre v3.7 estable.
 
-## Despliegue
-Reemplazar archivos en la raíz del repositorio GitHub KairosWeb y desplegar Render, conservando todas las variables de entorno existentes.
+- Fusión distribución y desvío por token; tiers verticales; eliminación de sensibilidad BTC y Top Posiciones.
+- Logos de exchanges en barras por venue; tabla con unidades totales, HODL, Core y Exchange, valor USDT y BTC.
+- Balancer: remanente USDT − 25% P − Trading, reserva limitada a 5% P, KPI Trading e iconografía; columnas USDT referencial.
+- Los importes siguen siendo indicativos con snapshot fijo; nunca se ejecutan órdenes.
+
+Desplegar reemplazando archivos en raíz del repositorio GitHub conectado a Render. Conservar variables de entorno.

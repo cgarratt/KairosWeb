@@ -190,8 +190,10 @@ def core_dashboard(prices):
         units = float(SNAPSHOT['holdings_total'].get(key, 0))
         value = units*price
         portfolio_crypto += value
+        custody = SNAPSHOT['custody_core_blocked__core_strategic__exchange'].get(key, [0,0,0])
         rows.append({'token':market_key,'tier':TIERS[token], 'target':TARGETS[token],
-                     'units':units,'price':price,'value':value})
+                     'units':units,'hodl_units':float(custody[0]),'core_units':float(custody[1]),
+                     'exchange_units':float(custody[2]),'price':price,'value':value})
     for row in rows:
         row['weight']=row['value']/portfolio_crypto if portfolio_crypto else 0
         row['drift_pp']=(row['weight']-row['target'])*100
@@ -637,10 +639,16 @@ def balancer_report(d, observed):
     floor=.40*p
     excess=max(0,cash-floor)
     gap=max(0,floor-cash)
-    reserve=.05*p
     c1=.15*p; c2=.10*p
+    trading=d['trading_reserve']
+    operational_25=c1+c2
+    residual_after_bags=cash-operational_25-trading
+    # 5% P is the structural allocation. Formula requested by user displays
+    # what remains in physical USDT after protecting C1+C2 and Trading.
+    reserve=max(0,min(.05*p,residual_after_bags))
+    reserve_nominal=.05*p
     # Indicative ONLY; actual commitments and reserved bags are not reconciled.
-    theoretical_ceiling=min(excess,reserve+excess)
+    theoretical_ceiling=max(0,min(excess,residual_after_bags,reserve+excess))
     buy_candidates=[r for r in rows if r['drift_pp'] < -1]
     sell_candidates=[r for r in rows if r['drift_pp'] > 1 and r['token']!='BTC']
     tokens_to_exchange={k:float(v[2]) for k,v in SNAPSHOT['custody_core_blocked__core_strategic__exchange'].items()}
@@ -670,13 +678,13 @@ def balancer_report(d, observed):
     sell_weights={r['token']:(r['value']-next((x['value'] for x in sale_preview if x['token']==r['token']),0))/after_sell_crypto if after_sell_crypto else 0 for r in rows}
     return {'generated_at':observed,'snapshot_note':d['note'],'status_badge':'LIVE MCP',
       'current':{'P':p,'cash':cash,'crypto':crypto,'floor':floor,'gap':gap,'excess':excess,
-                 'reserve':reserve,'c1':c1,'c2':c2,'trading':d['trading_reserve'],
+                 'reserve':reserve,'reserve_nominal':reserve_nominal,'residual_after_bags':residual_after_bags,'operational_25':operational_25,'c1':c1,'c2':c2,'trading':trading,
                  'operating':d['usdt_operating'],'buy_ceiling':theoretical_ceiling},
       'metrics':[
         {'label':'USDT físico','value':fmt_money(cash),'help':f"{cash/p*100:.1f}% del patrimonio" if p else '', 'tone':'primary'},
         {'label':'Piso 40% USDT','value':fmt_money(floor),'help':'Protección de liquidez','tone':'neutral'},
-        {'label':'Reserva Balancer (teórica)','value':fmt_money(reserve),'help':'5% P, no equivale a USDT libre','tone':'warn'},
-        {'label':'Capacidad compra indicativa','value':fmt_money(theoretical_ceiling),'help':'Antes de compromisos C1/C2, LIMIT y fees','tone':'ok' if theoretical_ceiling>0 else 'danger'}],
+        {'label':'Reserva Balancer estimada','value':fmt_money(reserve),'help':'Límite de 5% P y remanente tras C1/C2 + Trading','tone':'warn'},
+        {'label':'Reserva Trading','value':fmt_money(trading),'help':'Reserva separada Quantfury; incluida en USDT físico','tone':'primary'}],
       'buys':buy_preview,'sells':sale_preview,'buy_total':buy_total,'sell_total':sale_total,
       'buy_chart':[{'token':r['token'],'actual':r['weight']*100,'post':buy_weights[r['token']]*100,'target':r['target']*100} for r in buy_candidates],
       'sell_chart':[{'token':r['token'],'actual':r['weight']*100,'post':sell_weights[r['token']]*100,'target':r['target']*100} for r in sell_candidates],
