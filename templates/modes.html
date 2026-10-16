@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block title %}Kairos Web · Modos Kairos{% endblock %}
+{% block content %}
+<section class="panel"><div class="hero"><div><h2>Modos Kairos</h2><p>Selecciona un modo para ver su informe ejecutivo preliminar.</p></div><span class="badge info">Solo lectura</span></div>
+<div class="mode-grid" style="margin-top:24px">{% for mode in modes %}
+<a href="/mode/{{ mode.slug }}" class="mode-card"><div class="mode-head"><div><div class="mode-name">{{ mode.name }}</div><div class="mode-sub">{{ mode.subtitle }}</div></div><span class="tiny-badge pre">PRELIMINAR</span></div><div class="sub">{{ mode.description }}</div><div><span class="tiny-badge live">Abrir vista →</span></div></a>
+{% endfor %}</div></section>
+{% endblock %}

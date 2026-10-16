@@ -5,6 +5,8 @@ import os
 import secrets
 import time
 import threading
+import uuid
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -75,13 +77,48 @@ async def call_mcp(env_name, tool, args=None):
     if result.is_error:
         raise RuntimeError(f'{tool}: error remoto')
     if isinstance(result.data, dict):
-        return result.data
+        payload = result.data
+        # Some MCP providers wrap the application payload in structuredContent.
+        if 'structuredContent' in payload and isinstance(payload['structuredContent'], dict):
+            return payload['structuredContent']
+        return payload
     for block in result.content:
         if getattr(block, 'type', None) == 'text':
             value = json.loads(block.text)
             if isinstance(value, dict):
                 return value
     raise RuntimeError(f'{tool}: respuesta MCP no reconocida')
+
+def diagnostic_error(exc, scope):
+    error_id = uuid.uuid4().hex[:10]
+    app.logger.exception('Kairos MCP %s failure ID=%s', scope, error_id)
+    name = type(exc).__name__
+    msg = str(exc).lower()
+    if 'no configurada' in msg:
+        category = 'NOT_CONFIGURED'
+        hint = 'Configura la URL de este MCP en Environment de Render.'
+    elif 'https' in msg and 'url' in msg:
+        category = 'INVALID_URL'
+        hint = 'Revisa el esquema HTTPS y la ruta /mcp.'
+    elif any(word in name.lower() for word in ('timeout','cancel')) or 'timed out' in msg:
+        category = 'TIMEOUT'
+        hint = 'La conexión expiró. Verifica si el servicio MCP está activo y el timeout de Gunicorn.'
+    elif any(word in msg for word in ('401','403','unauthorized','forbidden')):
+        category = 'AUTH'
+        hint = 'Revisa el token Bearer del MCP; nunca lo compartas.'
+    elif any(word in msg for word in ('404','not found','405')):
+        category = 'ENDPOINT'
+        hint = 'Comprueba que la URL apunte al endpoint MCP correcto.'
+    elif 'stale' in msg:
+        category = 'STALE_DATA'
+        hint = 'La cotización no cumple el límite de frescura; vuelve a consultar.'
+    elif 'missing one' in msg or 'invalid records' in msg:
+        category = 'INCOMPLETE_DATA'
+        hint = 'La respuesta del MCP no incluye los 12 tokens requeridos.'
+    else:
+        category = 'MCP_ERROR'
+        hint = 'Consulta los logs de Render usando el identificador de error.'
+    return {'code': category, 'message': hint, 'error_id': error_id}
 
 def pretty_error(exc):
     if isinstance(exc, RuntimeError) and ('no configurada' in str(exc) or 'debe usar HTTPS' in str(exc)):
@@ -592,6 +629,10 @@ def build_mode_payload(slug, d, observed):
 def home():
     return render_template('index.html', modes=MODE_DEFS, master='5.3.5')
 
+@app.route('/modes')
+def modes_page():
+    return render_template('modes.html', modes=MODE_DEFS, master='5.3.5')
+
 @app.route('/mode/<slug>')
 def mode_page(slug):
     mode = MODES_BY_SLUG.get(slug)
@@ -606,7 +647,7 @@ def mode_page(slug):
 
 @app.route('/health')
 def health():
-    return jsonify({'status':'UP','service':'Kairos Web','version':'3.2','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
+    return jsonify({'status':'UP','service':'Kairos Web','version':'3.4','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
 
 @app.route('/api/portfolio')
 def portfolio():
@@ -614,14 +655,35 @@ def portfolio():
         observed, dashboard = load_live_dashboard()
         return jsonify({'status':'OK', 'source':'Binance Spot MCP', 'observed_at':observed, **dashboard})
     except Exception as exc:
-        app.logger.warning('portfolio MCP error: %s', type(exc).__name__)
-        return jsonify({'status':'DATA_ERROR','reason':pretty_error(exc),'snapshot_date':SNAPSHOT['units_snapshot_as_of']}), 503
+        diag = diagnostic_error(exc, 'portfolio')
+        return jsonify({'status':'DATA_ERROR','reason':diag['message'],'diagnostic':diag,'snapshot_date':SNAPSHOT['units_snapshot_as_of']}), 503
 
 @app.route('/api/mcp-status')
 def mcp_status():
     return jsonify({'binance_configured':bool(os.getenv('BINANCE_MCP_URL')),
                     'hyperliquid_configured':bool(os.getenv('HYPERLIQUID_MCP_URL')),
                     'hyperliquid_usage':'Macro HYPE only; no Binance/HYPE price fallback'})
+
+@app.route('/api/mcp-diagnostics')
+def mcp_diagnostics():
+    results = {}
+    for name, env, tool, args in [
+        ('binance','BINANCE_MCP_URL','get_kairos_spot_prices',{}),
+        ('hyperliquid','HYPERLIQUID_MCP_URL','get_hype_spot_market',{}),
+    ]:
+        if not os.getenv(env):
+            results[name]={'status':'NOT_CONFIGURED'}
+            continue
+        try:
+            response=asyncio.run(call_mcp(env,tool,args))
+            if response.get('status')!='OK':
+                raise RuntimeError('MCP result status not OK')
+            count=len(response.get('records',[])) if name=='binance' else None
+            results[name]={'status':'OK','records':count,'source':response.get('source')}
+        except Exception as exc:
+            diag=diagnostic_error(exc,name)
+            results[name]={'status':'DATA_ERROR','diagnostic':diag}
+    return jsonify({'status':'OK' if all(x['status']=='OK' for x in results.values()) else 'CHECK_REQUIRED', 'providers':results})
 
 @app.route('/api/hype-macro')
 def hype_macro():

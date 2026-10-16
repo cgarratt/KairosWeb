@@ -18,3 +18,17 @@ Reemplaza los archivos del repositorio en GitHub por **el contenido** de esta ca
 - Conexiones MCP e inventario heredados de v3.1. La caché/reintentos ayudan con cold starts pero no garantizan disponibilidad; para un DATA ERROR persistente revisar logs.
 - Los precios dinámicos no actualizan por sí solos el snapshot estático de unidades, USDT o fills.
 - Los logos de monedas se solicitan a un proveedor externo; para no depender de él convendría empaquetar iconos con licencias apropiadas más adelante.
+
+## v3.3
+- Kairos sin texto Horizon; conserva el símbolo geométrico seleccionado.
+- Iconografía patrimonial y logos de exchanges (CDN, con fallback).
+- `/api/mcp-diagnostics` comprueba llamadas reales a ambos MCP e informa códigos y error_id, sin URL ni secretos.
+- Buscar `ID=...` en Render Logs para causa específica.
+- Se mantiene autenticación Basic y read-only.
+
+
+## v3.4
+- Menú de modos movido fuera del dashboard a `/modes`, con botón superior.
+- Panel de comparación por Tier contra target (peso sobre la manga cripto; USDT excluido).
+- Columna Valor BTC en la tabla ejecutiva: `valor_USDT / BTCUSDT` del mismo lote Binance MCP.
+- Conserva tratamiento DATA ERROR y políticas de solo lectura de v3.3.

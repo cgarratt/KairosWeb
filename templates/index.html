@@ -8,7 +8,7 @@
       <p>Portafolio Kairos con datos en vivo desde Binance MCP y páginas preliminares por modo.</p>
       <div class="tabs">
         <a href="#overview" class="tab-link active">Overview</a>
-        <a href="#modes" class="tab-link">Modos Kairos</a>
+        <a href="/modes" class="tab-link">Modos Kairos</a>
         <a href="#sources" class="tab-link">Conexiones MCP</a>
       </div>
     </div>
@@ -17,10 +17,10 @@
 
   <section class="span-8">
     <div class="kpis">
-      <article class="kpi primary"><div class="label">Patrimonio total</div><div class="value" id="total">—</div><div class="help">Cripto + USDT físico consolidado</div></article>
-      <article class="kpi primary"><div class="label">Cripto valuado</div><div class="value" id="crypto">—</div><div class="help" id="crypto-help">Esperando precios…</div></article>
-      <article class="kpi ok"><div class="label">Liquidez USDT</div><div class="value" id="usdt">—</div><div class="help" id="usdt-help">Piso estructural 40%</div></article>
-      <article class="kpi warn"><div class="label">Reserva Trading</div><div class="value" id="reserve">—</div><div class="help">Bolsa fija separada (Quantfury)</div></article>
+      <article class="kpi primary"><div class="label">{{ metric_icon("Patrimonio total") }}Patrimonio total</div><div class="value" id="total">—</div><div class="help">Cripto + USDT físico consolidado</div></article>
+      <article class="kpi primary"><div class="label">{{ metric_icon("Cripto valuado") }}Cripto valuado</div><div class="value" id="crypto">—</div><div class="help" id="crypto-help">Esperando precios…</div></article>
+      <article class="kpi ok"><div class="label">{{ metric_icon("Liquidez USDT") }}Liquidez USDT</div><div class="value" id="usdt">—</div><div class="help" id="usdt-help">Piso estructural 40%</div></article>
+      <article class="kpi warn"><div class="label">{{ metric_icon("Reserva Trading") }}Reserva Trading</div><div class="value" id="reserve">—</div><div class="help">Bolsa fija separada (Quantfury)</div></article>
     </div>
   </section>
 
@@ -43,29 +43,12 @@
     <div class="bar-list" id="drift-bars"><div class="muted">Calculando…</div></div>
   </section>
 
-  <section class="panel span-6" id="modes">
-    <div class="hero" style="align-items:flex-start">
-      <div>
-        <h3>Modos Kairos</h3>
-        <p class="sub">Cada modo tiene ahora una página preliminar más visual.</p>
-      </div>
-      <a class="btn primary" href="/mode/resumen">Abrir Resumen</a>
-    </div>
-    <div class="mode-grid" style="margin-top:14px">
-      {% for mode in modes %}
-      <a href="/mode/{{ mode.slug }}" class="mode-card">
-        <div class="mode-head">
-          <div>
-            <div class="mode-name">{{ mode.name }}</div>
-            <div class="mode-sub">{{ mode.subtitle }}</div>
-          </div>
-          <span class="tiny-badge pre">PRELIMINAR</span>
-        </div>
-        <div class="sub">{{ mode.description }}</div>
-        <div style="margin-top:auto"><span class="tiny-badge live">Abrir vista</span></div>
-      </a>
-      {% endfor %}
-    </div>
+
+  <section class="panel span-6">
+    <h3>Distribución por Tiers vs objetivo</h3>
+    <p class="sub">Participación en la manga cripto (excluye USDT)</p>
+    <div id="tier-bars" class="bar-list"><div class="muted">Calculando…</div></div>
+    <p class="footer-note">Barra azul: asignación actual · marca vertical: objetivo aprobado.</p>
   </section>
 
   <section class="panel span-6">
@@ -102,8 +85,8 @@
     </div>
     <div style="overflow:auto;margin-top:12px">
       <table>
-        <thead><tr><th>Token</th><th>Precio</th><th>Valor</th><th>Peso</th><th>Target</th><th>Estado</th></tr></thead>
-        <tbody id="positions"><tr><td colspan="6" class="muted">Consultando…</td></tr></tbody>
+        <thead><tr><th>Token</th><th>Precio</th><th>Valor USDT</th><th>Valor BTC</th><th>Peso</th><th>Target</th><th>Estado</th></tr></thead>
+        <tbody id="positions"><tr><td colspan="7" class="muted">Consultando…</td></tr></tbody><tfoot id="positions-total"></tfoot>
       </table>
     </div>
   </section>
@@ -132,20 +115,41 @@ function tokenHtml(token){
 const money=(v,d=0)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:d,minimumFractionDigits:d}).format(v);
 const num=(v,d=1)=>new Intl.NumberFormat('en-US',{maximumFractionDigits:d,minimumFractionDigits:d}).format(v);
 const pct=v=>num(v,1)+'%';
+function renderTiers(rows){
+ const container=$('tier-bars'); container.replaceChildren();
+ const sum=rows.reduce((a,r)=>a+r.value,0);
+ const tiers=['T1','T2','T3'];const scale=100;
+ tiers.forEach(tier=>{
+   const subset=rows.filter(r=>r.tier===tier);
+   const actual=sum?subset.reduce((a,r)=>a+r.value,0)/sum*100:0;
+   const target=subset.reduce((a,r)=>a+r.target*100,0);
+   const wrap=document.createElement('div');wrap.className='tier-compare';
+   const label=document.createElement('div');label.className='tier-caption';label.textContent=tier+' · '+pct(actual)+' actual / '+pct(target)+' objetivo';
+   const track=document.createElement('div');track.className='tier-track';
+   const bar=document.createElement('div');bar.className='tier-current';bar.style.width=Math.min(actual/scale*100,100)+'%';
+   const line=document.createElement('div');line.className='tier-target';line.style.left=Math.min(target/scale*100,100)+'%';line.title='Objetivo '+pct(target);
+   track.append(bar,line);wrap.append(label,track);container.appendChild(wrap);
+ });
+}
 function toneFromStatus(s){return s==='SOBRE'?'danger':s==='INFRA'?'warn':'ok';}
+const EXCHANGES = {Binance:'binance',KuCoin:'kucoin',Hyperliquid:'hyperliquid',Quantfury:'',MEXC:'mexc',MetaMask:'metamask',Phantom:'phantom'};
+function exchangeLabel(name){const slug=EXCHANGES[name];const img=slug?`<img class="entity-symbol" src="https://cdn.simpleicons.org/${slug}" alt="" onerror="this.style.display='none'">`:'';return img+name;}
 function setBars(id, items, maxValue){const wrap=$(id);wrap.innerHTML='';if(!items.length){wrap.innerHTML='<div class="muted">Sin datos</div>';return;}const max=maxValue||Math.max(...items.map(x=>Math.abs(x.value)||0),1);items.forEach(it=>{const row=document.createElement('div');row.className='bar-row';row.innerHTML=`<div class="bar-label">${TOKEN_LOGOS[it.label]?tokenHtml(it.label):it.label}</div><div class="bar-track"><div class="bar-fill ${it.tone||''}" style="width:${Math.max(3,Math.abs(it.value)/max*100)}%"></div></div><div class="bar-value">${it.display}</div>`;wrap.appendChild(row);});}
 async function loadSources(){try{const r=await fetch('/api/mcp-status',{cache:'no-store'});const d=await r.json();$('src-binance').textContent=d.binance_configured?'URL configurada y lista para consultas.':'URL NO configurada.';$('src-hl').textContent=d.hyperliquid_configured?'URL configurada para histórico macro HYPE.':'URL NO configurada.';}catch(e){$('src-binance').textContent='No se pudo verificar';$('src-hl').textContent='No se pudo verificar';}}
 async function refreshData(){try{const r=await fetch('/api/portfolio',{cache:'no-store'});const d=await r.json();if(!r.ok||d.status!=='OK') throw new Error(d.reason||'Sin respuesta válida');$('live-badge').className='badge ok';$('live-badge').textContent='● LIVE MCP';$('total').textContent=money(d.total_value);$('crypto').textContent=money(d.crypto_value);$('crypto-help').textContent=`${pct(d.crypto_pct*100)} del patrimonio`; $('usdt').textContent=money(d.usdt_total);$('usdt-help').textContent=`${pct(d.usdt_pct*100)} del patrimonio · piso 40%`; $('reserve').textContent=money(d.trading_reserve);$('snapshot-note').textContent=`Snapshot ${d.snapshot_date} · Binance observado: ${new Date(d.observed_at).toLocaleString('es-PE',{timeZone:'America/Lima'})}`;
 setBars('comp-bars', [{label:'Cripto',value:d.crypto_pct*100,display:pct(d.crypto_pct*100),tone:'primary'},{label:'USDT',value:d.usdt_pct*100,display:pct(d.usdt_pct*100),tone:'ok'}],100);
 const rows=[...d.rows].sort((a,b)=>b.value-a.value);
+renderTiers(rows);
 setBars('token-bars', rows.slice(0,8).map(r=>({label:r.token,value:r.weight*100,display:pct(r.weight*100),tone:toneFromStatus(r.status)})), Math.max(...rows.slice(0,8).map(r=>r.weight*100),1));
 setBars('drift-bars', rows.sort((a,b)=>Math.abs(b.drift_pp)-Math.abs(a.drift_pp)).slice(0,8).map(r=>({label:r.token,value:Math.abs(r.drift_pp),display:(r.drift_pp>0?'+':'')+num(r.drift_pp,1)+' pp',tone:toneFromStatus(r.status)})));
 setBars('venue-bars', Object.entries(d.liquidity_venues).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({label:k,value:v,display:money(v),tone:'ok'})));
 const bsi=(d.bsi_historical?.rows||[]).filter(x=>x.bsi!==null).slice(0,6);setBars('bsi-bars', bsi.map(x=>({label:x.token,value:Math.abs(x.bsi),display:(x.bsi>0?'+':'')+num(x.bsi,1)+'%',tone:x.bsi>20?'warn':x.bsi>=0?'ok':'danger'})));
 const fc=d.forecast_sensitivity?.scenarios||[];setBars('forecast-bars', fc.map(x=>({label:(x.btc_change_pct>0?'+':'')+x.btc_change_pct+'% BTC', value:Math.abs(x.portfolio_change_pct), display:(x.portfolio_change_pct>0?'+':'')+num(x.portfolio_change_pct,2)+'%', tone:x.btc_change_pct<0?'danger':x.btc_change_pct>0?'ok':'primary'})), Math.max(...fc.map(x=>Math.abs(x.portfolio_change_pct)),1));
 setBars('top-bars', rows.slice(0,5).map(r=>({label:r.token,value:r.weight*100,display:money(r.value),tone:'primary'})), Math.max(...rows.slice(0,5).map(r=>r.weight*100),1));
-$('positions').innerHTML=rows.map(r=>`<tr><td>${tokenHtml(r.token)}<div class="muted">${r.tier}</div></td><td>${r.price>=1?money(r.price,2):money(r.price,6)}</td><td>${money(r.value)}</td><td>${pct(r.weight*100)}</td><td>${pct(r.target*100)}</td><td><span class="pill ${r.status}">${r.status}</span></td></tr>`).join('');
-}catch(e){$('live-badge').className='badge danger';$('live-badge').textContent='● DATA ERROR';$('positions').innerHTML=`<tr><td colspan="6">Sin cotizaciones válidas: ${e.message}</td></tr>`;['comp-bars','token-bars','drift-bars','venue-bars','bsi-bars','forecast-bars','top-bars'].forEach(id=>$(id).innerHTML='<div class="muted">Sin datos válidos</div>');}}
+const btcPrice=rows.find(r=>r.token==='BTC')?.price; if(!Number.isFinite(btcPrice)||btcPrice<=0)throw Error('Precio BTC inválido');
+$('positions').innerHTML=rows.map(r=>`<tr><td>${tokenHtml(r.token)}<div class="muted">${r.tier}</div></td><td>${r.price>=1?money(r.price,2):money(r.price,6)}</td><td>${money(r.value)}</td><td>${num(r.value / btcPrice,8)} BTC</td><td>${pct(r.weight*100)}</td><td>${pct(r.target*100)}</td><td><span class="pill ${r.status}">${r.status}</span></td></tr>`).join('');
+$('positions-total').innerHTML=`<tr style="font-weight:800;background:#edf4fc"><td colspan="2">Total patrimonio (incluye USDT)</td><td>${money(d.total_value)}</td><td>${num(d.total_value/btcPrice,8)} BTC</td><td>100% patrimonio</td><td colspan="2">Snapshot + MCP</td></tr>`;
+}catch(e){$('positions-total').innerHTML='';$('live-badge').className='badge danger';$('live-badge').textContent='● DATA ERROR';$('positions').innerHTML=`<tr><td colspan="7">Sin cotizaciones válidas: ${e.message}</td></tr>`;['comp-bars','token-bars','drift-bars','venue-bars','bsi-bars','forecast-bars','top-bars','tier-bars'].forEach(id=>$(id).innerHTML='<div class="muted">Sin datos válidos</div>');}}
 loadSources();refreshData();
 </script>
 {% endblock %}
