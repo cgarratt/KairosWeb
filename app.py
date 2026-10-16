@@ -443,12 +443,20 @@ def build_mode_payload(slug, d, observed):
         p=d['total_value']; cash=d['usdt_total']
         custody=SNAPSHOT['custody_core_blocked__core_strategic__exchange']
         sell_tokens=[]
-        for r in sellable_over:
+        # Todos los activos no-BTC son potenciales fuentes de venta una vez agotados los sobreponderados.
+        # El inventario disponible se limita a Exchange confirmado por snapshot, no a Core/HODL.
+        for r in d['rows']:
+            if r['token']=='BTC':
+                continue
             key='PUMPFUN' if r['token']=='PUMP' else r['token']
             exch=max(0.0,float(custody.get(key,[0,0,0])[2]))
+            value=max(0.0,exch*r['price'])
             excess=max(0.0,(r['weight']-r['target'])*d['crypto_value'])
-            sell_tokens.append({'token':r['token'],'price':r['price'],'weight':r['weight'],'target':r['target'],'exchange_units':exch,'max_usdt':min(excess,exch*r['price'])})
-        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],'kind':'ventas','current':{'P':p,'cash':cash,'cash_pct':d['usdt_pct']*100,'floor':.40*p,'max_percent':max(70.0,d['usdt_pct']*100)},'tokens':sell_tokens, 'notes':['Solo SELL; BTC NEVER SELL. No se altera Core/HODL.','El slider va desde la liquidez real actual hasta el 70% (40% inicial cuando la liquidez actual es menor); el escenario sigue siendo solo SELL.','Inventario disponible referencial: unidades declaradas en Exchange, SIN descontar SELL/LIMIT aún no reconciliadas.']}
+            sell_tokens.append({'token':r['token'],'price':r['price'],'weight':r['weight'],
+                                'target':r['target'],'exchange_units':exch,
+                                'max_usdt':min(excess,value), 'free_exchange_usdt':value,
+                                'overweight':r['drift_pp']>1})
+        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],'kind':'ventas','current':{'P':p,'cash':cash,'cash_pct':d['usdt_pct']*100,'floor':.40*p,'max_percent':max(70.0,d['usdt_pct']*100)},'tokens':sell_tokens, 'notes':['Solo SELL; BTC NEVER SELL. No se altera Core/HODL.','Slider desde liquidez actual hasta 70%; 40% es la selección inicial, no un límite de ventas.','Inventario disponible referencial: unidades declaradas en Exchange, SIN descontar SELL/LIMIT aún no reconciliadas.']}
         needed = max(0.0, usdt_gap)
         sell_rows=[]
         for r in sellable_over:

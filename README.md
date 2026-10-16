@@ -45,3 +45,20 @@ Un 502/503/504 de Render o del MCP necesita revisión operativa del servicio rem
 - Máximo: 70% USDT (o liquidez actual si supera 70%, para no invertir el rango).
 - Valor inicial: 40% cuando el porcentaje actual sea menor, de lo contrario el actual.
 - Recalcula propuestas SELL, unidades y pesos post-venta; BTC NEVER SELL, Exchange disponible y simulación sin ejecución.
+
+## v4.0.7
+- Totales C1, C2 y USDT al pie de Compras; total USDT al pie de Ventas.
+- Ventas: slider liquidez actual–70%, inicia 40% si el saldo actual es inferior; 40% NO limita el cálculo.
+- Ventas en dos etapas: primero sobreponderados; después restantes activos proporcionalmente al target, hasta el límite del inventario Exchange; BTC no se vende.
+- C1/C2 siguen PENDIENTES porque las anclas aprobadas no están integradas al backend; NO se inventan precios.
+- Sólo simulación: reservas SELL, comisiones y fills requieren reconciliación.
+
+## v4.0.8
+Balancer: eliminación exclusiva de la columna USDT ref. en candidatos de compra. Permanecen Reserva actual y Con ventas, sin alteraciones de cálculo.
+
+
+## v4.0.9 — Filas de totales
+- Se agrega un pie TOTAL USDT a las dos tablas de Balancer: compras (reserva actual y con ventas) y ventas.
+- Compras C1/C2 y Ventas ya incluyen total USDT dinámico; se conservan.
+- La tabla ejecutiva del Dashboard conserva su fila de patrimonio consolidado.
+- No sumar porcentajes ni cantidades de tokens heterogéneos como si fueran USDT.
