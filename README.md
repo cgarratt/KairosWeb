@@ -118,3 +118,12 @@ La página /modes y /api/modes solo muestran Balancer, Compras, Ventas, TradingB
 - Referencia histórica separada de los saldos en vivo en `data/integral_portfolio_reference.json`.
 - KPIs capital base/vivo, Lost realizado y recuperación; gráfico objetivo vs actual, composición y tabla con desviaciones.
 - No altera datos MCP, snapshot operativo ni modos de trading.
+
+
+## v4.1.9 — MCP Resilience
+- Reintentos con nueva sesión MCP únicamente para HTTP 502/503/504 y timeouts; esperas 2, 5, 10 segundos, sin reintentos para 401/403/404.
+- Tiempo por intento 35 segundos; consultar `/api/market-status` para saber la edad de la última lectura validada.
+- Cache 30s compartida entre hilos en un único proceso Gunicorn; datos vencidos no se reutilizan para análisis ni se muestran como LIVE.
+- `/mode/portafolio` continúa independiente del MCP, mostrando exclusivamente cifras históricas confirmadas.
+- Se conservan las reglas de inversión y las demás páginas sin cambios.
+- Para mayor disponibilidad, Render Free puede requerir un plan sin suspensión o una fuente de mercado siempre activa.

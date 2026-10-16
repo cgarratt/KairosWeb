@@ -41,6 +41,9 @@ _MARKET_CACHE = {'stored': 0.0, 'observed': None, 'dashboard': None}
 _MARKET_LOCK = threading.Lock()
 _FETCH_LOCK = threading.Lock()
 CACHE_TTL_SECONDS = 30
+RETRY_HTTP_CODES = frozenset((502, 503, 504))
+MCP_RETRY_DELAYS = (2, 5, 10)
+MCP_TIMEOUT_SECONDS = 35
 
 
 @app.before_request
@@ -73,7 +76,7 @@ async def call_mcp(env_name, tool, args=None):
     token = os.getenv(env_name.replace('_URL', '_TOKEN'), '').strip()
     from fastmcp.client.transports import StreamableHttpTransport
     transport = StreamableHttpTransport(endpoint, headers={'Authorization': f'Bearer {token}'} if token else None)
-    async with Client(transport, timeout=80) as client:
+    async with Client(transport, timeout=MCP_TIMEOUT_SECONDS) as client:
         result = await client.call_tool(tool, args or {})
     if result.is_error:
         raise RuntimeError(f'{tool}: error remoto')
@@ -89,6 +92,37 @@ async def call_mcp(env_name, tool, args=None):
             if isinstance(value, dict):
                 return value
     raise RuntimeError(f'{tool}: respuesta MCP no reconocida')
+
+def call_mcp_resilient(env_name, tool, args=None):
+    """Fresh MCP sessions each attempt; retry only gateway errors/timeouts.
+
+    Keep diagnostics/HTML and the live market loader on a shared retry policy.
+    Never retry authorization, application errors, or malformed URLs.
+    """
+    for attempt in range(len(MCP_RETRY_DELAYS) + 1):
+        try:
+            return asyncio.run(call_mcp(env_name, tool, args))
+        except Exception as exc:
+            status = _http_status(exc)
+            timeout = isinstance(exc, (TimeoutError, httpx.TimeoutException)) or 'timeout' in type(exc).__name__.lower()
+            if attempt >= len(MCP_RETRY_DELAYS) or (status not in RETRY_HTTP_CODES and not timeout):
+                raise
+            delay = MCP_RETRY_DELAYS[attempt]
+            app.logger.warning('MCP transient retry provider=%s tool=%s attempt=%s http_status=%s wait_s=%s',
+                               'binance' if env_name=='BINANCE_MCP_URL' else 'hyperliquid', tool,
+                               attempt + 1, status if status is not None else 'timeout', delay)
+            time.sleep(delay)
+
+
+def market_cache_status():
+    """Only metadata from last valid observation; stale valuations are never served."""
+    with _MARKET_LOCK:
+        observed = _MARKET_CACHE['observed']
+        stored = _MARKET_CACHE['stored']
+    age = round(max(0.0, time.monotonic() - stored), 1) if observed else None
+    return {'last_valid_observed_at':observed, 'cache_age_seconds':age,
+            'cache_state':'FRESH' if observed and age < CACHE_TTL_SECONDS else ('STALE' if observed else 'EMPTY')}
+
 
 def _http_status(exc):
     """Find real HTTP status through wrappers without logging URL or headers."""
@@ -263,21 +297,8 @@ def _load_live_dashboard_uncached():
     with _MARKET_LOCK:
         if _MARKET_CACHE['dashboard'] is not None and (time.monotonic() - _MARKET_CACHE['stored']) < CACHE_TTL_SECONDS:
             return _MARKET_CACHE['observed'], _MARKET_CACHE['dashboard']
-    # Retry one time on transient Render cold-start and MCP transport failure.
-    last_error = None
-    data = None
-    for attempt in range(2):
-        try:
-            data = asyncio.run(call_mcp('BINANCE_MCP_URL', 'get_kairos_spot_prices'))
-            if data.get('status') != 'OK':
-                raise RuntimeError('Binance MCP DATA_ERROR')
-            break
-        except Exception as exc:
-            last_error = exc
-            if attempt == 0:
-                time.sleep(1.5)
-    if data is None:
-        raise last_error or RuntimeError('MCP no disponible')
+    # Shared resilient fetch with fresh session for each transient gateway failure.
+    data = call_mcp_resilient('BINANCE_MCP_URL', 'get_kairos_spot_prices')
     if data.get('status') != 'OK':
         raise RuntimeError('Binance MCP DATA_ERROR')
     records = data.get('records')
@@ -810,7 +831,7 @@ def mode_page(slug):
 
 @app.route('/health')
 def health():
-    return jsonify({'status':'UP','service':'Kairos Web','version':'4.1.4','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
+    return jsonify({'status':'UP','service':'Kairos Web','version':'4.1.9','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
 
 @app.route('/api/portfolio')
 def portfolio():
@@ -819,7 +840,11 @@ def portfolio():
         return jsonify({'status':'OK', 'source':'Binance Spot MCP', 'observed_at':observed, **dashboard})
     except Exception as exc:
         diag = diagnostic_error(exc, 'portfolio')
-        return jsonify({'status':'DATA_ERROR','reason':diag['message'],'diagnostic':diag,'snapshot_date':SNAPSHOT['units_snapshot_as_of']}), 503
+        return jsonify({'status':'DATA_ERROR','reason':diag['message'],'diagnostic':diag,'snapshot_date':SNAPSHOT['units_snapshot_as_of'], **market_cache_status()}), 503
+
+@app.route('/api/market-status')
+def market_status_endpoint():
+    return jsonify(market_cache_status())
 
 @app.route('/api/mcp-status')
 def mcp_status():
@@ -854,7 +879,7 @@ def mcp_diagnostics():
             results[name]={'status':'NOT_CONFIGURED'}
             continue
         try:
-            response=asyncio.run(call_mcp(env,tool,args))
+            response=call_mcp_resilient(env,tool,args)
             if response.get('status')!='OK':
                 raise RuntimeError('MCP result status not OK')
             count=len(response.get('records',[])) if name=='binance' else None
@@ -867,8 +892,8 @@ def mcp_diagnostics():
 @app.route('/api/hype-macro')
 def hype_macro():
     try:
-        data=asyncio.run(call_mcp('HYPERLIQUID_MCP_URL','get_hype_spot_ohlcv',
-                                  {'interval':'1w','start_date':'2024-11-29','limit':130}))
+        data=call_mcp_resilient('HYPERLIQUID_MCP_URL','get_hype_spot_ohlcv',
+                                  {'interval':'1w','start_date':'2024-11-29','limit':130})
         if data.get('status') != 'OK':
             raise RuntimeError('Hyperliquid DATA_ERROR')
         return jsonify({'status':'OK','market':'HYPE/USDC spot, macro only','data':data})
