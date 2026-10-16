@@ -408,8 +408,8 @@ def build_mode_payload(slug, d, observed):
         p=d['total_value']; cash=d['usdt_total']; trading=d['trading_reserve']
         max_percent=(100*max(0.0,cash-trading)/p) if p else 0.0 # Total liquidez USDT menos reserva Trading
         reference_cap=max(0.0,cash-trading)
-        targets=[{'token':r['token'],'price':r['price'],'weight':r['weight'],'target':r['target'],'gap_usdt':max(0.0,(r['target']-r['weight'])*d['crypto_value']),'c1_price':None,'c2_price':None} for r in under]
-        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'], 'kind':'compras', 'current':{'P':p,'cash':cash,'trading':trading,'cash_pct':d['usdt_pct']*100,'floor':.40*p,'max_percent':max_percent,'reference_cap':reference_cap},'tokens':targets, 'notes':['C1=Fibonacci 50%; C2=61.8%. Distribución por déficit de composición, antes de precios Fib.','El slider es una SIMULACIÓN y no libera fondos bloqueados ni reemplaza órdenes LIMIT existentes.','La reserva Trading está separada y el piso mínimo de 40% USDT queda protegido al evaluar capacidad ejecutable.']}
+        targets=[{'token':r['token'],'price':r['price'],'weight':r['weight'],'target':r['target'],'current_usdt':r['value'],'gap_usdt':max(0.0,(r['target']-r['weight'])*d['crypto_value']),'c1_price':None,'c2_price':None} for r in d['rows']]
+        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'], 'kind':'compras', 'current':{'P':p,'cash':cash,'trading':trading,'cash_pct':d['usdt_pct']*100,'floor':.40*p,'max_percent':max_percent,'reference_cap':reference_cap,'crypto_value':d['crypto_value']},'tokens':targets, 'notes':['C1=Fibonacci 50%; C2=61.8%. Etapa 1: corregir brechas de composición sin ventas. Etapa 2: invertir excedente proporcionalmente a los targets.','El slider es una SIMULACIÓN y no libera fondos bloqueados ni reemplaza órdenes LIMIT existentes.','La reserva Trading está separada y el piso mínimo de 40% USDT queda protegido al evaluar capacidad ejecutable.']}
         buy_rows=[]
         for r in under:
             share = abs(r['drift_pp'])/deficits_sum
@@ -448,12 +448,7 @@ def build_mode_payload(slug, d, observed):
             exch=max(0.0,float(custody.get(key,[0,0,0])[2]))
             excess=max(0.0,(r['weight']-r['target'])*d['crypto_value'])
             sell_tokens.append({'token':r['token'],'price':r['price'],'weight':r['weight'],'target':r['target'],'exchange_units':exch,'max_usdt':min(excess,exch*r['price'])})
-        inventory=[]
-        for r in rows:
-            key='PUMPFUN' if r['token']=='PUMP' else r['token']
-            hodl,core,exchange=[float(v) for v in custody.get(key,[0,0,0])]
-            inventory.append({'token':r['token'],'tier':r['tier'],'hodl_units':hodl,'core_units':core,'exchange_units':exchange,'total_units':r['units'],'exchange_pct':100*exchange/r['units'] if r['units'] else 0,'sellable_reference':0 if r['token']=='BTC' else exchange,'price':r['price']})
-        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],'kind':'ventas','current':{'P':p,'cash':cash,'cash_pct':d['usdt_pct']*100,'floor':.40*p,'max_percent':40.0},'inventory':inventory,'tokens':sell_tokens, 'notes':['Solo SELL; BTC NEVER SELL. No se altera Core/HODL.','El slider define la meta final de USDT; 40% por defecto.','Inventario disponible referencial: unidades declaradas en Exchange, SIN descontar SELL/LIMIT aún no reconciliadas.']}
+        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],'kind':'ventas','current':{'P':p,'cash':cash,'cash_pct':d['usdt_pct']*100,'floor':.40*p,'max_percent':max(70.0,d['usdt_pct']*100)},'tokens':sell_tokens, 'notes':['Solo SELL; BTC NEVER SELL. No se altera Core/HODL.','El slider va desde la liquidez real actual hasta el 70% (40% inicial cuando la liquidez actual es menor); el escenario sigue siendo solo SELL.','Inventario disponible referencial: unidades declaradas en Exchange, SIN descontar SELL/LIMIT aún no reconciliadas.']}
         needed = max(0.0, usdt_gap)
         sell_rows=[]
         for r in sellable_over:
@@ -693,7 +688,7 @@ def balancer_report(d, observed):
     residual_after_bags=cash-operational_25-trading
     # 5% P is the structural allocation. Formula requested by user displays
     # what remains in physical USDT after protecting C1+C2 and Trading.
-    reserve=max(0,min(.05*p,residual_after_bags))
+    reserve=max(0,residual_after_bags)
     reserve_nominal=.05*p
     # Indicative ONLY; actual commitments and reserved bags are not reconciled.
     theoretical_ceiling=max(0,min(excess,residual_after_bags,reserve+excess))
@@ -713,8 +708,8 @@ def balancer_report(d, observed):
                              'weight':r['weight'],'target':r['target'],'drift':r['drift_pp']})
     sale_total=sum(r['value'] for r in sale_preview)
     # Never allocate hypothetical BUY while consolidated USDT is below 40%.
-    current_cash_capacity=max(0,min(reserve, cash-floor))
-    projected_cash_capacity=max(0,min(reserve+sale_total, cash+sale_total-floor, residual_after_bags+sale_total))
+    current_cash_capacity=reserve
+    projected_cash_capacity=reserve+sale_total
     buy_preview=[]
     weight_deficit=sum(max(0,r['target']-r['weight']) for r in buy_candidates)
     for r in buy_candidates:
@@ -733,7 +728,7 @@ def balancer_report(d, observed):
       'metrics':[
         {'label':'USDT físico','value':fmt_money(cash),'help':f"{cash/p*100:.1f}% del patrimonio" if p else '', 'tone':'primary'},
         {'label':'Piso 40% USDT','value':fmt_money(floor),'help':'Protección de liquidez','tone':'neutral'},
-        {'label':'Reserva Balancer estimada','value':fmt_money(reserve),'help':'Límite de 5% P y remanente tras C1/C2 + Trading','tone':'warn'},
+        {'label':'Reserva Balancer estimada','value':fmt_money(reserve),'help':'USDT menos 25% P (C1/C2) y Reserva Trading, sin límite 40%','tone':'warn'},
         {'label':'Reserva Trading','value':fmt_money(trading),'help':'Reserva separada Quantfury; incluida en USDT físico','tone':'primary'}],
       'buys':buy_preview,'sells':sale_preview,'buy_total':buy_total,'sell_total':sale_total,
       'buy_with_sales':[{'token':r['token'],'value':projected_cash_capacity*(r['target']-r['weight'])/weight_deficit if weight_deficit else 0} for r in buy_candidates],
