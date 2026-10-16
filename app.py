@@ -376,6 +376,11 @@ def build_mode_payload(slug, d, observed):
         }
 
     if slug == 'compras':
+        p=d['total_value']; cash=d['usdt_total']; trading=d['trading_reserve']
+        max_percent=15.0 # 40% total nominal allocation - 25% P for C1 + C2, before separate Trading reserve
+        reference_cap=max(0.0,min(max_percent*p/100,cash-trading))
+        targets=[{'token':r['token'],'price':r['price'],'weight':r['weight'],'target':r['target'],'gap_usdt':max(0.0,(r['target']-r['weight'])*d['crypto_value'])} for r in under]
+        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'], 'kind':'compras', 'current':{'P':p,'cash':cash,'trading':trading,'cash_pct':d['usdt_pct']*100,'floor':.40*p,'max_percent':max_percent,'reference_cap':reference_cap},'tokens':targets, 'notes':['C1=Fibonacci 50%; C2=61.8%. Distribución por déficit de composición, antes de precios Fib.','El slider es una SIMULACIÓN y no libera fondos bloqueados ni reemplaza órdenes LIMIT existentes.','La reserva Trading está separada y el piso mínimo de 40% USDT queda protegido al evaluar capacidad ejecutable.']}
         buy_rows=[]
         for r in under:
             share = abs(r['drift_pp'])/deficits_sum
@@ -406,6 +411,15 @@ def build_mode_payload(slug, d, observed):
         }
 
     if slug == 'ventas':
+        p=d['total_value']; cash=d['usdt_total']
+        custody=SNAPSHOT['custody_core_blocked__core_strategic__exchange']
+        sell_tokens=[]
+        for r in sellable_over:
+            key='PUMPFUN' if r['token']=='PUMP' else r['token']
+            exch=max(0.0,float(custody.get(key,[0,0,0])[2]))
+            excess=max(0.0,(r['weight']-r['target'])*d['crypto_value'])
+            sell_tokens.append({'token':r['token'],'price':r['price'],'weight':r['weight'],'target':r['target'],'exchange_units':exch,'max_usdt':min(excess,exch*r['price'])})
+        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],'kind':'ventas','current':{'P':p,'cash':cash,'cash_pct':d['usdt_pct']*100,'floor':.40*p,'max_percent':100.0},'tokens':sell_tokens, 'notes':['Solo SELL; BTC NEVER SELL. No se altera Core/HODL.','El slider define la meta final de USDT; 40% por defecto.','Inventario disponible referencial: unidades declaradas en Exchange, SIN descontar SELL/LIMIT aún no reconciliadas.']}
         needed = max(0.0, usdt_gap)
         sell_rows=[]
         for r in sellable_over:
@@ -669,7 +683,7 @@ def balancer_report(d, observed):
     weight_deficit=sum(max(0,r['target']-r['weight']) for r in buy_candidates)
     for r in buy_candidates:
         amount=theoretical_ceiling*(r['target']-r['weight'])/weight_deficit if weight_deficit else 0
-        buy_preview.append({'token':r['token'],'value':amount,'weight':r['weight'],'target':r['target'],'drift':r['drift_pp']})
+        buy_preview.append({'token':r['token'],'value':amount,'reference':reserve_nominal*(r['target']-r['weight'])/weight_deficit if weight_deficit else 0,'weight':r['weight'],'target':r['target'],'drift':r['drift_pp']})
     buy_total=sum(r['value'] for r in buy_preview)
     # Independent scenarios: BUY only and SELL only, no sequential fill assumption.
     after_buy_crypto=crypto+buy_total
@@ -713,7 +727,7 @@ def mode_page(slug):
         return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master='5.3.5'), 503
     try:
         payload = build_mode_payload(slug, dashboard, observed)
-        return render_template('balancer.html' if slug=='balancer' else 'mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master='5.3.5')
+        return render_template('balancer.html' if slug=='balancer' else 'trade_sim.html' if slug in ('compras','ventas') else 'mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master='5.3.5')
     except Exception as exc:
         error_id = uuid.uuid4().hex[:10]
         app.logger.exception('Kairos MODE_RENDER slug=%s ID=%s',slug,error_id)
@@ -722,7 +736,7 @@ def mode_page(slug):
 
 @app.route('/health')
 def health():
-    return jsonify({'status':'UP','service':'Kairos Web','version':'3.7','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
+    return jsonify({'status':'UP','service':'Kairos Web','version':'3.9','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
 
 @app.route('/api/portfolio')
 def portfolio():

@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}Kairos · {{ mode.name }}{% endblock %}
+{% block head %}
+<style>
+.sim-layout{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.sim-metric{border:1px solid #dce6f4;background:#f7fbff;padding:15px;border-radius:16px}.sim-metric b{font-size:23px;color:#164c94;display:block;margin:9px 0}.sim-metric small{color:#536984}.control-panel{padding:22px;border:1px solid #c7dbf6;border-radius:18px;background:#eef5ff}input[type=range]{width:100%;accent-color:#266ac6;cursor:pointer;height:25px}.sim-rows td{font-variant-numeric:tabular-nums}.sim-actions{display:inline-flex;padding:5px 10px;border-radius:20px;font-size:12px;font-weight:800;background:#e7f8f0;color:#16825d}.sim-actions.watch{background:#fff3d8;color:#8f6900}.sim-actions.sell{background:#ffedf0;color:#af334a}.sim-warn{padding:12px 16px;background:#fff8e9;border-radius:12px;color:#966200;border:1px solid #f0dda9;font-size:13px}.sim-bar{height:15px;border-radius:20px;overflow:hidden;background:#e4eaf3}.sim-bar>div{height:100%;background:linear-gradient(90deg,#1c61b9,#43abe5);transition:width .15s}.sim-panel-title{display:flex;justify-content:space-between;align-items:center;gap:12px}@media(max-width:800px){.sim-layout{grid-template-columns:repeat(2,1fr)}}@media(max-width:530px){.sim-layout{grid-template-columns:1fr}}
+</style>{% endblock %}
+{% block content %}
+<div class="grid">
+<section class="panel span-12 hero"><div><h2>{{ mode.name }}</h2><p>{{ mode.description }}</p><div class="tabs"><a class="tab-link" href="/">Dashboard</a><a class="tab-link" href="/modes">Modos Kairos</a><a class="tab-link" href="/mode/balancer">Balancer</a><a class="tab-link {% if mode.slug=='compras' %}active{% endif %}" href="/mode/compras">Compras</a><a class="tab-link {% if mode.slug=='ventas' %}active{% endif %}" href="/mode/ventas">Ventas</a></div></div><div class="badge info">SIMULACIÓN · SIN ÓRDENES</div></section>
+<section class="panel span-12"><h2>{{ 'Despliegue de USDT para C1/C2' if mode.slug=='compras' else 'Objetivo de liquidez USDT' }}</h2><p class="sub">{{ 'Mover el slider redistribuye los importes C1 y C2 entre activos infraponderados.' if mode.slug=='compras' else 'Mover el slider ajusta las ventas hipotéticas de activos sobreponderados.' }}</p>
+<div class="sim-layout" style="margin:18px 0">
+<div class="sim-metric"><small>◉ Patrimonio estimado</small><b id="portfolio-metric">—</b><small>Spot MCP + snapshot</small></div>
+<div class="sim-metric"><small>◈ USDT físico</small><b id="cash-metric">—</b><small id="cash-pct">—</small></div>
+<div class="sim-metric"><small>{{ '▣ Reserva Trading' if mode.slug=='compras' else '◎ Objetivo USDT' }}</small><b id="third-metric">—</b><small>{{ 'No se utiliza para Compras' if mode.slug=='compras' else 'Sobre patrimonio actual' }}</small></div>
+<div class="sim-metric"><small>{{ '◇ Despliegue simulado' if mode.slug=='compras' else '◇ Ventas simuladas' }}</small><b id="allocation-metric">—</b><small>Solo escenario, no orden</small></div>
+</div>
+<div class="control-panel"><div class="sim-panel-title"><strong>{{ 'Despliegue teórico (% de patrimonio P)' if mode.slug=='compras' else 'Liquidez objetivo (% del patrimonio P)' }}</strong><strong id="slider-value" style="font-size:23px;color:#1657a7">—</strong></div>
+<input id="allocation-slider" type="range" aria-label="{{ 'Porcentaje a desplegar' if mode.slug=='compras' else 'Porcentaje de liquidez objetivo' }}" min="{{ 0 if mode.slug=='compras' else 40 }}" max="{{ payload.current.max_percent }}" step="0.5" value="{{ 0 if mode.slug=='compras' else 40 }}">
+<div style="display:flex;justify-content:space-between;gap:12px" class="sub"><span>{{ '0% de P' if mode.slug=='compras' else '40% USDT' }}</span><span>{{ '15% de P máximo (40% menos 25% operativo)' if mode.slug=='compras' else '100% USDT objetivo máximo teórico' }}</span></div>
+</div>
+<p class="sim-warn" id="caution"></p></section>
+<section class="panel span-12"><h2>{{ 'Candidatos C1 / C2' if mode.slug=='compras' else 'Candidatos SELL' }}</h2><p class="sub">{{ 'Presupuesto teórico C1/C2 proporcional al déficit, limitado por su máximo por token.' if mode.slug=='compras' else 'Ordenados por exceso de peso; BTC excluido. Límites de Exchange declarados, sin descontar órdenes pendientes.' }}</p>
+<div style="overflow-x:auto"><table><thead><tr>{% if mode.slug=='compras' %}<th>Token</th><th>Actual / Objetivo</th><th>Déficit</th><th>C1 50% USDT</th><th>C2 61.8% USDT</th><th>Total USDT</th><th>Acción</th>{% else %}<th>Token</th><th>Actual / Objetivo</th><th>Exchange ud.</th><th>USDT estimado</th><th>Unidades SELL</th><th>Acción</th>{% endif %}</tr></thead><tbody id="sim-body"></tbody></table></div></section>
+<section class="panel span-6"><h2>Distribución del escenario</h2><p class="sub">Asignación USDT referencial por token.</p><div id="alloc-chart" class="bar-list"></div></section>
+<section class="panel span-6"><h2>Liquidez post-escenario</h2><p class="sub">Comparativa de USDT antes vs después. Sin alterar saldos reales.</p><div class="sim-metric" style="margin:15px 0"><small>Situación actual</small><b id="before-cash">—</b><div class="sim-bar"><div id="before-bar"></div></div></div><div class="sim-metric"><small>Después (hipotético)</small><b id="after-cash">—</b><div class="sim-bar"><div id="after-bar"></div></div></div></section>
+<section class="panel span-12"><div class="callout warn"><strong>Alcance de la simulación</strong>El slider no modifica posiciones ni coloca órdenes. Los precios Fibonacci operativos, los compromisos LIMIT, comisiones y ventas reservadas requieren reconciliación. Snapshot: {{ payload.snapshot_note }}</div></section>
+</div>
+<script>
+const mode={{ payload.kind|tojson }};
+const source={{ payload|tojson }};
+const P=source.current.P, cash=source.current.cash, trading=source.current.trading||0;
+const symbols={BTC:'bitcoin-btc',ETH:'ethereum-eth',SOL:'solana-sol',LINK:'chainlink-link',HYPE:'hyperliquid-hype',HBAR:'hedera-hbar',SUI:'sui-sui',ONDO:'ondo-finance-ondo',PUMP:'pump-fun-pump',PLUME:'plume-plume',PEPE:'pepe-pepe',VIRTUAL:'virtual-protocol-virtual'};
+const dollar=x=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(x);
+const quantity=x=>new Intl.NumberFormat('en-US',{maximumFractionDigits:x>=100?2:6}).format(x);
+const el=id=>document.getElementById(id);
+const cap=(x,a,b)=>Math.max(a,Math.min(x,b));
+function token(t){return `<span class="coin-tag"><span class="coin-icon"><img src="https://cryptologos.cc/logos/${symbols[t]||''}-logo.png" alt="" onerror="this.style.display='none'"><span class="coin-fallback">${t.slice(0,2)}</span></span><b>${t}</b></span>`}
+function distribute(total, items, key){const out=items.map(()=>0);let remaining=total;for(let rounds=0;rounds<items.length+1 && remaining>1e-7;rounds++){const eligible=items.map((x,i)=>({i,free:Math.max(0,x[key]-out[i])})).filter(x=>x.free>1e-7);if(!eligible.length)break;const totalFree=eligible.reduce((s,x)=>s+x.free,0);const spent=Math.min(remaining,totalFree);for(const entry of eligible){const amount=Math.min(entry.free,spent*entry.free/totalFree);out[entry.i]+=amount;remaining-=amount;}}return out}
+function paint(){let target=Number(el('allocation-slider').value);el('slider-value').textContent=target.toFixed(1)+'%';el('portfolio-metric').textContent=dollar(P);el('cash-metric').textContent=dollar(cash);el('cash-pct').textContent=(100*cash/P).toFixed(1)+'% de P';let allocated=[],after=cash;
+if(mode==='compras'){
+  const desired=P*target/100;
+  // Maximum theoretical deployment is 15%P (40% liquidity allocation less 25%P C1/C2)
+  const safeCapacity=Math.max(0,cash-.40*P); // no buys from below protected 40% floor
+  const referenceCapacity=Math.max(0,Math.min(desired,source.current.reference_cap));
+  allocated=distribute(referenceCapacity,source.tokens,'gap_usdt');
+  const sum=allocated.reduce((a,b)=>a+b,0);after=cash-sum;
+  el('third-metric').textContent=dollar(trading);el('allocation-metric').textContent=dollar(sum);
+  el('caution').textContent=(sum>safeCapacity+0.01?'Escenario teórico solamente: el efectivo encima del piso 40% es '+dollar(safeCapacity)+'. No autorizar BUY sin caja libre confirmada. ':'')+'El máximo mostrado es 15% P antes de descontar Trading y órdenes pendientes. C1 y C2 se distribuyen en proporción 60% / 40% (15% P / 10% P).';
+  el('sim-body').innerHTML=source.tokens.map((x,i)=>{let a=allocated[i],c1=a*.6,c2=a*.4;let action=a>0?'BUY · SIMULAR':'WATCH';return `<tr><td>${token(x.token)}</td><td>${(x.weight*100).toFixed(1)}% / ${(x.target*100).toFixed(1)}%</td><td>${dollar(x.gap_usdt)}</td><td>${dollar(c1)}</td><td>${dollar(c2)}</td><td><b>${dollar(a)}</b></td><td><span class="sim-actions ${a?'':'watch'}">${action}</span></td></tr>`}).join('') || '<tr><td colspan="7">Sin tokens infraponderados.</td></tr>';
+}else{
+  const desired=Math.max(0,P*target/100-cash);
+  allocated=distribute(desired,source.tokens,'max_usdt');const sum=allocated.reduce((a,b)=>a+b,0);after=cash+sum;
+  el('third-metric').textContent=target.toFixed(1)+'%';el('allocation-metric').textContent=dollar(sum);
+  el('caution').textContent='Máximo alcanzable con sobreponderados y Exchange declarados: '+(100*(cash+source.tokens.reduce((s,x)=>s+x.max_usdt,0))/P).toFixed(1)+'% P. No se restan órdenes SELL pendientes: montos exclusivamente referenciales. BTC NEVER SELL.';
+  el('sim-body').innerHTML=source.tokens.map((x,i)=>{let a=allocated[i],action=a>0?'SELL · SIMULAR':'HOLD';return `<tr><td>${token(x.token)}</td><td>${(100*x.weight).toFixed(1)}% / ${(100*x.target).toFixed(1)}%</td><td>${quantity(x.exchange_units)}</td><td><b>${dollar(a)}</b></td><td>${quantity(a/x.price)}</td><td><span class="sim-actions ${a?'sell':'watch'}">${action}</span></td></tr>`}).join('')||'<tr><td colspan="6">Sin activos sobreponderados vendibles.</td></tr>';
+}
+let max=Math.max(1,...allocated);el('alloc-chart').innerHTML=source.tokens.map((x,i)=>`<div class="bar-row"><div class="bar-label">${token(x.token)}</div><div class="bar-track"><div class="bar-fill ${mode==='ventas'?'danger':'ok'}" style="width:${100*allocated[i]/max}%"></div></div><div class="bar-value">${dollar(allocated[i])}</div></div>`).join('')||'<span class="muted">Sin candidatos</span>';
+el('before-cash').textContent=dollar(cash)+' ('+(100*cash/P).toFixed(1)+'%)';el('after-cash').textContent=dollar(after)+' ('+(100*after/P).toFixed(1)+'%)';el('before-bar').style.width=cap(100*cash/P,0,100)+'%';el('after-bar').style.width=cap(100*after/P,0,100)+'%';}
+el('allocation-slider').addEventListener('input',paint);paint();
+</script>
+{% endblock %}
