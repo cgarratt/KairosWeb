@@ -39,3 +39,9 @@ Reemplaza los archivos del repositorio en GitHub por **el contenido** de esta ca
 - Donut de cripto/USDT, gráfico lineal **de escenarios** Forecast (no histórico), barras comparativas tiers.
 - Gráfico complementario tipo donut en vista Resumen (referencial).
 - Necesita desplegar en Render para validar el endpoint MCP remoto.
+
+
+## Corrección v3.6 (MODE_RENDER)
+Se corrigieron dos colisiones de nombres en Jinja: `chart.items` y `chart.max` apuntaban a métodos del diccionario, no a sus valores. Todas las páginas de modos compartían el error. Ahora usan `chart['items']` y `chart['max']`. No se modificaron los conectores ni las URLs MCP.
+
+Prueba de regresión: `tests/test_mode_template.py` verifica estos accesos.

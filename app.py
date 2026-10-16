@@ -654,7 +654,7 @@ def mode_page(slug):
 
 @app.route('/health')
 def health():
-    return jsonify({'status':'UP','service':'Kairos Web','version':'3.5','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
+    return jsonify({'status':'UP','service':'Kairos Web','version':'3.6','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
 
 @app.route('/api/portfolio')
 def portfolio():

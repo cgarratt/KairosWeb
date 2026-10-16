@@ -18,7 +18,7 @@
 
   {% if error %}
   <section class="panel span-12">
-    <div class="callout danger"><strong>Conexión temporalmente no disponible</strong>{{ error }}. Esto no confirma que los MCP estén caídos: pueden estar despertando en Render.</div>
+    <div class="callout danger"><strong>No se pudo generar el reporte</strong>{{ error }}. Consulta el código de diagnóstico para distinguir errores de plantilla y mercado.</div>
     {% if diagnostic %}<p class="sub"><strong>Código: {{ diagnostic.code }} · ID: {{ diagnostic.error_id }}</strong></p>{% endif %}
     <p><button class="btn primary" type="button" onclick="location.reload()">↻ Reintentar carga</button> <a class="btn" href="/api/mcp-diagnostics">Diagnóstico MCP</a></p>
     <p class="sub">La vista de este modo permanece disponible; no se calcularán cifras sin datos confirmados.</p>
@@ -48,10 +48,10 @@
     <h3>{{ chart.title }}</h3>
     <p class="sub">{{ chart.subtitle }}</p>
     <div class="bar-list">
-      {% for item in chart.items %}
+      {% for item in chart['items'] %}
       <div class="bar-row">
         <div class="bar-label">{% set logo_codes = ['BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMP','PLUME','PEPE','VIRTUAL','USDT'] %}{% if item.label in logo_codes %}<span class="coin-tag chart-symbol"><span class="coin-icon"><img loading="lazy" src="https://cryptologos.cc/logos/{{ {'BTC':'bitcoin-btc','ETH':'ethereum-eth','SOL':'solana-sol','LINK':'chainlink-link','HYPE':'hyperliquid-hype','HBAR':'hedera-hbar','SUI':'sui-sui','ONDO':'ondo-finance-ondo','PUMP':'pump-fun-pump','PLUME':'plume-plume','PEPE':'pepe-pepe','VIRTUAL':'virtual-protocol-virtual','USDT':'tether-usdt'}[item.label] }}-logo.png" alt="" onerror="this.style.display='none'"><span class="coin-fallback">{{ item.label[:2] }}</span></span><span class="coin-text">{{ item.label }}</span></span>{% else %}{{ item.label }}{% endif %}</div>
-        <div class="bar-track"><div class="bar-fill {{ item.tone or '' }}" style="width: {{ ((item.value|abs) / chart.max * 100) if chart.max else 0 }}%"></div></div>
+        <div class="bar-track"><div class="bar-fill {{ item.tone or '' }}" style="width: {{ ((item.value|abs) / chart['max'] * 100) if chart['max'] else 0 }}%"></div></div>
         <div class="bar-value">{{ item.display }}</div>
       </div>
       {% endfor %}
