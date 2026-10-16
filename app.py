@@ -21,11 +21,13 @@ app = Flask(__name__)
 SNAPSHOT = json.loads((BASE / 'data/snapshot_master_2026-10-15.json').read_text())
 CONFIG = json.loads((BASE / 'data/config.json').read_text())
 BSI_ANCHORS = json.loads((BASE / 'data/bsi_anchors.json').read_text())
+COST_BASIS = json.loads((BASE / 'data/cost_basis_verified.json').read_text()).get('prices', {})
 O2_LEVELS = json.loads((BASE / 'data/o2_reference_levels.json').read_text())
 TOKENS = [r['symbol'] for r in CONFIG['universe']]
 TARGETS = {r['symbol']: r['target'] for r in CONFIG['universe']}
 TIERS = {r['symbol']: r['tier'] for r in CONFIG['universe']}
 MODE_DEFS = [
+    {'slug':'portafolio','name':'Portafolio','subtitle':'Capital integral y rentabilidad histórica','description':'Seguimiento estratégico del capital base, capital vivo, pérdidas realizadas y objetivos por segmento.'},
     {'slug':'balancer','name':'Balancer','subtitle':'Rebalanceo y liquidez','description':'Propuestas de rebalanceo, control de piso de liquidez y protección de Core.'},
     {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Simulación de compras en dos etapas; referencias Fibonacci y tabla C1/C2 en Forecast.'},
     {'slug':'ventas','name':'Ventas','subtitle':'Objetivo USDT','description':'Propuestas solo SELL para acercarse a la meta de liquidez y reducir sobrepeso.'},
@@ -201,6 +203,21 @@ def forecast_sensitivity(rows, usdt):
                           'portfolio_change_pct':round((btc_value*s/100)/base*100,2) if base else 0} for s in shocks],
             'official_forecast':'NOT_CONNECTED','note':'NO es Forecast O2-O5 ni predicción. Falta motor y precios hipotéticos por onda.'}
 
+def portfolio_profitability(rows):
+    """Rank unrealized P&L by verified average acquisition cost. Missing != zero."""
+    results=[]
+    for row in rows:
+        basis=COST_BASIS.get(row['token'])
+        if not isinstance(basis,(int,float)) or isinstance(basis,bool) or basis <= 0 or row['units'] <= 0:
+            continue
+        pnl=row['units']*(row['price']-basis)
+        results.append({'token':row['token'],'cost_basis_usdt':basis,'pnl_usdt':round(pnl,2),
+                        'pnl_pct':round((row['price']/basis-1)*100,2)})
+    return {'status':'PARTIAL' if len(results)<len(rows) else 'OK',
+            'basis':'P&L no realizado vs costo promedio certificado',
+            'verified_count':len(results),'missing_count':len(rows)-len(results),
+            'top5':sorted(results,key=lambda r:r['pnl_pct'],reverse=True)[:5]}
+
 def core_dashboard(prices):
     rows=[]
     portfolio_crypto=0.0
@@ -237,6 +254,7 @@ def core_dashboard(prices):
         'liquidity_floor_usdt':total_value*0.40,
         'liquidity_headroom_usdt':liquidity-total_value*0.40,
         'custody_summary':custody_summary(prices),
+        'profitability': portfolio_profitability(rows),
         'bsi_historical':historical_bsi(prices),
         'forecast_sensitivity':forecast_sensitivity(rows,liquidity)
     }
@@ -754,6 +772,20 @@ def home():
 @app.route('/modes')
 def modes_page():
     return render_template('modes.html', modes=MODE_DEFS, master='5.3.5')
+
+@app.route('/mode/portafolio')
+def integral_portfolio_page():
+    # Strategic historical ledger, deliberately independent of live crypto valuation.
+    values = json.loads((BASE / 'data/integral_portfolio_reference.json').read_text(encoding='utf-8'))
+    base = values['historical_capital_usdt']
+    segments = values['segments']
+    alive = sum(x['actual_usdt'] for x in segments if x['key'] != 'lost')
+    lost = next(x['actual_usdt'] for x in segments if x['key'] == 'lost')
+    gain_to_recover = (base / alive - 1) * 100 if alive > 0 else None
+    return render_template('portfolio_integral.html', master='5.3.5', segments=segments,
+                           base=base, alive=alive, lost=lost, gain_to_recover=gain_to_recover,
+                           source_note=values['source_note'], total_recorded=sum(x['actual_usdt'] for x in segments),
+                           total_target=sum(x['target_usdt'] for x in segments))
 
 @app.route('/mode/<slug>')
 def mode_page(slug):

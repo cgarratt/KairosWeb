@@ -97,3 +97,24 @@ La página /modes y /api/modes solo muestran Balancer, Compras, Ventas, TradingB
 - Dashboard con gráfico vertical por token, logos, KPI superiores y liquidez reagrupada.
 - Balancer incluye barra de distribución USDT C1/C2/Balancer/Trading sin piso 40% como restricción.
 - BSI sigue histórico informativo; no inventa series temporales.
+
+
+## v4.1.6 — Dashboard compacto
+- Los KPIs Patrimonio total, Cripto valuado, Liquidez USDT y Reserva Trading forman una cuadrícula 2 × 2.
+- El pie de composición consolida T1, T2, T3 y USDT contra patrimonio total; no cuenta Reserva Trading dos veces.
+- Se retiran los gráficos de Distribución por Tiers y Liquidez por Venue. BSI y la tabla ejecutiva permanecen.
+- Se conserva el backend y los modos sin cambios de reglas.
+
+
+## v4.1.7 — Top 5 Rentabilidad
+- Panel junto a BSI, ranking por porcentaje P&L no realizado contra costo promedio verificado.
+- Configurar costos en data/cost_basis_verified.json, clave prices, por token (p.ej. {"BTC": 50000.0}). No insertar estimaciones.
+- La rentabilidad en USD se calcula sobre unidades actuales, NO P&L realizado histórico.
+- Sin datos suficientes se muestra estado incompleto, nunca resultados inventados.
+
+
+## v4.1.8 — Portafolio integral
+- Nuevo modo Portafolio en `/modes` y `/mode/portafolio`.
+- Referencia histórica separada de los saldos en vivo en `data/integral_portfolio_reference.json`.
+- KPIs capital base/vivo, Lost realizado y recuperación; gráfico objetivo vs actual, composición y tabla con desviaciones.
+- No altera datos MCP, snapshot operativo ni modos de trading.
