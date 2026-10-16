@@ -5,7 +5,7 @@
   <section class="panel span-12 hero">
     <div>
       <h2>Dashboard ejecutivo</h2>
-      <p>Portafolio Kairos con datos en vivo desde Binance MCP y páginas preliminares por modo.</p>
+      <p>Portafolio cripto · composición, liquidez y posiciones a precios Spot MCP.</p>
       <div class="tabs">
         <a href="#overview" class="tab-link active">Overview</a>
         <a href="/modes" class="tab-link">Modos Kairos</a>
@@ -31,7 +31,7 @@
 
   <section class="panel span-12">
     <h3>Distribución por token vs objetivos</h3>
-    <p class="sub">Barras comparativas: peso actual (azul), objetivo (gris) y desvío en puntos porcentuales.</p>
+    <p class="sub">Actual (azul) · Objetivo (gris) · Desvío en puntos porcentuales.</p>
     <div class="token-comparison" id="token-comparison">Calculando…</div>
   </section>
   <section class="panel span-6">
@@ -48,12 +48,12 @@
   <section class="panel span-12">
     <h3>Gestión de liquidez</h3>
     <p class="sub">USDT consolidado y distribución por exchange/venue.</p>
-    <div class="grid liquidity-grid" style="margin-top:10px">
-      <div class="span-7 liquidity-kpis">
+    <div class="liquidity-grid" style="margin-top:10px">
+      <div class="liquidity-kpis">
         <article class="kpi ok"><div class="label">{{ metric_icon("Liquidez USDT") }}Liquidez USDT</div><div class="value" id="usdt">—</div><div class="help" id="usdt-help">Piso estructural 40%</div></article>
         <article class="kpi warn"><div class="label">{{ metric_icon("Reserva Trading") }}Reserva Trading</div><div class="value" id="reserve">—</div><div class="help">Bolsa fija separada (Quantfury)</div></article>
       </div>
-      <div class="panel span-5 nested-panel">
+      <div class="panel nested-panel">
         <h3>Liquidez por Venue</h3>
         <p class="sub">USDT físico confirmado por venue</p>
         <div class="bar-list" id="venue-bars"><div class="muted">Calculando…</div></div>
@@ -90,6 +90,10 @@
 </div>
 
 <style>
+.shell{max-width:1500px}.panel{box-shadow:0 6px 23px rgba(21,48,80,.05)}.kpis-compact .kpi{min-height:178px;display:flex;flex-direction:column;justify-content:center}.kpis-compact .value{font-size:34px}
+.token-comparison{display:grid!important;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px!important;align-items:end;margin-top:23px!important}.vtoken{display:flex;flex-direction:column;align-items:center;gap:9px;min-width:0}.vbars{height:195px;width:100%;display:flex;gap:5px;justify-content:center;align-items:end;border-bottom:1px solid #dae4f0}.vcol{width:min(36%,34px);border-radius:5px 5px 0 0;position:relative}.vcol.actual{background:#2e7cda}.vcol.goal{background:#b9cadf}.vcol span{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-size:10px;font-weight:800;margin-bottom:4px;white-space:nowrap}.vname .coin-tag{flex-direction:column;gap:2px;font-size:11px}.vname .coin-icon{width:25px;height:25px}.vtoken>strong{font-size:11px}.vtoken .bad{color:#bd3851}.vtoken .warn{color:#ac6d22}.vtoken .good{color:#138c69}
+.liquidity-grid{display:grid;grid-template-columns:1.12fr .88fr;gap:16px}.liquidity-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.liquidity-kpis .kpi{min-height:175px}.nested-panel{box-shadow:none;padding:16px}.nested-panel .bar-row{grid-template-columns:110px 1fr auto}
+@media(max-width:1100px){.token-comparison{grid-template-columns:repeat(6,minmax(0,1fr))}.liquidity-grid{grid-template-columns:1fr}}@media(max-width:680px){.token-comparison{grid-template-columns:repeat(3,minmax(0,1fr))}.vbars{height:155px}.liquidity-kpis{grid-template-columns:1fr}.kpis-compact{grid-template-columns:1fr}}
 .kpis-compact{grid-template-columns:repeat(2,minmax(0,1fr));}.liquidity-grid{align-items:stretch}.liquidity-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.nested-panel{background:#fff;border:1px solid #dce7f6;border-radius:18px;padding:18px}@media(max-width:900px){.liquidity-kpis{grid-template-columns:1fr}.kpis-compact{grid-template-columns:1fr}}
 .token-comparison{display:flex;flex-direction:column;gap:12px;margin-top:16px}.token-compare-item{display:grid;grid-template-columns:135px 1fr 190px;gap:12px;align-items:center;font-size:13px}.token-compare-track{height:27px;border-radius:7px;background:#f0f4fa;position:relative;overflow:hidden}.token-compare-actual,.token-compare-target{position:absolute;left:0;height:10px;border-radius:6px}.token-compare-actual{top:2px;background:#2876cc}.token-compare-target{bottom:2px;background:#b5c6de}.tiers-vertical{display:flex;justify-content:space-around;gap:25px;align-items:end;height:215px;padding:12px}.tier-col{width:30%;height:100%;display:flex;flex-direction:column;align-items:center;gap:6px}.tier-col-bars{display:flex;align-items:end;justify-content:center;gap:12px;flex:1;width:100%;border-bottom:1px solid #cbd7e5}.tier-col-bar{width:35px;border-radius:5px 5px 0 0}.tier-col-bar.actual{background:#2678ce}.tier-col-bar.goal{background:#c0cedf}.tier-col small{white-space:nowrap;color:#617089}@media(max-width:650px){.token-compare-item{grid-template-columns:85px 1fr;}.token-compare-item>span{grid-column:2}.tier-col-bar{width:24px}}
 </style>
@@ -123,20 +127,7 @@ function renderTiers(rows){
  });
 }
 
-function renderTokenComparison(rows){
- const root=$('token-comparison');root.replaceChildren();
- rows.forEach(r=>{
-  const item=document.createElement('div');item.className='token-compare-item';
-  const left=document.createElement('div');left.innerHTML=tokenHtml(r.token);
-  const middle=document.createElement('div');middle.className='token-compare-track';
-  const a=document.createElement('div');a.className='token-compare-actual';a.style.width=Math.min(100,r.weight*100/35*100)+'%';
-  const b=document.createElement('div');b.className='token-compare-target';b.style.width=Math.min(100,r.target*100/35*100)+'%';
-  middle.append(a,b);
-  const label=document.createElement('span');label.textContent=`${pct(r.weight*100)} / ${pct(r.target*100)} · ${r.drift_pp>0?'+':''}${num(r.drift_pp,1)} pp`;
-  label.style.color=r.drift_pp>1?'#bd334c':r.drift_pp< -1?'#ae7819':'#118660';
-  item.append(left,middle,label);root.append(item);
- });
-}
+function renderTokenComparison(rows){const root=$('token-comparison');root.replaceChildren();const scale=Math.max(25,...rows.map(r=>Math.max(r.weight,r.target)*100))*1.12;rows.forEach(r=>{const item=document.createElement('div');item.className='vtoken';const bars=document.createElement('div');bars.className='vbars';for(const [v,cls] of [[r.weight,'actual'],[r.target,'goal']]){const col=document.createElement('div');col.className='vcol '+cls;col.style.height=Math.max(2,v*100/scale*100)+'%';col.title=pct(v*100);const lab=document.createElement('span');lab.textContent=pct(v*100);col.append(lab);bars.append(col);}const name=document.createElement('div');name.className='vname';name.innerHTML=tokenHtml(r.token);const d=document.createElement('strong');d.className=r.drift_pp>1?'bad':r.drift_pp< -1?'warn':'good';d.textContent=(r.drift_pp>0?'+':'')+num(r.drift_pp,1)+' pp';item.append(bars,name,d);root.append(item);});}
 function renderTierVertical(rows){
  const root=$('tiers-vertical');root.replaceChildren();
  for(const tier of ['T1','T2','T3']){

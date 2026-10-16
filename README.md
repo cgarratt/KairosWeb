@@ -92,3 +92,8 @@ Se cargan niveles O2 de la tabla Kairos fechada 16/10/2026 en `data/o2_reference
 
 ## v4.1.4 — Modos activos
 La página /modes y /api/modes solo muestran Balancer, Compras, Ventas, TradingBot y Forecast. Se ocultaron Alertas, Benchmark, Rotation y MonteCarlo del menú y se inhabilitó su acceso directo; su código no se borra para una fase futura.
+
+## v4.1.5
+- Dashboard con gráfico vertical por token, logos, KPI superiores y liquidez reagrupada.
+- Balancer incluye barra de distribución USDT C1/C2/Balancer/Trading sin piso 40% como restricción.
+- BSI sigue histórico informativo; no inventa series temporales.
