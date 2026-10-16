@@ -1,11 +1,143 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kairos | Portfolio Intelligence</title><style>
-:root{font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Arial,sans-serif;color:#152741;background:#f3f6fb}*{box-sizing:border-box}body{margin:0}button{cursor:pointer;font:inherit}header{background:#101f3b;color:white;padding:20px 34px;display:flex;align-items:center;justify-content:space-between;gap:20px}.brand{font-size:24px;font-weight:800;letter-spacing:.05em}.brand span{color:#4dd3c5}.tag{font-size:11px;letter-spacing:.12em;color:#b6c5dd;text-transform:uppercase}.header-right{font-size:12px;color:#c2d0e6;text-align:right}.layout{display:grid;grid-template-columns:228px minmax(0,1fr);min-height:calc(100vh - 76px)}nav{background:white;padding:23px 12px;border-right:1px solid #e3e9f2}nav h4{margin:4px 12px 15px;color:#79869c;text-transform:uppercase;font-size:10px;letter-spacing:.15em}.nav-btn{display:flex;align-items:center;gap:12px;width:100%;border:0;background:transparent;padding:12px;border-radius:9px;text-align:left;color:#394b68;font-size:13px;font-weight:600}.nav-btn:hover,.nav-btn.active{color:#0d5a9b;background:#eaf3ff}.symbol{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#edf2fa;font-size:13px}main{padding:30px;max-width:1600px;width:100%;margin:0 auto}.top{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:22px}h1{font-size:25px;margin:0 0 5px}p{margin:0;color:#708099;font-size:13px}.refresh{border:0;border-radius:9px;background:#1366b8;color:#fff;padding:10px 16px;font-size:13px;font-weight:700}.refresh:disabled{opacity:.5}.badge{display:inline-flex;align-items:center;border-radius:50px;padding:6px 10px;font-size:11px;font-weight:700;background:#fef2dc;color:#966612}.badge.ok{background:#def8ed;color:#087b51}.badge.error{background:#ffe8e9;color:#ba3a47}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}.card,.panel{background:#fff;border:1px solid #e5eaf2;border-radius:14px;box-shadow:0 2px 8px #1c3a6410}.card{padding:20px}.card small{color:#7d89a0;text-transform:uppercase;font-size:10px;letter-spacing:.08em;font-weight:800}.card strong{display:block;font-size:26px;letter-spacing:-.04em;margin:11px 0 5px}.card .hint{font-size:12px;color:#8492a5}.grid2{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-top:16px}.panel{padding:22px;min-width:0}.panel h2{margin:0 0 4px;font-size:16px}.sub{font-size:12px;color:#8996aa;margin-bottom:18px}.bar{display:flex;height:14px;border-radius:100px;overflow:hidden;background:#e7ebf1;margin:25px 0 13px}.bar .crypto{background:#2479cf;width:60%}.bar .cash{background:#23b899;width:40%}.legend{display:flex;justify-content:space-between;font-size:12px}.dot{display:inline-block;width:8px;height:8px;border-radius:99px;margin-right:7px}.section-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px}table{width:100%;border-collapse:collapse;font-size:12px}th{font-size:10px;letter-spacing:.06em;text-transform:uppercase;text-align:right;color:#8a96a6;padding:12px 8px;border-bottom:1px solid #e7edf4}td{text-align:right;padding:13px 8px;border-bottom:1px solid #edf0f5;white-space:nowrap;font-variant-numeric:tabular-nums}th:first-child,td:first-child{text-align:left}tr:last-child td{border-bottom:0}.token{font-size:13px;font-weight:800;color:#182e4c}.tier{color:#90a0b4;font-size:10px}.pill{font-size:10px;font-weight:750;border-radius:5px;padding:4px 7px}.pill.INFRA{background:#e5f4ff;color:#1c72b8}.pill.SOBRE{background:#ffebeb;color:#c33c50}.pill.OK{background:#e5f7ee;color:#198a60}.muted{color:#8190a5}.warn{color:#b45d1e}.footer{margin-top:16px;font-size:11px;color:#8491a5}.mode-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.mode{border:1px solid #e8edf5;border-radius:11px;padding:15px}.mode h3{font-size:13px;margin:0 0 6px}.mode p{line-height:1.5;font-size:11px}.mode button{margin-top:12px;background:#f2f5fa;color:#78889e;border:0;border-radius:6px;padding:6px 10px;font-size:10px;cursor:not-allowed}.error-block{padding:13px 15px;margin-bottom:17px;background:#fff0f0;border-radius:8px;border:1px solid #ffd1d1;color:#ac3040;font-size:12px}.hidden{display:none!important}@media(max-width:1050px){.metrics{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}@media(max-width:650px){header{padding:15px}nav{display:none}.layout{display:block}main{padding:15px}.metrics{gap:9px}.card{padding:13px}.card strong{font-size:21px}.panel{padding:14px}.mode-list{grid-template-columns:1fr}table{font-size:11px}td,th{padding:10px 4px}.desktop{display:none}.header-right{font-size:10px}}
-</style></head><body><header><div><div class="brand">KAIROS <span>◈</span></div><div class="tag">Portfolio intelligence · Master v{{ master }}</div></div><div class="header-right">MCP ONLY · READ ONLY<br><span id="now">Sin conexión en vivo</span></div></header><div class="layout"><nav><h4>Overview</h4><button class="nav-btn active" onclick="switchTab('dashboard',this)"><span class="symbol">▦</span> Dashboard</button><h4 style="margin-top:25px">Modos Kairos</h4>{% for name,subtitle,desc in modes %}<button class="nav-btn" onclick="switchTab('modes',this,'{{ name }}')"><span class="symbol">↗</span>{{ name }}</button>{% endfor %}<h4 style="margin-top:25px">Conexiones</h4><button class="nav-btn" onclick="switchTab('sources',this)"><span class="symbol">⇄</span> MCP / Estado</button></nav><main><div class="top"><div><h1 id="heading">Dashboard ejecutivo</h1><p id="subtitle">Portafolio Kairos · 12 activos · lectura de mercado en tiempo real</p></div><div style="display:flex;gap:9px;align-items:center"><span id="status" class="badge">● Verificando</span><button id="refresh" class="refresh" onclick="refresh()">↻ Actualizar</button></div></div><div id="error" class="error-block hidden"></div><section id="dashboard"><div class="metrics"><div class="card"><small>Patrimonio total</small><strong id="total">—</strong><span class="hint">Cripto + USDT físico</span></div><div class="card"><small>Invertido en cripto</small><strong id="crypto">—</strong><span class="hint" id="crypto-pct">12 activos</span></div><div class="card"><small>Liquidez USDT</small><strong id="usdt">—</strong><span class="hint" id="usdt-pct">Incluye reserva TradingBot</span></div><div class="card"><small>USDT operativo</small><strong id="operating">—</strong><span class="hint">No incluye reserva Quantfury</span></div></div><div class="grid2"><article class="panel"><div class="section-title"><div><h2>Composición del portafolio</h2><p class="sub">Pesos actuales frente a targets · base solo cripto</p></div></div><div style="overflow-x:auto"><table><thead><tr><th>Token</th><th>Precio</th><th class="desktop">Unidades</th><th>Valor</th><th>Actual</th><th>Meta</th><th>Estado</th></tr></thead><tbody id="positions"><tr><td colspan="7" class="muted">Esperando datos válidos del MCP…</td></tr></tbody></table></div></article><div><article class="panel"><h2>Liquidez y exposición</h2><p class="sub">Porcentaje del patrimonio, incluidas reservas</p><div class="bar"><span class="crypto" id="crypto-bar"></span><span class="cash" id="cash-bar"></span></div><div class="legend"><span><i class="dot" style="background:#2479cf"></i>Cripto <b id="leg-crypto">—</b></span><span><i class="dot" style="background:#23b899"></i>USDT <b id="leg-cash">—</b></span></div><hr style="border:0;border-top:1px solid #eef1f6;margin:25px 0"><div class="legend"><span class="muted">Reserva TradingBot</span><b id="reserve">—</b></div><div class="legend" style="margin-top:17px"><span class="muted">Piso estructural USDT</span><b>40% (referencia)</b></div><p class="footer">El piso operativo exige reglas de disponibilidad, compromisos y reservas antes de proponer órdenes.</p></article><article class="panel" style="margin-top:16px"><h2>Integridad de datos</h2><p class="sub">Separación de mercado y custodia</p><p id="snapshot" style="line-height:1.7">Snapshot base: 15/10/2026</p><p style="margin-top:9px;line-height:1.7">Precios Spot: Binance MCP. Macro HYPE: Hyperliquid MCP, bajo demanda. Los balances no se extraen de cuentas personales.</p></article></div></div></section><section id="modes" class="hidden"><article class="panel"><h2>Modos de Kairos</h2><p class="sub">Menú preparado para conectar los motores Kairos en la próxima fase</p><div class="mode-list">{% for name,subtitle,desc in modes %}<div class="mode" id="mode-{{ name }}"><h3>{{ name }} <span class="tier">· {{ subtitle }}</span></h3><p>{{ desc }}</p><button disabled>Motor pendiente de integración</button></div>{% endfor %}</div></article></section><section id="sources" class="hidden"><article class="panel"><h2>Estado de conexiones MCP</h2><p class="sub">Credenciales y URLs permanecen en el servidor Render, nunca en el navegador</p><p id="mcp-state">Consultando configuración…</p><button class="refresh" style="margin-top:20px" onclick="checkHype()">Validar histórico HYPE</button><p id="hype-result" style="margin-top:15px"></p></article></section><p class="footer" id="foot">Kairos Web 1.0 · Solo lectura · Propuestas no habilitadas · Nunca transmite órdenes · Cifras sin precios activos = no disponibles</p></main></div><script>
-const $=id=>document.getElementById(id), money=(v,d=0)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:d,minimumFractionDigits:d}).format(v), num=(v,d=2)=>new Intl.NumberFormat('en-US',{maximumFractionDigits:d}).format(v), pct=v=>num(v*100,1)+'%';
-let currentTab='dashboard';function switchTab(tab,btn,selected){currentTab=tab;['dashboard','modes','sources'].forEach(x=>$(x).classList.toggle('hidden',x!==tab));document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));if(btn)btn.classList.add('active');$('heading').textContent=tab==='dashboard'?'Dashboard ejecutivo':tab==='modes'?'Modos Kairos':'Conexiones MCP';$('subtitle').textContent=tab==='dashboard'?'Portafolio Kairos · 12 activos · lectura de mercado en tiempo real':tab==='modes'?'Selección de motores · solo lectura':'Diagnóstico y estado de proveedores';if(tab==='sources')loadSources();if(selected){let node=$('mode-'+selected);if(node)node.scrollIntoView({behavior:'smooth',block:'center'});}}
-function fail(reason){$('status').className='badge error';$('status').textContent='● DATA ERROR';$('error').classList.remove('hidden');$('error').textContent='Sin cotizaciones verificadas: '+reason+' No se muestran valoraciones anteriores como si fueran actuales.';['total','crypto','usdt','operating','crypto-pct','usdt-pct','leg-crypto','leg-cash','reserve'].forEach(k=>$(k).textContent='—');$('positions').innerHTML='<tr><td colspan="7" class="muted">Sin datos de mercado válidos. No se calculan desviaciones.</td></tr>';$('now').textContent='Datos no disponibles';}
-async function refresh(){let b=$('refresh');b.disabled=true;b.textContent='Consultando…';try{let r=await fetch('/api/portfolio',{cache:'no-store'}),d=await r.json();if(!r.ok||d.status!=='OK')throw Error(d.reason||'MCP no disponible');$('status').className='badge ok';$('status').textContent='● LIVE MCP';$('error').classList.add('hidden');$('total').textContent=money(d.total_value);$('crypto').textContent=money(d.crypto_value);$('usdt').textContent=money(d.usdt_total);$('operating').textContent=money(d.usdt_operating);$('crypto-pct').textContent=pct(d.crypto_value/d.total_value)+' del patrimonio';$('usdt-pct').textContent=pct(d.usdt_pct)+' del patrimonio';$('reserve').textContent=money(d.trading_reserve);$('leg-crypto').textContent=pct(d.crypto_value/d.total_value);$('leg-cash').textContent=pct(d.usdt_pct);$('crypto-bar').style.width=pct(d.crypto_value/d.total_value);$('cash-bar').style.width=pct(d.usdt_pct);$('snapshot').textContent='Snapshot confirmado: '+d.snapshot_date+' · Unidades estáticas; precios consultados al MCP.';$('now').textContent='Binance observado: '+new Date(d.observed_at).toLocaleString('es-PE',{timeZone:'America/Lima',dateStyle:'short',timeStyle:'short'});$('positions').innerHTML=d.rows.sort((a,b)=>b.value-a.value).map(x=>`<tr><td><span class="token">${x.token}</span><div class="tier">${x.tier}</div></td><td>${money(x.price,x.price<.1?6:2)}</td><td class="desktop">${num(x.units,x.units>100000?0:5)}</td><td><b>${money(x.value)}</b></td><td>${pct(x.weight)}</td><td class="muted">${pct(x.target)}</td><td><span class="pill ${x.status}">${x.status}</span></td></tr>`).join('');}catch(e){fail(e.message)}finally{b.disabled=false;b.textContent='↻ Actualizar'}}
-async function loadSources(){try{let r=await fetch('/api/mcp-status');let d=await r.json();$('mcp-state').textContent='Binance MCP: '+(d.binance_configured?'URL configurada':'NO configurada')+' · Hyperliquid MCP: '+(d.hyperliquid_configured?'URL configurada':'NO configurada')+'. Configuración no implica conectividad certificada.'}catch(e){$('mcp-state').textContent='No se pudo consultar configuración.'}}
-async function checkHype(){$('hype-result').textContent='Consultando…';try{let r=await fetch('/api/hype-macro'),d=await r.json();if(!r.ok||d.status!=='OK')throw Error(d.reason||'Sin respuesta');$('hype-result').textContent='Hyperliquid: respuesta OK para OHLCV macro HYPE/USDC. Sin cambios de pivotes aprobados.'}catch(e){$('hype-result').textContent='DATA ERROR: '+e.message}}
-refresh();
-</script></body></html>
+{% extends 'base.html' %}
+{% block title %}Kairos Web · Dashboard{% endblock %}
+{% block content %}
+<div class="grid">
+  <section class="panel span-12 hero">
+    <div>
+      <h2>Dashboard ejecutivo</h2>
+      <p>Portafolio Kairos con datos en vivo desde Binance MCP y páginas preliminares por modo.</p>
+      <div class="tabs">
+        <a href="#overview" class="tab-link active">Overview</a>
+        <a href="#modes" class="tab-link">Modos Kairos</a>
+        <a href="#sources" class="tab-link">Conexiones MCP</a>
+      </div>
+    </div>
+    <div class="badge info" id="live-badge">● Consultando mercado…</div>
+  </section>
+
+  <section class="span-8">
+    <div class="kpis">
+      <article class="kpi primary"><div class="label">Patrimonio total</div><div class="value" id="total">—</div><div class="help">Cripto + USDT físico consolidado</div></article>
+      <article class="kpi primary"><div class="label">Cripto valuado</div><div class="value" id="crypto">—</div><div class="help" id="crypto-help">Esperando precios…</div></article>
+      <article class="kpi ok"><div class="label">Liquidez USDT</div><div class="value" id="usdt">—</div><div class="help" id="usdt-help">Piso estructural 40%</div></article>
+      <article class="kpi warn"><div class="label">Reserva Trading</div><div class="value" id="reserve">—</div><div class="help">Bolsa fija separada (Quantfury)</div></article>
+    </div>
+  </section>
+
+  <section class="panel span-4">
+    <h3>Composición general</h3>
+    <p class="sub">Exposición cripto vs. liquidez</p>
+    <div class="bar-list" id="comp-bars"></div>
+    <p class="footer-note" id="snapshot-note">Snapshot base: esperando datos…</p>
+  </section>
+
+  <section class="panel span-6">
+    <h3>Distribución por token</h3>
+    <p class="sub">Peso relativo dentro de la manga cripto</p>
+    <div class="bar-list" id="token-bars"><div class="muted">Calculando…</div></div>
+  </section>
+
+  <section class="panel span-6">
+    <h3>Desviación vs. objetivos</h3>
+    <p class="sub">Brechas en puntos porcentuales respecto al target Kairos</p>
+    <div class="bar-list" id="drift-bars"><div class="muted">Calculando…</div></div>
+  </section>
+
+  <section class="panel span-6" id="modes">
+    <div class="hero" style="align-items:flex-start">
+      <div>
+        <h3>Modos Kairos</h3>
+        <p class="sub">Cada modo tiene ahora una página preliminar más visual.</p>
+      </div>
+      <a class="btn primary" href="/mode/resumen">Abrir Resumen</a>
+    </div>
+    <div class="mode-grid" style="margin-top:14px">
+      {% for mode in modes %}
+      <a href="/mode/{{ mode.slug }}" class="mode-card">
+        <div class="mode-head">
+          <div>
+            <div class="mode-name">{{ mode.name }}</div>
+            <div class="mode-sub">{{ mode.subtitle }}</div>
+          </div>
+          <span class="tiny-badge pre">PRELIMINAR</span>
+        </div>
+        <div class="sub">{{ mode.description }}</div>
+        <div style="margin-top:auto"><span class="tiny-badge live">Abrir vista</span></div>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel span-6">
+    <h3>BSI histórico</h3>
+    <p class="sub">Informativo frente a BTC · no señal operativa</p>
+    <div class="bar-list" id="bsi-bars"><div class="muted">Calculando…</div></div>
+  </section>
+
+  <section class="panel span-6">
+    <h3>Forecast de sensibilidad</h3>
+    <p class="sub">Variación del patrimonio si solo cambia BTC</p>
+    <div class="bar-list" id="forecast-bars"><div class="muted">Calculando…</div></div>
+  </section>
+
+  <section class="panel span-6">
+    <h3>Liquidez por venue</h3>
+    <p class="sub">USDT físico confirmado por venue</p>
+    <div class="bar-list" id="venue-bars"><div class="muted">Calculando…</div></div>
+  </section>
+
+  <section class="panel span-6">
+    <h3>Top posiciones</h3>
+    <p class="sub">Mayor concentración dentro del sleeve cripto</p>
+    <div class="bar-list" id="top-bars"><div class="muted">Calculando…</div></div>
+  </section>
+
+  <section class="panel span-12">
+    <div class="hero" style="align-items:flex-start">
+      <div>
+        <h3>Tabla ejecutiva del portafolio</h3>
+        <p class="sub">Snapshot de unidades + precios Spot en línea</p>
+      </div>
+      <a class="btn" href="javascript:void(0)" onclick="refreshData()">Actualizar</a>
+    </div>
+    <div style="overflow:auto;margin-top:12px">
+      <table>
+        <thead><tr><th>Token</th><th>Precio</th><th>Valor</th><th>Peso</th><th>Target</th><th>Estado</th></tr></thead>
+        <tbody id="positions"><tr><td colspan="6" class="muted">Consultando…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel span-12" id="sources">
+    <h3>Conexiones MCP</h3>
+    <p class="sub">Diagnóstico de configuración y fuentes.</p>
+    <div class="grid" style="gap:14px;margin-top:10px">
+      <div class="panel span-4"><h3>Binance MCP</h3><p class="sub" id="src-binance">Verificando…</p></div>
+      <div class="panel span-4"><h3>Hyperliquid MCP</h3><p class="sub" id="src-hl">Verificando…</p></div>
+      <div class="panel span-4"><h3>Nota</h3><p class="sub">HYPE macro sigue consultándose en Hyperliquid; el dashboard principal usa Spot Binance para la valoración actual.</p></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const money=(v,d=0)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:d,minimumFractionDigits:d}).format(v);
+const num=(v,d=1)=>new Intl.NumberFormat('en-US',{maximumFractionDigits:d,minimumFractionDigits:d}).format(v);
+const pct=v=>num(v,1)+'%';
+function toneFromStatus(s){return s==='SOBRE'?'danger':s==='INFRA'?'warn':'ok';}
+function setBars(id, items, maxValue){const wrap=$(id);wrap.innerHTML='';if(!items.length){wrap.innerHTML='<div class="muted">Sin datos</div>';return;}const max=maxValue||Math.max(...items.map(x=>Math.abs(x.value)||0),1);items.forEach(it=>{const row=document.createElement('div');row.className='bar-row';row.innerHTML=`<div class="bar-label">${it.label}</div><div class="bar-track"><div class="bar-fill ${it.tone||''}" style="width:${Math.max(3,Math.abs(it.value)/max*100)}%"></div></div><div class="bar-value">${it.display}</div>`;wrap.appendChild(row);});}
+async function loadSources(){try{const r=await fetch('/api/mcp-status',{cache:'no-store'});const d=await r.json();$('src-binance').textContent=d.binance_configured?'URL configurada y lista para consultas.':'URL NO configurada.';$('src-hl').textContent=d.hyperliquid_configured?'URL configurada para histórico macro HYPE.':'URL NO configurada.';}catch(e){$('src-binance').textContent='No se pudo verificar';$('src-hl').textContent='No se pudo verificar';}}
+async function refreshData(){try{const r=await fetch('/api/portfolio',{cache:'no-store'});const d=await r.json();if(!r.ok||d.status!=='OK') throw new Error(d.reason||'Sin respuesta válida');$('live-badge').className='badge ok';$('live-badge').textContent='● LIVE MCP';$('total').textContent=money(d.total_value);$('crypto').textContent=money(d.crypto_value);$('crypto-help').textContent=`${pct(d.crypto_pct*100)} del patrimonio`; $('usdt').textContent=money(d.usdt_total);$('usdt-help').textContent=`${pct(d.usdt_pct*100)} del patrimonio · piso 40%`; $('reserve').textContent=money(d.trading_reserve);$('snapshot-note').textContent=`Snapshot ${d.snapshot_date} · Binance observado: ${new Date(d.observed_at).toLocaleString('es-PE',{timeZone:'America/Lima'})}`;
+setBars('comp-bars', [{label:'Cripto',value:d.crypto_pct*100,display:pct(d.crypto_pct*100),tone:'primary'},{label:'USDT',value:d.usdt_pct*100,display:pct(d.usdt_pct*100),tone:'ok'}],100);
+const rows=[...d.rows].sort((a,b)=>b.value-a.value);
+setBars('token-bars', rows.slice(0,8).map(r=>({label:r.token,value:r.weight*100,display:pct(r.weight*100),tone:toneFromStatus(r.status)})), Math.max(...rows.slice(0,8).map(r=>r.weight*100),1));
+setBars('drift-bars', rows.sort((a,b)=>Math.abs(b.drift_pp)-Math.abs(a.drift_pp)).slice(0,8).map(r=>({label:r.token,value:Math.abs(r.drift_pp),display:(r.drift_pp>0?'+':'')+num(r.drift_pp,1)+' pp',tone:toneFromStatus(r.status)})));
+setBars('venue-bars', Object.entries(d.liquidity_venues).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({label:k,value:v,display:money(v),tone:'ok'})));
+const bsi=(d.bsi_historical?.rows||[]).filter(x=>x.bsi!==null).slice(0,6);setBars('bsi-bars', bsi.map(x=>({label:x.token,value:Math.abs(x.bsi),display:(x.bsi>0?'+':'')+num(x.bsi,1)+'%',tone:x.bsi>20?'warn':x.bsi>=0?'ok':'danger'})));
+const fc=d.forecast_sensitivity?.scenarios||[];setBars('forecast-bars', fc.map(x=>({label:(x.btc_change_pct>0?'+':'')+x.btc_change_pct+'% BTC', value:Math.abs(x.portfolio_change_pct), display:(x.portfolio_change_pct>0?'+':'')+num(x.portfolio_change_pct,2)+'%', tone:x.btc_change_pct<0?'danger':x.btc_change_pct>0?'ok':'primary'})), Math.max(...fc.map(x=>Math.abs(x.portfolio_change_pct)),1));
+setBars('top-bars', rows.slice(0,5).map(r=>({label:r.token,value:r.weight*100,display:money(r.value),tone:'primary'})), Math.max(...rows.slice(0,5).map(r=>r.weight*100),1));
+$('positions').innerHTML=rows.map(r=>`<tr><td><strong>${r.token}</strong><div class="muted">${r.tier}</div></td><td>${r.price>=1?money(r.price,2):money(r.price,6)}</td><td>${money(r.value)}</td><td>${pct(r.weight*100)}</td><td>${pct(r.target*100)}</td><td><span class="pill ${r.status}">${r.status}</span></td></tr>`).join('');
+}catch(e){$('live-badge').className='badge danger';$('live-badge').textContent='● DATA ERROR';$('positions').innerHTML=`<tr><td colspan="6">Sin cotizaciones válidas: ${e.message}</td></tr>`;['comp-bars','token-bars','drift-bars','venue-bars','bsi-bars','forecast-bars','top-bars'].forEach(id=>$(id).innerHTML='<div class="muted">Sin datos válidos</div>');}}
+loadSources();refreshData();
+</script>
+{% endblock %}

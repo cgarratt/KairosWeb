@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Kairos Web{% endblock %}</title>
+  <style>
+    :root{--bg:#f4f7fb;--panel:#ffffff;--line:#dbe3ef;--text:#0f1b2d;--muted:#617089;--blue:#214f9a;--blue2:#377fd3;--green:#1fa67a;--red:#c4465a;--amber:#d58d18;--soft:#eef4fb;--shadow:0 10px 24px rgba(14,28,61,.08)}
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:linear-gradient(180deg,#f8fbff 0%,var(--bg) 100%);color:var(--text)}a{text-decoration:none;color:inherit}
+    .shell{max-width:1400px;margin:0 auto;padding:24px}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}.brand{display:flex;gap:14px;align-items:center}.logo{width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));display:grid;place-items:center;color:#fff;font-weight:800;box-shadow:var(--shadow)}.brand h1{font-size:24px;margin:0}.brand p{margin:4px 0 0;color:var(--muted)}
+    .top-actions{display:flex;gap:10px;flex-wrap:wrap}.chip,.btn{border:1px solid var(--line);background:#fff;border-radius:999px;padding:10px 14px;font-weight:600;color:var(--text)}.btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:18px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:20px}.span-12{grid-column:span 12}.span-8{grid-column:span 8}.span-6{grid-column:span 6}.span-4{grid-column:span 4}.span-3{grid-column:span 3}
+    .panel h2,.panel h3{margin:0 0 8px}.sub{color:var(--muted);font-size:14px;line-height:1.45}.muted{color:var(--muted)}
+    .hero{display:flex;justify-content:space-between;gap:20px;align-items:flex-end;flex-wrap:wrap}.hero h2{font-size:32px;margin:0}.hero p{margin:8px 0 0;color:var(--muted)}
+    .badge{display:inline-flex;gap:8px;align-items:center;border-radius:999px;padding:9px 13px;font-size:13px;font-weight:800}.badge.ok{background:#e9fbf5;color:#0f7c59}.badge.warn{background:#fff6e5;color:#9d6300}.badge.danger{background:#fff0f2;color:#b23651}.badge.info{background:#edf4ff;color:#2759a2}
+    .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}.kpi{background:linear-gradient(180deg,#fff 0%,#f8fbff 100%);border:1px solid var(--line);border-radius:18px;padding:18px}.kpi .label{font-size:13px;color:var(--muted);margin-bottom:8px}.kpi .value{font-size:28px;font-weight:800}.kpi .help{font-size:13px;color:var(--muted);margin-top:8px;line-height:1.4}.kpi.primary .value{color:var(--blue)}.kpi.ok .value{color:var(--green)}.kpi.warn .value{color:var(--amber)}.kpi.danger .value{color:var(--red)}
+    .mode-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}.mode-card{border:1px solid var(--line);background:linear-gradient(180deg,#fff 0%,#f7fbff 100%);border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:10px}.mode-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.mode-name{font-size:20px;font-weight:800}.mode-sub{font-size:13px;color:var(--muted)}
+    .tiny-badge{font-size:11px;padding:6px 9px;border-radius:999px;background:#eef3fb;color:#49617f;font-weight:800}.tiny-badge.live{background:#e9fbf5;color:#147654}.tiny-badge.pre{background:#fff6e5;color:#946217}
+    .bar-list{display:flex;flex-direction:column;gap:12px}.bar-row{display:grid;grid-template-columns:120px 1fr auto;align-items:center;gap:12px}.bar-label{font-weight:700}.bar-track{position:relative;height:12px;border-radius:999px;background:#edf2f8;overflow:hidden}.bar-fill{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:linear-gradient(90deg,var(--blue),var(--blue2))}.bar-fill.ok{background:linear-gradient(90deg,#24a57a,#2ac18e)}.bar-fill.warn{background:linear-gradient(90deg,#d58d18,#ebb23f)}.bar-fill.danger{background:linear-gradient(90deg,#c4465a,#e06579)}.bar-value{font-weight:800;color:#334257;white-space:nowrap}
+    table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:12px 10px;border-bottom:1px solid #edf2f8;text-align:left;vertical-align:top}th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#66748c}.pill{display:inline-block;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800}.pill.SOBRE{background:#fff0f2;color:#b23651}.pill.INFRA{background:#fff8e8;color:#9f6600}.pill.OK{background:#edf8f4;color:#1a7e5b}
+    .callout{border-radius:18px;padding:16px 18px;border:1px solid var(--line);background:#f8fbff}.callout.info{background:#eef5ff;border-color:#d6e4fb}.callout.warn{background:#fff8e9;border-color:#f3ddb0}.callout.danger{background:#fff1f3;border-color:#f7cfd7}.callout strong{display:block;margin-bottom:6px}
+    .list{margin:0;padding-left:18px}.list li{margin:7px 0;color:#334257;line-height:1.5}
+    .footer-note{font-size:12px;color:var(--muted);margin-top:18px;line-height:1.5}.tabs{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}.tab-link{padding:10px 14px;border-radius:999px;background:#fff;border:1px solid var(--line);font-weight:700}.tab-link.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+    @media (max-width:1100px){.span-8,.span-6,.span-4,.span-3{grid-column:span 12}.kpis{grid-template-columns:repeat(2,1fr)}.mode-grid{grid-template-columns:1fr}}
+    @media (max-width:680px){.shell{padding:14px}.kpis{grid-template-columns:1fr}.bar-row{grid-template-columns:90px 1fr auto}.hero h2{font-size:26px}.topbar{align-items:flex-start;flex-direction:column}}
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <div class="shell">
+    <div class="topbar">
+      <div class="brand">
+        <div class="logo">K</div>
+        <div>
+          <h1>Kairos Web</h1>
+          <p>Master {{ master }} · Solo lectura · Datos Spot por MCP</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <a class="btn" href="/">Dashboard</a>
+        <a class="btn" href="/api/portfolio" target="_blank" rel="noreferrer">API Portfolio</a>
+        <a class="btn" href="/api/mcp-status" target="_blank" rel="noreferrer">MCP Status</a>
+      </div>
+    </div>
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

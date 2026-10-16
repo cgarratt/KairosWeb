@@ -1,0 +1,154 @@
+{
+  "version": "4.0.5",
+  "policy_revision": "2026-10-15.BSI-ANCHOR-OCT05-01",
+  "approved_user_reference_date": "2026-10-05",
+  "anchor_timestamp_utc": "2026-10-05T00:00:00Z",
+  "anchor_timestamp_lima": "2026-10-04T19:00:00-05:00",
+  "anchor_method": "OPEN_OF_WEEKLY_TRADINGVIEW_1S_CANDLE_BEGINNING_2026-10-05_UTC",
+  "source": "12 user-supplied original TradingView screenshots created 2026-10-05 08:29:29 to 08:31:45 Lima; take OPEN, not screenshot-current CLOSE",
+  "verification": "SCREENSHOT_O_VALUES_TRANSCRIBED_FROM_ORIGINAL_USER_EVIDENCE; cross-venue independent tick feed unavailable",
+  "caveats": [
+    "Same weekly bar boundary assumed UTC Monday 00:00; verify source-specific time zone before live triggering if provider differs.",
+    "Mixed USD and USDT quotes; minor basis difference possible.",
+    "Open price not the latest market price and does not establish order execution.",
+    "Historical performance since 2026-10-05 is INFORMATIVE, not a new actionable sell unless distinct post-policy baseline and incremental gains are verified."
+  ],
+  "btc_base_price": "85186.43",
+  "assets": {
+    "BTC": {
+      "price": "85186.43",
+      "quote": "USD",
+      "venue": "INDEX",
+      "instrument": "BTC/USD",
+      "source_type": "USER_TRADINGVIEW_SCREENSHOT_WEEKLY_O",
+      "source_capture_local": "08:29:29 America/Lima on 2026-10-05",
+      "evidence_sha256": "f4d26ee47dea70c0eba7f79dcfba9f91b207373281b21cfec5a1b7cbff0572c4",
+      "price_field": "O (weekly candle open)",
+      "legacy_evidence_path_retired": "evidence/BTCUSD_2026-10-05_08-29-29.png"
+    },
+    "ETH": {
+      "price": "2696.71",
+      "quote": "USD",
+      "venue": "INDEX",
+      "instrument": "ETH/USD",
+      "source_type": "USER_TRADINGVIEW_SCREENSHOT_WEEKLY_O",
+      "source_capture_local": "08:30:02 America/Lima on 2026-10-05",
+      "evidence_sha256": "addec3751a9def5bc2e4bdc3462a49db8546102a0928ec62e90540ff1dcad822",
+      "price_field": "O (weekly candle open)",
+      "legacy_evidence_path_retired": "evidence/ETHUSD_2026-10-05_08-30-02.png"
+    },
+    "SOL": {
+      "price": "121.59",
+      "quote": "USDT",
+      "venue": "Binance",
+      "instrument": "SOLUSDT",
+      "source_type": "USER_TRADINGVIEW_SCREENSHOT_WEEKLY_O",
+      "source_capture_local": "08:30:14 America/Lima on 2026-10-05",
+      "evidence_sha256": "0b248e0a10feb13d2bedd917ed4b9094995d359bf0a23e187351914acf3138be",
+      "price_field": "O (weekly candle open)",
+      "legacy_evidence_path_retired": "evidence/SOLUSDT_2026-10-05_08-30-14.png"
+    },
+    "LINK": {
+      "price": "14.277",
+      "quote": "USDT",
+      "venue": "Binance",
+      "instrument": "LINKUSDT",
+      "source_type": "USER_TRADINGVIEW_SCREENSHOT_WEEKLY_O",
+      "source_capture_local": "08:30:24 America/Lima on 2026-10-05",
+      "evidence_sha256": "05188262663d4f1849f35d8cba6cd0b8cca1bd6fa2cf55adf05ff8d0f5dc4748",
+      "price_field": "O (weekly candle open)",
+      "legacy_evidence_path_retired": "evidence/LINKUSDT_2026-10-05_08-30-24.png"
+    },
+    "HYPE": {
+      "price": "90.55202745",
+      "quote": "USD",
+      "venue": "Pyth",
+      "instrument": "HYPE/USD",
+      "source_type": "USER_TRADINGVIEW_SCREENSHOT_WEEKLY_O",
+      "source_capture_local": "08:30:39 America/Lima on 2026-10-05",
+      "evidence_sha256": "6288c6079f23af8fc8818cb6fd3ddec443e164b2a831fa497eb7d8968bb37a4c",
+      "price_field": "O (weekly candle open)",
+      "legacy_evidence_path_retired": "evidence/HYPEUSD_2026-10-05_08-30-39.png"
+    },
+    "HBAR": {
+      "price": "0.10400",
+      "quote": "USDT",
+      "venue": "Binance",
+      "instrument": "HBARUSDT",
+      "source_type": "USER_TRADINGVIEW_SCREENSHOT_WEEKLY_O",
+      "source_capture_local": "08:30:47 America/Lima on 2026-10-05",
+      "evidence_sha256": "9eba2f3fd6618803310724933abbd400b0ec15c90198511b057c0da2b361f31a",
+      "price_field": "O (weekly candle open)",
+      "legacy_evidence_path_retired": "evidence/HBARUSDT_2026-10-05_08-30-47.png"
+    },
+    "SUI": {
+      "price": "1.2084",
+      "quote": "USDT",
+      "venue": "KuCoin",
+      "instrument": "SUIUSDT",
+      "source_type": "USER_TRADINGVIEW_SCREENSHOT_WEEKLY_O",
+      "source_capture_local": "08:30:55 America/Lima on 2026-10-05",
+      "evidence_sha256": "d3a5e205ba69d812ae3217eed046be15b88fc39cc53a44bc510c85bf26abd6cb",
+      "price_field": "O (weekly candle open)",
+      "legacy_evidence_path_retired": "evidence/SUIUSDT_2026-10-05_08-30-55.png"
+    },
+    "ONDO": {
+      "price": "0.49847",
+      "quote": "USDT",
+      "venue": "KuCoin",
+      "instrument": "ONDOUSDT",
+      "source_type": "USER_TRADINGVIEW_SCREENSHOT_WEEKLY_O",
+      "source_capture_local": "08:31:03 America/Lima on 2026-10-05",
+      "evidence_sha256": "6dc1522432bd7784e5d5c2adc42d1bde3e4d2de5324fe2a7a666b12b7d682cc6",
+      "price_field": "O (weekly candle open)",
+      "legacy_evidence_path_retired": "evidence/ONDOUSDT_2026-10-05_08-31-03.png"
+    },
+    "PUMPFUN": {
+      "price": "0.006520",
+      "quote": "USDT",
+      "venue": "Bitget",
+      "instrument": "PUMPUSDT",
+      "source_type": "USER_TRADINGVIEW_SCREENSHOT_WEEKLY_O",
+      "source_capture_local": "08:31:12 America/Lima on 2026-10-05",
+      "evidence_sha256": "0fefa4af7414857864eafa437cc2e43a76d2b2d7304b7993da5147bd6d1a60c2",
+      "price_field": "O (weekly candle open)",
+      "legacy_evidence_path_retired": "evidence/PUMPUSDT_2026-10-05_08-31-12.png"
+    },
+    "PLUME": {
+      "price": "0.018868",
+      "quote": "USDT",
+      "venue": "Gate",
+      "instrument": "PLUMEUSDT",
+      "source_type": "USER_TRADINGVIEW_SCREENSHOT_WEEKLY_O",
+      "source_capture_local": "08:31:45 America/Lima on 2026-10-05",
+      "evidence_sha256": "bdc87c4d82a6e95e25efd824654a5e289a42fafa5a83d4b6842dcfd861505033",
+      "price_field": "O (weekly candle open)",
+      "legacy_evidence_path_retired": "evidence/PLUMEUSDT_2026-10-05_08-31-45.png"
+    },
+    "PEPE": {
+      "price": "0.000004398",
+      "quote": "USDT",
+      "venue": "KuCoin",
+      "instrument": "PEPEUSDT",
+      "source_type": "USER_TRADINGVIEW_SCREENSHOT_WEEKLY_O",
+      "source_capture_local": "08:31:34 America/Lima on 2026-10-05",
+      "evidence_sha256": "74e3f6a5882d8f90701ad21872a004b56d82414183ca56584e83af92ac2fe456",
+      "price_field": "O (weekly candle open)",
+      "legacy_evidence_path_retired": "evidence/PEPEUSDT_2026-10-05_08-31-34.png"
+    },
+    "VIRTUAL": {
+      "price": "0.8426",
+      "quote": "USDT",
+      "venue": "KuCoin",
+      "instrument": "VIRTUALUSDT",
+      "source_type": "USER_TRADINGVIEW_SCREENSHOT_WEEKLY_O",
+      "source_capture_local": "08:31:26 America/Lima on 2026-10-05",
+      "evidence_sha256": "74796d18e7dcf1bd966af73442f2f7228f64d798bf10c47bbf56a80705e6d706",
+      "price_field": "O (weekly candle open)",
+      "legacy_evidence_path_retired": "evidence/VIRTUALUSDT_2026-10-05_08-31-26.png"
+    }
+  },
+  "market_data_source_status_v5_3_5": "LEGACY_PRICE_REFERENCE_ARCHIVED_NOT_NEW_MCP_READING",
+  "price_image_evidence_removed_from_master": true,
+  "migration_candidate_file": "state/BSI_OCT05_MCP_ANCHOR_CANDIDATES_v5.3.5.json"
+}
