@@ -6,8 +6,8 @@ page_html='''<!doctype html><html lang="es" data-theme="dark"><body>
 <div id="settings-nav"><button data-tab="units">Unidades</button><button data-tab="pivots">Pivotes</button></div>
 <div id="settings-title"></div><div id="settings-desc"></div><div id="settings-snapshot"></div>
 <div id="settings-admin-state"></div><div id="settings-pivots-tools" hidden><button id="settings-preliminary">Actualizar MCP</button><span id="settings-preliminary-progress"></span></div>
-<div id="settings-data"></div><div id="settings-totals"></div>
-<input id="settings-evidence"><button id="settings-save">Guardar cambios</button><div id="settings-msg"></div>
+<section id="settings-mcp-panel" hidden></section><div id="settings-data"></div><div id="settings-totals"></div>
+<div class="settings-form"><input id="settings-evidence"></div><div><button id="settings-save">Guardar cambios</button></div><div id="settings-msg"></div>
 </body></html>'''
 mock_js='''
 window._calls=[];

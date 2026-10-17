@@ -93,13 +93,13 @@
       </div>
       <div class="right-tools">
         <div class="alerts-wrap">
-          <button type="button" class="tool-icon" id="bell-open" aria-label="Notificaciones históricas no leídas" aria-expanded="false" aria-controls="alerts-popover" title="Alertas Kairos">
+          <button type="button" class="tool-icon" id="bell-open" aria-label="Alertas Kairos accionables sin leer" aria-expanded="false" aria-controls="alerts-popover" title="Alertas Kairos">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></svg>
             <span id="bell-count" class="bell-count" hidden>0</span>
           </button>
           <div class="alerts-popover" id="alerts-popover" hidden>
             <div class="alerts-head"><strong>Alertas Kairos</strong><div class="settings-buttons"><button type="button" id="alerts-read-all" class="tiny-control" disabled>Marcar todas como leídas</button><button type="button" id="alerts-refresh" class="tiny-control">Actualizar</button></div></div>
-            <p class="alerts-caption">Histórico KairosGPT en Google Sheets. WATCH o PRECONFIRMADO no representan órdenes.</p>
+            <p class="alerts-caption">Solo acciones certificadas de KairosGPT; WATCH, PRECONFIRMADO y errores no urgentes quedan fuera.</p>
             <div id="alerts-list" class="alerts-list" aria-live="polite">Consultando…</div>
           </div>
         </div>
@@ -112,9 +112,9 @@
       </div>
     </div>
     <nav class="global-nav" aria-label="Navegación Kairos">
-      <a class="global-nav-link {{ 'active' if request.path == '/' else '' }}" href="/">Dashboard</a>
+      <a class="global-nav-link {{ 'active' if request.path == '/' else '' }}" href="/" title="Resumen de patrimonio, composición y liquidez con precios MCP">Dashboard</a>
       {% for mode in nav_modes %}
-      <a class="global-nav-link {{ 'active' if request.path == '/mode/' ~ mode.slug else '' }}" href="/mode/{{ mode.slug }}">{{ mode.name }}</a>
+      <a class="global-nav-link {{ 'active' if request.path == '/mode/' ~ mode.slug else '' }}" href="/mode/{{ mode.slug }}" title="{{ mode.description }}">{{ mode.name }}</a>
       {% endfor %}
     </nav>
     {% block content %}{% endblock %}
@@ -122,5 +122,6 @@
   <script defer src="{{ url_for('static', filename='table_sort.js') }}"></script>
   <script defer src="{{ url_for('static', filename='alert_bell.js') }}"></script>
   <script defer src="{{ url_for('static', filename='theme.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='tooltips.js') }}?v={{ master }}"></script>
 </body>
 </html>

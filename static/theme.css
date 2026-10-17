@@ -190,3 +190,29 @@
 :root[data-theme="dark"] .pivot-candidate-hint{color:#d3e3f9}
 :root[data-theme="dark"] .pivot-candidate-hint[data-status="DATA_ERROR"]{color:#ffb4b4}
 :root[data-theme="dark"] .settings-total-panel{background:#243d5c;color:#f7fbff}
+
+/* KairosWeb 1.3.0: interactive affordances, MCP center and wave labels */
+:root :is(button,a,[role="button"],.settings-tab,select,.clickable,[data-theme-toggle]){cursor:pointer}
+:root :is(button:disabled,[aria-disabled="true"]){cursor:not-allowed;opacity:.65}
+:root :is(button,a,[role="button"]):not(:disabled):hover{filter:brightness(1.10)}
+:root :is(button,a,select,[role="button"]):focus-visible{outline:3px solid #67b9ff;outline-offset:3px}
+.mcp-health-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px;margin:15px 0}
+.mcp-health-card{padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--soft);color:var(--text)}
+.mcp-health-card h4{font-size:18px;margin:0 0 9px}.mcp-health-card p{margin:8px 0;color:var(--muted)}
+.mcp-health-card .mcp-health-state{font-weight:800;color:var(--text)}
+.mcp-health-card .mcp-health-checked{font-size:13px;min-height:18px}
+:root[data-theme="dark"] .mcp-health-card{background:#1b304b;border-color:#4a6382}
+:root[data-theme="dark"] .mcp-health-card :is(p,.mcp-health-checked){color:#d5e3f7}
+:root[data-theme="dark"] .mcp-health-card .mcp-health-state{color:#eff6ff}
+:root[data-theme="dark"] .fc-chart .wave-price-label{fill:#f7fbff;stroke:#182a42;stroke-width:3;paint-order:stroke;stroke-linejoin:round}
+:root[data-theme="light"] .fc-chart .wave-price-label{fill:#183d70;stroke:#f3f8ff;stroke-width:3;paint-order:stroke}
+.fc-chart .wave-price-label{font-size:16px;font-weight:800}
+:root[data-theme="dark"] .fc-chart .wave-stage-label{fill:#d6e7fa}
+:root[data-theme="light"] .fc-chart .wave-stage-label{fill:#38516f}
+.fc-chart .wave-stage-label{font-size:14px;font-weight:700}
+:root[data-theme="dark"] .fc-chart line{stroke:#516988}
+:root[data-theme="dark"] .bar-value{color:#f6faff}
+@media(max-width:720px){.mcp-health-grid{grid-template-columns:1fr}.fc-chart .wave-price-label{font-size:15px}}
+.kairos-tap-tooltip{position:fixed;z-index:9999;max-width:260px;pointer-events:none;padding:9px 12px;background:#132c4c;color:#fff;border:1px solid #7ea4d1;border-radius:10px;box-shadow:0 6px 22px #0005;font-size:13px;line-height:1.4}
+.kairos-tap-tooltip[hidden]{display:none}
+#settings-mcp-panel[hidden],.settings-form[hidden],.settings-buttons[hidden]{display:none!important}

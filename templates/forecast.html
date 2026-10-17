@@ -158,7 +158,7 @@ function drawCurve(waves){
  function node(tag,attrs,text){const e=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,String(v)));if(text!=null)e.textContent=text;svg.appendChild(e);return e}
  for(let i=0;i<4;i++){let y=52+i*62;node('line',{x1:44,y1:y,x2:703,y2:y,stroke:'#e1eaf8','stroke-width':1})}
  node('polyline',{points:points.map(p=>p.join(',')).join(' '),fill:'none',stroke:'#2877c8','stroke-width':3,'stroke-linecap':'round','stroke-linejoin':'round'});
- points.forEach(([x,y],i)=>{node('circle',{cx:x,cy:y,r:6,fill:'#2877c8',stroke:'white','stroke-width':2});node('text',{x,y:286,'font-size':12,'text-anchor':'middle',fill:'#4a5e7e'},names[i]);node('text',{x,y:Math.max(18,y-13),'font-size':12,'text-anchor':'middle',fill:'#183e73','font-weight':700},price(prices[i]))});
+ points.forEach(([x,y],i)=>{const marker=node('circle',{cx:x,cy:y,r:7,fill:'#2877c8',stroke:'white','stroke-width':2,tabindex:0,'aria-label':`${choice.token} · ${names[i]} · ${price(prices[i])} · escenario hipotético no certificado`});const tip=document.createElementNS(ns,'title');tip.textContent=`${choice.token}: ${names[i]} = ${price(prices[i])}; referencia simulada, no pivote certificado`;marker.appendChild(tip);node('text',{x,y:286,class:'wave-stage-label','text-anchor':'middle'},names[i]);node('text',{x,y:Math.max(20,y-17),class:'wave-price-label','text-anchor':'middle'},price(prices[i]))});
  $('chart-info').textContent=`${choice.token} · Precios hipotéticos construidos con referencias O2 no certificadas. Distancia horizontal por etapa, no por fecha.`;
 }
 

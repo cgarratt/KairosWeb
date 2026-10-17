@@ -94,36 +94,122 @@ def _header_records(rows):
     return [{k:(r[i] if i<len(r) else None) for i,k in enumerate(keys) if k} for r in rows[1:] if r and r[0]]
 
 
-def alert_inbox(blocks, limit=150):
-    """ONLY 1H runs, unread event IDs. WATCH != order/confirmed alert."""
+# Notification visibility is stricter than the archival KairosGPT event ledger.
+# Never turn WATCH, PRECONFIRMADO or provisional BSI/TradingBot signals into orders.
+_ACTIONABLE_STATES = frozenset(('READY','ACCIONABLE','CERTIFICADA','VALIDADA','APROBADA','LISTA_PARA_REVISION'))
+_APPROVED_CERT = frozenset(('CERTIFICADA','CERTIFICADO','VALIDADA','VERIFICADA','APROBADA'))
+_FORBIDDEN_ACTION = ('NO ORDEN','SIN CAJA','NO ELEGIBLE','NO VERIFICADO','NO CERTIFICAD',
+                     'SEGUIMIENTO','ESPERAR DATOS','SIN PRESUPUESTO','PENDIENTE CERTIFIC')
+
+
+def alert_category(event, *, bsi_enabled=False):
+    """Fail-closed interpretation of explicitly certified actions only.
+
+    Return a category or None. The ledger has separate fields for action type,
+    state, certification, level and budget: all required constraints are checked.
+    Even a text saying BUY cannot promote a noncertified event.
+    """
+    state=str(event.get('estado_evento') or '').upper().strip()
+    kind=str(event.get('tipo_alerta') or '').upper().strip()
+    cert=str(event.get('certificacion') or '').upper().strip()
+    action=str(event.get('accion_sugerida') or '').upper().strip()
+    if state not in _ACTIONABLE_STATES or not action or any(t in action for t in _FORBIDDEN_ACTION):
+        return None
+    try:
+        level=float(event.get('nivel_usdt') or 0)
+        budget=float(event.get('usdt_preparar') or 0)
+        if not(math.isfinite(level) and math.isfinite(budget) and level>=0 and budget>=0):return None
+    except (ValueError,TypeError):return None
+    if kind.startswith('BSI_') or kind in ('BSI_SELL','VENTA_BSI'):
+        if not bsi_enabled or cert not in _APPROVED_CERT or level<=0 or not any(t in action for t in ('VENDER','VENTA','SELL')):
+            return None
+        return 'BSI SELL'
+    if kind.startswith('TRADINGBOT_'):
+        if cert not in ('CERTIFICADA_QF','VERIFICADA_QF','READY_QF') or level<=0 or not all(t in action for t in ('SL','TP')):
+            return None
+        return 'TRADINGBOT READY'
+    if cert not in _APPROVED_CERT:return None
+    if kind in ('PREPARAR_LIQUIDEZ','LIQUIDEZ_PREPARAR','RESERVAR_USDT'):
+        return 'PREPARAR LIQUIDEZ' if budget>0 and level>0 and any(t in action for t in ('PREPARAR','RESERVAR')) else None
+    if kind=='COMPRA' or kind.startswith('COMPRA_') or kind=='BUY_READY':
+        return 'COMPRA' if level>0 and budget>0 and any(t in action for t in ('COMPRA','COMPRAR','BUY','LIMIT')) else None
+    if kind=='VENTA' or kind.startswith('VENTA_') or kind=='SELL_READY':
+        return 'VENTA' if level>0 and any(t in action for t in ('VENDER','VENTA','SELL')) and any(ch.isdigit() for ch in action) else None
+    return None
+
+
+def alert_inbox(blocks, limit=150, *, bsi_enabled=False):
+    """ONLY certified 1H actions; unread + deduplicated by material instruction.
+
+    Historical WATCH/PRECONFIRMADO are preserved by GPT but never visible here.
+    Mark-all acts on this same filtered set, not on unshown historical WATCH.
+    """
     runs={r.get('corrida_id'):r for r in _header_records(blocks['runs']) if str(r.get('marco','')).upper()=='1H'}
     seen={str(r.get('evento_id','')) for r in _header_records(blocks['receipts']) if r.get('leido_utc')}
-    result=[]
+    gathered=[]
     for x in _header_records(blocks['events']):
         eid=str(x.get('evento_id') or '')
-        run=runs.get(x.get('corrida_id'))
-        if not eid or eid in seen or run is None:continue
+        if not eid or x.get('corrida_id') not in runs:continue
+        category=alert_category(x,bsi_enabled=bsi_enabled)
+        if category is None:continue
         try:dt=datetime.fromisoformat(str(x['creado_utc']).replace('Z','+00:00'))
         except (KeyError,ValueError,TypeError):continue
         if dt.tzinfo is None:continue
         token=str(x.get('token') or '').strip()
         action=str(x.get('accion_sugerida') or '').strip()
-        if not token or not action:continue
-        certification=str(x.get('certificacion') or 'NO_CERTIFICADA')
-        state=str(x.get('estado_evento') or 'WATCH')
-        result.append({'id':eid,'token':token,'created_utc':dt.astimezone(timezone.utc).isoformat().replace('+00:00','Z'),
-                       'action':action,'state':state,'certification':certification,
+        if not token:continue
+        key=(category,token,action.upper().strip(),str(x.get('nivel_usdt') or ''),str(x.get('usdt_preparar') or ''))
+        gathered.append((key, {'id':eid,'token':token,'created_utc':dt.astimezone(timezone.utc).isoformat().replace('+00:00','Z'),
+                       'action':action,'state':str(x.get('estado_evento')),
+                       'certification':str(x.get('certificacion')),'category':category,
                        'kind':str(x.get('tipo_alerta') or ''),'timeframe':str(x.get('marco') or '1H'),
                        'spot_usdt':x.get('spot_usdt'),'level_usdt':x.get('nivel_usdt'),
-                       'run_id':str(x.get('corrida_id') or ''),'source':'KAIROSGPT_GOOGLE_SHEETS',
-                       'is_trade_ready':False})
-    result.sort(key=lambda x:(x['created_utc'],x['id']),reverse=True)
-    return {'status':'OK','source':'KAIROSGPT_GOOGLE_SHEETS','scope':'UNREAD_1H_HISTORICAL',
-            'unread_count':len(result),'records':result[:limit] if limit is not None else result, 'limited':limit is not None and len(result)>limit}
+                       'usdt_prepare':x.get('usdt_preparar'), 'run_id':str(x.get('corrida_id') or ''),
+                       'source':'KAIROSGPT_GOOGLE_SHEETS','is_trade_ready':category=='TRADINGBOT READY'}))
+    gathered.sort(key=lambda x:(x[1]['created_utc'],x[1]['id']),reverse=True)
+    records=[];dedupe=set()
+    for key, record in gathered:
+        if key in dedupe:continue
+        dedupe.add(key)
+        # A newer read signal suppresses stale unreads with the same action.
+        if record['id'] in seen:continue
+        records.append(record)
+    return {'status':'OK','source':'KAIROSGPT_GOOGLE_SHEETS','scope':'UNREAD_ACTIONABLE_1H_ONLY',
+            'unread_count':len(records),'records':records[:limit] if limit is not None else records,
+            'limited':limit is not None and len(records)>limit}
 
+
+def _bsi_selling_approved():
+    """BSI SELL is gated by BOTH approved policies and 12/12 reconciled data.
+
+    A policy flag alone cannot certify legacy anchors or unmonetized HWM.
+    The full 4H baseline UTC must be aligned for all twelve instruments.
+    """
+    try:
+        blocks=read_ranges({
+          'parameters':"'12_PARAMETROS_KAIROS'!A4:J180",
+          'bsi':"'09_BSI'!A4:K16",
+        })
+        rows=blocks['parameters']
+        pairs={str(r[1]):str(r[5]) for r in rows[1:] if len(r)>5 and r[1] in ('BASELINE_STATUS','HISTORICAL_ANCHOR_MIGRATION')}
+        if len(pairs)!=2 or not all(v=='APROBADO' for v in pairs.values()):return False
+        bsi=blocks['bsi']
+        if len(bsi)!=13:return False
+        dates=set();tokens=set()
+        for row in bsi[1:]:
+            if len(row)<10 or not row[0] or row[5] in (None,'') or row[6] in (None,'') or row[7] in (None,''):
+                return False
+            if str(row[9]).upper() not in ('CERTIFICADO','OPERATIVO_CERTIFICADO','HOMOLOGADO'):
+                return False
+            if not math.isfinite(float(row[5])) or not math.isfinite(float(row[7])):
+                return False
+            dates.add(str(row[6]));tokens.add(str(row[0]))
+        return len(dates)==1 and len(tokens)==12 and len(bsi)==13
+    except Exception:
+        return False
 
 def unread_alerts():
-    result=alert_inbox(read_ranges(INBOX_SHEETS))
+    result=alert_inbox(read_ranges(INBOX_SHEETS),bsi_enabled=_bsi_selling_approved())
     result['can_mark_read']=bool(os.getenv('KAIROS_GOOGLE_WRITER_JSON'))
     return result
 
@@ -153,7 +239,7 @@ def mark_all_alerts_read():
     """One idempotent receipt batch for all historical unread 1H events, never 4H."""
     with WRITE_LOCK:
         blocks=read_ranges(INBOX_SHEETS)
-        unread=alert_inbox(blocks,limit=None)['records']
+        unread=alert_inbox(blocks,limit=None,bsi_enabled=_bsi_selling_approved())['records']
         if not unread:
             return {'status':'OK','marked':0,'already_read':True}
         if len(unread)>1800:

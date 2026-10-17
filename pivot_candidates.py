@@ -27,10 +27,11 @@ def candidates_binance(token, data, *, selected_low=None):
         value=float(selected_low) if selected_low is not None else None
         warnings.append('CL bruto 0.000411 pertenece a semana excluida; usar únicamente PUMP_CL_CANDIDATE del Master, aún no certificado')
     def wave(key):return _val(wp.get(key))
+    selected_override=token in ('SUI','PUMPFUN') and raw is not None and value!=raw
     result={'token':token,'market':('PUMP' if token=='PUMPFUN' else token)+'/USDT',
             'source':'Binance Spot MCP H4','status':'CANDIDATO_NO_CERTIFICADO',
             'cycle_high':_val(ch),'ch_date':_date(ch),
-            'cycle_low':value,'cl_date':_date(cl),'raw_cycle_low':raw,
+            'cycle_low':value,'cl_date':None if selected_override else _date(cl),'raw_cycle_low':raw,
             'o1':wave('SH1'),'o1_date':_date(wp.get('SH1')),
             'o2':wave('SL1'),'o2_date':_date(wp.get('SL1')),
             'o3':wave('SH2'),'o3_date':_date(wp.get('SH2')),
@@ -74,3 +75,41 @@ def candidates_hype(data, *, left=5, right=5):
             'o4':None,'o5':None, 'full_weeks':len(weeks),
             'method':'5L/5R, semanas UTC completas; BOS y Elliott pendientes',
             'warning':'Los extremos 5L/5R requieren BOS semanal y aprobación humana. O3 sin 5R = máximo observado, NO pivote O3.'}
+
+
+def add_uncertified_daily_extrema(candidate, ohlcv):
+    """Populate empty O1 from maximum CLOSED daily high strictly after candidate CL.
+
+    Not a 5L/5R/BOS pivot. Do not infer O2..O5 from arbitrary daily extremes.
+    Keep selected SUI/PUMP low but flag its unverified date rather than silently
+    using the flash-crash candle as a certified structural anchor.
+    """
+    from datetime import date
+    from math import isfinite
+    result=dict(candidate)
+    if not isinstance(ohlcv,dict) or ohlcv.get('status')!='OK':return result
+    if result.get('o1') is not None:return result
+    cl_date=str(result.get('cl_date') or '')[:10]
+    proxy=False
+    if not cl_date and result.get('token') in ('SUI','PUMPFUN'):
+        # Exclusion on the flash-crash week is authoritative. Do NOT use that
+        # rejected candle as a start date for the replacement CL.
+        result['warning']=(str(result.get('warning') or '')+'; O1 sin calcular: fecha CL seleccionada sin confirmar').strip('; ')
+        return result
+    try:date.fromisoformat(cl_date)
+    except (TypeError,ValueError):return result
+    records=ohlcv.get('records') or []
+    valid=[]
+    for r in records:
+        try:
+            d=str(r['open_utc'])[:10]
+            high=float(r['high'])
+            if d>cl_date and isfinite(high) and high>0:valid.append((d,high))
+        except (KeyError,TypeError,ValueError):continue
+    if not valid:return result
+    # Highest observed daily high, NOT a certified weekly wave pivot.
+    d,price=max(valid,key=lambda x:x[1])
+    result.update(o1=price,o1_date=d,o1_preliminary_method='HIGH_MAX_POST_CL_CLOSED_1D',
+                  o1_certified=False)
+    result['warning']=(str(result.get('warning') or '')+'; O1 MAXIMO OBSERVADO sin 5L/5R/BOS, pendiente de validación humana').strip('; ')
+    return result

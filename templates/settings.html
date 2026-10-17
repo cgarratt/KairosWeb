@@ -2,7 +2,7 @@
 {% block title %}Configuración · KairosWeb{% endblock %}
 {% block content %}
 <section class="panel">
-  <div class="hero"><div><h2>Configuración del Master</h2><p>Google Sheets KAIROS_V5_MASTER · Guardado auditado</p></div><span class="badge info">Validar → Guardar → Sincronizar</span></div>
+  <div class="hero"><div><h2>Configuración del Master</h2><p>Google Sheets KAIROS_V5_MASTER · Guardado auditado</p></div></div>
   <p class="settings-hint">Los formularios nunca generan órdenes, fills ni certifican pivotes o BSI por inferencia. La fecha de la revisión se genera automáticamente en Lima. Guardar requiere una sesión administrativa activa.</p>
   <div class="settings-layout" style="margin-top:22px">
     <aside class="settings-side" id="settings-nav" aria-label="Secciones de configuración">
@@ -12,6 +12,7 @@
       <button class="settings-tab" type="button" data-tab="liquidity">Liquidez por venue</button>
       <button class="settings-tab" type="button" data-tab="parameters">Reglas y ventas O3/O5</button>
       <button class="settings-tab" type="button" data-tab="pivots">Pivotes preliminares</button>
+      <button class="settings-tab" type="button" data-tab="mcp">Estado de conexiones MCP</button>
       <div class="settings-theme-box"><strong>Aspecto de KairosWeb</strong><label><input type="radio" name="theme-choice" value="light"> ☀️ Claro</label><label><input type="radio" name="theme-choice" value="dark"> 🌙 Azul marino oscuro</label></div>
     </aside>
     <div class="settings-content">
@@ -20,6 +21,14 @@
       <p id="settings-snapshot" class="settings-hint"></p>
       <div id="settings-admin-state" class="settings-hint settings-admin-state"></div>
       <div id="settings-pivots-tools" hidden><button class="btn" type="button" id="settings-preliminary">Actualizar candidatos desde MCP</button><div id="settings-preliminary-progress" class="settings-hint" role="status" aria-live="polite"></div><p class="settings-hint">Primero se muestran candidatos MCP históricos ya archivados en el Master. «Actualizar» consulta los 12 tokens individualmente desde Binance MCP (11) e Hyperliquid Spot HYPE/USDC (1). Si un MCP falla, se conserva su candidato archivado y se muestra el error por token. No certifica ondas ni activa órdenes.</p></div>
+      <section id="settings-mcp-panel" hidden aria-label="Diagnóstico de conectividad MCP">
+        <p class="settings-hint">Verificar conexión prueba una lectura real; <strong>/health</strong> no reinicia servicios. «Refrescar» invalida la caché local y reintenta la consulta, sin reiniciar Render.</p>
+        <div id="settings-mcp-grid" class="mcp-health-grid">
+          <article class="mcp-health-card" data-provider="binance"><h4>Binance MCP</h4><p>Spot, indicadores y BSI</p><p class="mcp-health-state">Sin verificar</p><p class="mcp-health-checked"></p><button class="tiny-control mcp-check" data-provider="binance" type="button">Verificar conexión</button> <button class="tiny-control mcp-refresh" data-provider="binance" type="button">Refrescar datos</button></article>
+          <article class="mcp-health-card" data-provider="hyperliquid"><h4>Hyperliquid MCP</h4><p>HYPE Spot macro HYPE/USDC</p><p class="mcp-health-state">Sin verificar</p><p class="mcp-health-checked"></p><button class="tiny-control mcp-check" data-provider="hyperliquid" type="button">Verificar conexión</button> <button class="tiny-control mcp-refresh" data-provider="hyperliquid" type="button">Refrescar conexión</button></article>
+        </div>
+        <div class="settings-msg" id="mcp-message" role="status">Pruebas MCP independientes; no cambian el Master.</div>
+      </section>
       <div id="settings-data" class="settings-fields">Cargando datos…</div>
       <div id="settings-totals" aria-live="polite"></div>
       <div class="settings-form">
@@ -32,5 +41,6 @@
   </div>
 </section>
 <script defer src="{{ url_for('static',filename='settings_format.js') }}"></script>
-<script defer src="{{ url_for('static',filename='settings_master.js') }}"></script>
+<script defer src="{{ url_for('static',filename='settings_master.js') }}?v={{ master }}"></script>
+<script defer src="{{ url_for('static',filename='mcp_settings.js') }}?v={{ master }}"></script>
 {% endblock %}

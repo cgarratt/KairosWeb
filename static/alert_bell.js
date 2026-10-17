@@ -16,19 +16,19 @@
       all.disabled=!pending||!v.can_mark_read;
       all.title=v.can_mark_read?'Marcar todas las alertas 1H sin leer':'Requiere credencial Google editora';
       list.replaceChildren();
-      if(!v.records.length){list.append(el('p','settings-hint','No quedan Alertas Kairos sin leer.'));return;}
+      if(!v.records.length){list.append(el('p','settings-hint','No hay alertas accionables pendientes.'));return;}
       for(const item of v.records){const wrap=el('article','alert-record'),heading=el('div','alert-meta');
         heading.append(el('span','alert-token',item.token),el('span','',formatDate(item.created_utc)));
         heading.append(el('span','alert-flag',item.state));
         if(item.certification!=='CERTIFICADA')heading.append(el('span','alert-flag unverified',item.certification));
         wrap.append(heading,el('p','alert-action','Acción: '+item.action));list.append(wrap);
       }
-      if(v.limited)list.append(el('p','settings-hint','Se muestran los 150 más recientes; el botón marcará TODOS los históricos 1H sin leer.'));
+      if(v.limited)list.append(el('p','settings-hint','Se muestran los 150 más recientes; el botón marcará TODOS los eventos accionables sin leer.'));
     }catch(e){count.hidden=true;all.disabled=true;list.textContent='DATA ERROR: '+e.message;}
   }
   all.addEventListener('click',async()=>{
     if(!pending)return;
-    if(!confirm(`¿Marcar como leídas las ${pending} alertas 1H pendientes? Se conservará su historial.`))return;
+    if(!confirm(`¿Marcar como leídas las ${pending} alertas accionables pendientes? Se conservará su historial.`))return;
     all.disabled=true;all.textContent='Guardando…';
     try{const r=await fetch('/api/alerts/read-all',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:'{}'});
       const v=await r.json();if(!r.ok||v.status!=='OK')throw Error(v.reason||v.message||'Error al actualizar');

@@ -36,14 +36,12 @@ class BellSheetTests(unittest.TestCase):
         return {'runs':runs,'events':events,'receipts':receipts}
     def test_only_unread_1h_events_displayed(self):
         result=alert_inbox(self.fixture())
-        assert result['unread_count']==1
-        assert result['records'][0]['token']=='LINK'
-        assert result['records'][0]['action']=='ESPERAR; NO ORDEN'
-        assert result['records'][0]['is_trade_ready'] is False
+        assert result['unread_count']==0
+        assert result['records']==[]  # WATCH / NO ORDEN must never enter the bell
     def test_all_historical_unread_when_no_receipts(self):
         data=self.fixture();data['receipts']=data['receipts'][:1]
         result=alert_inbox(data)
-        assert [r['token'] for r in result['records']]==['LINK','ETH']
+        assert result['records']==[]  # even unread WATCH records are not actions
 
 class SettingsTests(unittest.TestCase):
     def test_valid_reallocation_of_target(self):

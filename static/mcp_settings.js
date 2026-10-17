@@ -1,0 +1,55 @@
+(() => {
+  'use strict';
+  const panel=document.getElementById('settings-mcp-panel');
+  if(!panel)return;
+  const msg=document.getElementById('mcp-message');
+  const lang=new Intl.DateTimeFormat('es-PE',{dateStyle:'short',timeStyle:'medium',timeZone:'America/Lima'});
+  const providers=['binance','hyperliquid'];
+  let working=new Set();
+  function render(provider,result){
+    const card=panel.querySelector(`[data-provider="${provider}"]`);
+    if(!card)return;
+    const state=card.querySelector('.mcp-health-state'),stamp=card.querySelector('.mcp-health-checked');
+    const status=result?.status||'SIN_VERIFICAR';
+    const label={OK:'Conectado',DATA_ERROR:'No disponible',NOT_CONFIGURED:'No configurado'}[status]||status;
+    state.textContent=label+(provider==='binance'&&result?.records?` · ${result.records}/12 precios`: '');
+    state.dataset.status=status;
+    const when=result?.last_success_utc;
+    stamp.textContent=when?`Última respuesta exitosa: ${lang.format(new Date(when))} (Lima)`:'Sin respuesta exitosa registrada en este proceso';
+    if(result?.diagnostic?.category)stamp.textContent+=` · Diagnóstico: ${result.diagnostic.category}`;
+  }
+  async function check(provider,refresh=false){
+    if(working.has(provider))return;
+    working.add(provider);
+    const card=panel.querySelector(`[data-provider="${provider}"]`);
+    for(const button of card.querySelectorAll('button'))button.disabled=true;
+    card.querySelector('.mcp-health-state').textContent=refresh?'Refrescando sesión MCP…':'Verificando conectividad…';
+    msg.textContent=refresh?'Reintentando con una sesión nueva del MCP. No se reiniciará Render.':'Consultando estado MCP…';
+    try{
+      let url='/api/mcp-diagnostics?provider='+encodeURIComponent(provider),opts={credentials:'same-origin',cache:'no-store'};
+      if(refresh){
+        const res=await fetch('/api/admin/session',{credentials:'same-origin',cache:'no-store'});
+        const credentials=await res.json();
+        if(!res.ok||!credentials.is_admin||!credentials.csrf_token)throw new Error('Inicia sesión administrativa antes de refrescar. Verificación funciona sin sesión.');
+        url='/api/mcp-refresh';opts={method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-Kairos-Csrf':credentials.csrf_token},body:JSON.stringify({provider})};
+      }
+      const response=await fetch(url,opts),data=await response.json();
+      const result=refresh?data.result:data.providers?.[provider];
+      if(result)render(provider,result);
+      else render(provider,{status:'DATA_ERROR'});
+      if(!response.ok||!result||result.status!=='OK')throw new Error('No hay conexión válida. Consulta el estado y los logs privados de Render.');
+      msg.textContent=`${provider==='binance'?'Binance':'Hyperliquid'} MCP conectado. Consulta de solo lectura validada.`;
+    }catch(error){
+      if(!card.querySelector('.mcp-health-state').dataset.status)render(provider,{status:'DATA_ERROR'});
+      msg.textContent=error.message||'No se pudo completar la consulta MCP.';
+    }finally{
+      working.delete(provider);for(const button of card.querySelectorAll('button'))button.disabled=false;
+    }
+  }
+  panel.addEventListener('click',event=>{
+    const button=event.target.closest('button[data-provider]');if(!button)return;
+    check(button.dataset.provider,button.classList.contains('mcp-refresh'));
+  });
+  document.addEventListener('kairos-mcp-check',()=>{if(!panel.hidden)providers.forEach(p=>check(p));});
+  if(new URLSearchParams(location.search).get('tab')==='mcp')providers.forEach(p=>check(p));
+})();

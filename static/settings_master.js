@@ -2,13 +2,13 @@
   'use strict';
   const fmt=window.KairosFormatting;
   const names={units:'Maestro de unidades',targets:'Objetivos y Tiers',tier_custody:'Custodia por Tier',
-    liquidity:'Liquidez por venue',parameters:'Parámetros y plan de ventas',pivots:'Pivotes y referencias'};
+    liquidity:'Liquidez por venue',parameters:'Parámetros y plan de ventas',pivots:'Pivotes y referencias',mcp:'Estado de conexiones MCP'};
   const desc={units:'02_POSICIONES · Unidades HODL, Core y Exchange; inversión remanente. Total y costo medio se calculan automáticamente.',
     targets:'02_POSICIONES · Objetivos de los 12 activos; la suma debe ser 100%.',
     tier_custody:'04_CUSTODIA · Porcentajes simulados por Tier; no realiza traspasos reales.',
     liquidity:'03_LIQUIDEZ · Saldos USDT por venue; Quantfury se cuenta una sola vez.',
     parameters:'12_PARAMETROS_KAIROS · Valores aprobados, porcentajes y planes de ventas. Cada parámetro describe su impacto.',
-    pivots:'07_PIVOTES · Candidatos MCP para revisión manual; guardar NO los certifica ni genera órdenes.'};
+    pivots:'07_PIVOTES · Cada onda es un candidato PRELIMINAR sin certificación; guardar NO genera órdenes.',mcp:'Diagnóstico MCP independiente del Master. Consultas de solo lectura y reconexión sin reiniciar Render.'};
   const sectionFields={units:[['hodl','HODL'],['core','Core'],['exchange','Exchange'],['investment_total','Inversión remanente (USDT)']],
     targets:[['tier','Tier'],['target','Objetivo (%)']],
     tier_custody:[['hodl','HODL (%)'],['core','Core (%)'],['exchange','Exchange (%)']],
@@ -88,6 +88,10 @@
     document.getElementById('settings-desc').textContent=desc[tab];
     document.getElementById('settings-snapshot').textContent=state?`Snapshot: ${state.snapshot_id} · Corte: ${state.fecha_corte} · Cambios auditados`:'';
     body.replaceChildren();totals.replaceChildren();more.hidden=tab!=='pivots';
+    const diag=document.getElementById('settings-mcp-panel');if(diag)diag.hidden=tab!=='mcp';
+    document.querySelector('.settings-form').hidden=tab==='mcp';
+    save.parentElement.hidden=tab==='mcp';
+    if(tab==='mcp'){body.textContent='';return;}
     if(!state){body.textContent='Google Sheets no disponible.';return;}
     const rows=state.sections[tab]||[];
     for(let index=0;index<rows.length;index++){
@@ -166,8 +170,11 @@
       message(!data.write_configured?'Sin permisos de escritura configurados. Solo consulta.':data.is_admin?'Listo. Modifica los valores y pulsa Guardar cambios.':'Consulta activa; inicia sesión administrativa para guardar.');
     }catch(e){state=null;draw();message('DATA ERROR: '+e.message);}
   }
+  const initialTab=new URLSearchParams(location.search).get('tab');
+  if(initialTab==='mcp'){tab='mcp';nav.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('selected',x.dataset.tab===tab));}
   nav.addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(!b)return;tab=b.dataset.tab;
     nav.querySelectorAll('button').forEach(x=>x.classList.toggle('selected',x===b));draw();message('Edición local; aún no se ha publicado ningún cambio.');
+    if(tab==='mcp')document.dispatchEvent(new CustomEvent('kairos-mcp-check'));
     if(tab==='pivots'){if(!archiveLoaded)loadArchivedPivots();else applyCachedPivots();}
   });
   save.addEventListener('click',async()=>{

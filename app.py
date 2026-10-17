@@ -1,4 +1,4 @@
-"""KairosWeb v1.2.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
+"""KairosWeb v1.3.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
 import asyncio
 import json
 import os
@@ -27,7 +27,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = "1.2.0"  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = "1.3.0"  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -97,8 +97,8 @@ def bind_published_sheet():
     # The health and diagnostics endpoints remain reachable during source outages.
     independent={'/health','/api/mcp-status','/api/mcp-config-check','/api/mcp-diagnostics',
                  '/api/alerts/unread','/api/alerts/read','/api/alerts/read-all',
-                 '/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status'}
-    if request.path in independent or request.path.startswith('/static/'):
+                 '/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status', '/api/mcp-refresh'}
+    if request.path in independent or request.path in ('/admin/login','/api/admin/session') or (request.path=='/settings' and request.args.get('tab')=='mcp') or request.path.startswith('/static/'):
         return None
     try:
         g.kairos_state=get_state()
@@ -478,7 +478,7 @@ def build_mode_payload(slug, d, observed):
                     {'label':r['token'],'value':abs(r['drift_pp']),'display':('+' if r['drift_pp']>=0 else '')+f"{r['drift_pp']:.1f} pp",'tone':tone_from_drift(r['drift_pp'])}
                     for r in sorted(rows, key=lambda x: abs(x['drift_pp']), reverse=True)[:8]
                 ]),
-                bar_card('BSI histórico','Información relativa frente a BTC (referencial)',[
+                bar_card('BTC Strength Index (BSI)','Información relativa frente a BTC (referencial)',[
                     {'label':r['token'],'value':abs(r['bsi']),'display':('+' if r['bsi']>=0 else '')+f"{r['bsi']:.1f}%",'tone':'warn' if r['bsi']>20 else 'ok' if r['bsi']>=0 else 'danger'}
                     for r in top_bsi
                 ])
@@ -1124,12 +1124,16 @@ def pivot_preliminary_endpoint():
     if token not in TOKENS:
         return jsonify({'status':'INVALID_TOKEN'}),400
     try:
-        from pivot_candidates import candidates_binance, candidates_hype
+        from pivot_candidates import candidates_binance, candidates_hype, add_uncertified_daily_extrema
         if token=='HYPE':
             data=call_mcp_resilient('HYPERLIQUID_MCP_URL','get_hype_spot_ohlcv',
                       {'interval':'1d','start_date':'2024-11-29','limit':750})
             record=candidates_hype(data,left=int(approved_numeric('WEEKLY_PIVOT_LEFT')),
                                         right=int(approved_numeric('WEEKLY_PIVOT_RIGHT')))
+            if record.get('o3') is None and record.get('o3_unconfirmed_high') is not None:
+                record['o3']=record['o3_unconfirmed_high']
+                record['o3_date']=record.get('o3_unconfirmed_date')
+                record['warning']+='; O3 máximo OBSERVADO sin 5R, NO certificado'
         else:
             symbol='PUMP' if token=='PUMPFUN' else token
             pkey={'SUI':'SUI_CL_SELECTED','PUMPFUN':'PUMP_CL_CANDIDATE'}.get(token)
@@ -1137,6 +1141,14 @@ def pivot_preliminary_endpoint():
             selected=param.get('value') if param.get('status') in ('APROBADO_COMO_ANCLA_MANUAL','CANDIDATO_NO_CONFIRMADO') else None
             raw=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_cycle_phase',{'symbol':symbol+'USDT'})
             record=candidates_binance(token,raw,selected_low=selected)
+            if record.get('status')!='DATA_ERROR' and record.get('o1') is None and record.get('cl_date'):
+                try:
+                    count=min(999,max(60,int((raw.get('coverage') or {}).get('daily_candles') or 250)))
+                    daily=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
+                                            {'symbol':symbol+'USDT','interval':'1d','limit':count})
+                    record=add_uncertified_daily_extrema(record,daily)
+                except Exception:
+                    record['warning']=(record.get('warning') or '')+'; máximo O1 no disponible por fallo OHLCV; conservar archivo MCP'
         record=review_result(record)
         return jsonify({'status':'OK','scope':'EXPLORATORY_ONLY','certified':False,
                         'observed_utc':datetime.now(timezone.utc).isoformat(),
@@ -1220,26 +1232,71 @@ def mcp_config_check():
         }
     return jsonify({'status':'OK','checks':checks,'note':'El diagnóstico no revela URLs, contraseñas ni tokens.'})
 
+_MCP_LAST_OK = {}
+_MCP_LAST_LOCK = threading.Lock()
+
+
+def _check_provider(provider):
+    checks={
+        'binance':('BINANCE_MCP_URL','get_kairos_spot_prices',{}),
+        'hyperliquid':('HYPERLIQUID_MCP_URL','get_hype_spot_market',{}),
+    }
+    if provider not in checks:
+        raise ValueError('Proveedor no reconocido')
+    env,tool,args=checks[provider]
+    if not os.getenv(env):return {'status':'NOT_CONFIGURED','category':'NOT_CONFIGURED','last_success_utc':None}
+    try:
+        response=call_mcp_resilient(env,tool,args)
+        if response.get('status')!='OK':raise RuntimeError('MCP status not OK')
+        if provider=='binance' and len(response.get('records') or [])!=12:
+            raise RuntimeError('MCP incomplete Binance token coverage')
+        now=datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
+        with _MCP_LAST_LOCK:_MCP_LAST_OK[provider]=now
+        return {'status':'OK','source':response.get('source'),
+                'records':len(response.get('records') or []) if provider=='binance' else None,
+                'checked_utc':now,'last_success_utc':now}
+    except Exception as exc:
+        diag=diagnostic_error(exc,provider)
+        with _MCP_LAST_LOCK:previous=_MCP_LAST_OK.get(provider)
+        return {'status':'DATA_ERROR','diagnostic':diag,'last_success_utc':previous,
+                'checked_utc':datetime.now(timezone.utc).isoformat().replace('+00:00','Z')}
+
+
 @app.route('/api/mcp-diagnostics')
 def mcp_diagnostics():
-    results = {}
-    for name, env, tool, args in [
-        ('binance','BINANCE_MCP_URL','get_kairos_spot_prices',{}),
-        ('hyperliquid','HYPERLIQUID_MCP_URL','get_hype_spot_market',{}),
-    ]:
-        if not os.getenv(env):
-            results[name]={'status':'NOT_CONFIGURED'}
-            continue
-        try:
-            response=call_mcp_resilient(env,tool,args)
-            if response.get('status')!='OK':
-                raise RuntimeError('MCP result status not OK')
-            count=len(response.get('records',[])) if name=='binance' else None
-            results[name]={'status':'OK','records':count,'source':response.get('source')}
-        except Exception as exc:
-            diag=diagnostic_error(exc,name)
-            results[name]={'status':'DATA_ERROR','diagnostic':diag}
-    return jsonify({'status':'OK' if all(x['status']=='OK' for x in results.values()) else 'CHECK_REQUIRED', 'providers':results})
+    provider=request.args.get('provider','').strip().lower()
+    if provider and provider not in ('binance','hyperliquid'):
+        return jsonify({'status':'INVALID_PROVIDER'}),400
+    names=[provider] if provider else ['binance','hyperliquid']
+    results={name:_check_provider(name) for name in names}
+    return jsonify({'status':'OK' if all(x['status']=='OK' for x in results.values()) else 'CHECK_REQUIRED',
+                    'providers':results,'refresh':'Consulta read-only; /health NO reinicia Render.'})
+
+
+@app.route('/api/admin/session')
+def admin_session_state():
+    # Does not disclose the secret or grant authentication. Allows MCP diagnosis
+    # even when 01_CONTROL cannot be read from Google Sheets.
+    return jsonify({'status':'OK','is_admin':bool(_admin_authorized()),
+                    'csrf_token':session.get('csrf_token') if _admin_authorized() else None})
+
+
+@app.route('/api/mcp-refresh',methods=['POST'])
+def mcp_refresh():
+    # A refresh never restarts Render services, changes credentials or writes Sheets.
+    if not _same_origin() or not _admin_authorized() or not _csrf_ok():
+        return jsonify({'status':'ADMIN_AUTH_REQUIRED'}),403
+    payload=request.get_json(silent=True) or {}
+    provider=payload.get('provider')
+    if provider not in ('binance','hyperliquid'):
+        return jsonify({'status':'INVALID_PROVIDER'}),400
+    if provider=='binance':
+        with _MARKET_LOCK:
+            _MARKET_CACHE.update(stored=0.0,observed=None,prices=None)
+    check=_check_provider(provider)
+    return jsonify({'status':check['status'],'provider':provider,'result':check,
+                    'note':'Caché local invalidada cuando aplica; se abrió nueva consulta MCP. Sin reinicio de Render.'}), (200 if check['status']=='OK' else 503)
+
 
 @app.route('/api/hype-macro')
 def hype_macro():

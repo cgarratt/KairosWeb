@@ -32,7 +32,7 @@
     <div class="token-comparison" id="token-comparison">Calculando…</div>
   </section>
   <section class="panel span-6">
-    <h3>BSI histórico</h3>
+    <h3 title="BTC Strength Index: rendimiento relativo al de Bitcoin desde el ancla histórica (informativo, no orden).">BTC Strength Index (BSI)</h3>
     <p class="sub">Fuerza relativa frente a BTC · información histórica, no señal operativa</p>
     <div class="bar-list" id="bsi-bars"><div class="muted">Calculando…</div></div>
   </section>
@@ -56,16 +56,6 @@
         <thead><tr><th>Token</th><th>Unidades</th><th>HODL</th><th>Core</th><th>Exchange</th><th>Precio</th><th>Valor USDT</th><th>Valor BTC</th><th>Peso</th><th>Target</th><th>Estado</th></tr></thead>
         <tbody id="positions"><tr><td colspan="11" class="muted">Consultando…</td></tr></tbody><tfoot id="positions-total"></tfoot>
       </table>
-    </div>
-  </section>
-
-  <section class="panel span-12" id="sources">
-    <h3>Conexiones MCP</h3>
-    <p class="sub">Diagnóstico de configuración y fuentes.</p>
-    <div class="grid" style="gap:14px;margin-top:10px">
-      <div class="panel span-4"><h3>Binance MCP</h3><p class="sub" id="src-binance">Verificando…</p></div>
-      <div class="panel span-4"><h3>Hyperliquid MCP</h3><p class="sub" id="src-hl">Verificando…</p></div>
-      <div class="panel span-4"><h3>Nota</h3><p class="sub">HYPE macro sigue consultándose en Hyperliquid; el dashboard principal usa Spot Binance para la valoración actual.</p></div>
     </div>
   </section>
 </div>
@@ -139,9 +129,7 @@ function renderTierVertical(rows){
 function toneFromStatus(s){return s==='SOBRE'?'danger':s==='INFRA'?'warn':'ok';}
 const EXCHANGES = {Binance:'binance',KuCoin:'kucoin',Hyperliquid:'hyperliquid',Quantfury:'',MEXC:'mexc',MetaMask:'metamask',Phantom:'phantom'};
 function exchangeLabel(name){const slug=EXCHANGES[name];const img=slug?`<img class="entity-symbol" src="https://cdn.simpleicons.org/${slug}" alt="" onerror="this.style.display='none'">`:'';return img+name;}
-function setBars(id, items, maxValue){const wrap=$(id);wrap.innerHTML='';if(!items.length){wrap.innerHTML='<div class="muted">Sin datos</div>';return;}const max=maxValue||Math.max(...items.map(x=>Math.abs(x.value)||0),1);items.forEach(it=>{const row=document.createElement('div');row.className='bar-row';row.innerHTML=`<div class="bar-label">${TOKEN_LOGOS[it.label]?tokenHtml(it.label):(id==='venue-bars'?exchangeLabel(it.label):it.label)}</div><div class="bar-track"><div class="bar-fill ${it.tone||''}" style="width:${Math.max(3,Math.abs(it.value)/max*100)}%"></div></div><div class="bar-value">${it.display}</div>`;wrap.appendChild(row);});}
-async function loadSources(){try{const r=await fetch('/api/mcp-status',{cache:'no-store'});const d=await r.json();$('src-binance').textContent=d.binance_configured?'URL configurada y lista para consultas.':'URL NO configurada.';$('src-hl').textContent=d.hyperliquid_configured?'URL configurada para histórico macro HYPE.':'URL NO configurada.';}catch(e){$('src-binance').textContent='No se pudo verificar';$('src-hl').textContent='No se pudo verificar';}}
-function renderForecastLine(sc){const container=$('forecast-line'); if(!sc.length){container.textContent='Sin escenarios';return;}const v=sc.map(x=>x.portfolio_value),lo=Math.min(...v),hi=Math.max(...v),range=Math.max(1,hi-lo);const pts=sc.map((x,i)=>`${24+i*104},${142-(x.portfolio_value-lo)/range*118}`).join(' ');container.innerHTML=`<svg viewBox="0 0 470 170" role="img" aria-label="Sensibilidad del portafolio ante cinco escenarios BTC"><line x1="24" x2="440" y1="83" y2="83" stroke="#cad7e7" stroke-dasharray="5 4"/><polyline points="${pts}" fill="none" stroke="#246bd1" stroke-width="4" stroke-linejoin="round"/>${sc.map((x,i)=>{const y=142-(x.portfolio_value-lo)/range*118;return `<circle cx="${24+i*104}" cy="${y}" r="5" fill="#246bd1"/><text x="${24+i*104}" y="${Math.max(13,y-12)}" text-anchor="middle" font-size="10" fill="#334865">${x.portfolio_change_pct>0?'+':''}${num(x.portfolio_change_pct,2)}%</text>`}).join('')}</svg><div class="line-chart-labels">${sc.map(x=>`<span>${x.btc_change_pct>0?'+':''}${x.btc_change_pct}%</span>`).join('')}</div>`;}
+function setBars(id, items, maxValue){const wrap=$(id);wrap.innerHTML='';if(!items.length){wrap.innerHTML='<div class="muted">Sin datos</div>';return;}const max=maxValue||Math.max(...items.map(x=>Math.abs(x.value)||0),1);items.forEach(it=>{const row=document.createElement('div');row.className='bar-row';row.innerHTML=`<div class="bar-label">${TOKEN_LOGOS[it.label]?tokenHtml(it.label):(id==='venue-bars'?exchangeLabel(it.label):it.label)}</div><div class="bar-track"><div class="bar-fill ${it.tone||''}" style="width:${Math.max(3,Math.abs(it.value)/max*100)}%"></div></div><div class="bar-value">${it.display}</div>`;row.title=`${it.label}: ${it.display} · ${id==='bsi-bars'?'BTC Strength Index (BSI) · histórico informativo':'Valor obtenido de KairosWeb'}`;wrap.appendChild(row);});}
 async function refreshData(){try{const r=await fetch('/api/portfolio',{cache:'no-store'});const d=await r.json();if(!r.ok||d.status!=='OK') throw new Error(d.reason||'Sin respuesta válida');$('live-badge').className='badge ok';$('live-badge').textContent='● LIVE MCP';$('total').textContent=money(d.total_value);$('crypto').textContent=money(d.crypto_value);$('crypto-help').textContent=`${pct(d.crypto_pct*100)} del patrimonio`; $('usdt').textContent=money(d.usdt_total);$('usdt-help').textContent=`${pct(d.usdt_pct*100)} del patrimonio · piso 40%`; $('reserve').textContent=money(d.trading_reserve);$('snapshot-note').textContent=`Snapshot ${d.snapshot_date} · Binance observado: ${new Date(d.observed_at).toLocaleString('es-PE',{timeZone:'America/Lima'})}`;
 const slices=[
   {tier:'T1',color:'#2c73d2'},
@@ -176,6 +164,6 @@ const btcPrice=rows.find(r=>r.token==='BTC')?.price; if(!Number.isFinite(btcPric
 $('positions').innerHTML=rows.map(r=>`<tr><td>${tokenHtml(r.token)}<div class="muted">${r.tier}</div></td><td>${num(r.units,r.units>100000?0:5)}</td><td>${num(r.hodl_units,r.units>100000?0:5)}</td><td>${num(r.core_units,r.units>100000?0:5)}</td><td>${num(r.exchange_units,r.units>100000?0:5)}</td><td>${r.price>=1?money(r.price,2):money(r.price,6)}</td><td>${money(r.value)}</td><td>${num(r.value / btcPrice,8)} BTC</td><td>${pct(r.weight*100)}</td><td>${pct(r.target*100)}</td><td><span class="pill ${r.status}">${r.status}</span></td></tr>`).join('');
 $('positions-total').innerHTML=`<tr style="font-weight:800;background:#edf4fc"><td colspan="6">Total patrimonio (incluye USDT)</td><td>${money(d.total_value)}</td><td>${num(d.total_value/btcPrice,8)} BTC</td><td>100% patrimonio</td><td colspan="2">Snapshot + MCP</td></tr>`;
 }catch(e){$('positions-total').innerHTML='';$('live-badge').className='badge danger';$('live-badge').textContent='● DATA ERROR';$('positions').innerHTML=`<tr><td colspan="11">Sin cotizaciones válidas: ${e.message}</td></tr>`;['bsi-bars','profit-bars','token-comparison'].forEach(id=>$(id).innerHTML='<div class="muted">Sin datos válidos</div>');}}
-loadSources();refreshData();
+refreshData();
 </script>
 {% endblock %}

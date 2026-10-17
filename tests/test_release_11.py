@@ -61,11 +61,8 @@ class BulkAlertsTests(unittest.TestCase):
              patch('kairos_sheets_features._sheet_ids',return_value={'17_ALERTAS_LECTURAS':300}),\
              patch('kairos_sheets_features._api',side_effect=api):
             ret=mark_all_alerts_read()
-        self.assertEqual(ret['marked'],1)
-        self.assertEqual(len(calls),1)
-        request=calls[0][0]['appendCells']
-        self.assertEqual(len(request['rows']),1)
-        self.assertEqual(request['rows'][0]['values'][0]['userEnteredValue']['stringValue'],'b')
+        self.assertEqual(ret['marked'],0)
+        self.assertEqual(len(calls),0)  # WATCH not shown, therefore not acknowledged
     def test_empty_inbox_idempotent(self):
         data=BellSheetTests().fixture();data['receipts'].append(['b','2026-10-17T13:00:00Z'])
         with patch('kairos_sheets_features.read_ranges',return_value=data),patch('kairos_sheets_features._api') as fn:
