@@ -1,4 +1,4 @@
-"""KairosWeb v1.9.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
+"""KairosWeb: Google Sheets published state + Binance/Hyperliquid MCP only."""
 import asyncio
 import json
 import math
@@ -30,7 +30,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = "2.0.0"  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.3'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -519,6 +519,7 @@ def build_mode_payload(slug, d, observed):
             'kind':'compras', 'current':purchase_current, 'tokens':purchase_tokens,
             'o2_level_reference':O2_LEVELS['source'],
             'forecast_o2_allocation':o2_weights, 'o2_levels':O2_LEVELS['levels'],
+            'drift_band_pp':approved_numeric('DRIFT_BAND_PP'),
             'structural_liquidity_target':approved_numeric('STRUCTURAL_USDT_TARGET'),
             'notes':['Referencias O2C1–O2C4 en Compras; niveles históricos no certificados.',
              'Compras mantiene su slider y la simulación de balanceo + asignación proporcional.',
