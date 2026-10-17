@@ -204,28 +204,9 @@ El payload del backend incluye `tier` de cada token. Antes no lo hacía, causand
 - Fotografías O2, O3, O4, O5 y Post-O5 con unidades por custodia y conciliación USDT.
 - WATCH obligatorio sin verificación Quantfury; los pivotes heurísticos 2/2 no representan certificación del Master completo.
 
-
-## v4.3.3 — Carga de snapshots (Alternativa A)
-
-Nueva ruta `/snapshot-admin`: elegir JSON, validar, previsualizar diferencias y activar tras confirmación.
-Los saldos de Dashboard, Balancer, Compras, Ventas y Forecast se obtienen del snapshot activo en PostgreSQL. La caché de cotizaciones se invalida al activar/restaurar. No se cambian precios MCP ni la política del Master.
-
-### Configuración obligatoria en Render
-
-1. Provisionar una base PostgreSQL **persistente** (en Render u otro proveedor; comprobar disponibilidad y costo).
-2. En el servicio `kairos-web`, configurar `DATABASE_URL` con la cadena PostgreSQL (secret).
-3. Configurar `KAIROS_SNAPSHOT_ADMIN_TOKEN` con un secreto largo y aleatorio, distinto de `KAIROS_WEB_PASSWORD`.
-4. Desplegar y abrir `/snapshot-admin` con las credenciales Kairos Web existentes. Pegar la clave administrativa solo en la página, que no la almacena.
-5. Seleccionar el archivo `KAIROS_SNAPSHOT_2026_10_17_EJEMPLO.json` o el JSON exportado del snapshot; revisar todos los saldos. Pulsar **Validar** y, si coincide, **Activar**.
-
-La clave no debe compartirse por chat ni almacenarse en GitHub. Si no se configura la base persistente, la pantalla permite inspeccionar el estado pero **no permite activar**. No se escribe a disco efímero de Render.
-
-### Endpoints
-- GET `/api/snapshot/status` — versión activa, no secretos.
-- POST `/api/snapshot/preview` — JSON completo; requiere usuario web + cabecera `X-Kairos-Admin-Token`.
-- POST `/api/snapshot/activate` — candidato + digest de preview, confirmado por el usuario.
-- GET `/api/snapshot/history` — historial autenticado de hasta 25 versiones.
-- POST `/api/snapshot/restore` — reactivación de versión anterior por ID y token administrativo.
-
-### Conciliación
-Se verifican exactamente 12 tokens, cantidades no negativas, desglose HODL/Core/Exchange, 7 venues, USDT consolidado y QF incluido una sola vez. Diferencias de unidades por redondeo de capturas toleradas hasta 0.01% por token. Los fills individuales siguen requiriendo deduplicación/reconciliación externa: el upload representa una fotografía consolidada declarada por el usuario, **no** confirma ejecuciones particulares. Los costos de adquisición para Top 5 se mantienen en archivo separado; aún no se importan desde snapshots.
+## v4.3.3 (snapshot embebido, sin PostgreSQL)
+- Actualizadas unidades y custodia a captura consolidada 17/10/2026.
+- USDT total $28,130; Quantfury $7,225 incluido una sola vez; operativo antes compromisos $20,905.
+- Costos promedio declarados del 17/10 actualizados; precios en vivo continúan viniendo del MCP.
+- No requiere DATABASE_URL ni Snapshot Management; nuevo despliegue requerido para futuros cambios de inventario.
+- Órdenes LIMIT y transacciones no reconciliadas individualmente; no inferir fills.

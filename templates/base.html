@@ -93,7 +93,7 @@
       </div>
     </div>
     <nav class="global-nav" aria-label="Navegación Kairos">
-      {% for url,title in [('/', 'Dashboard'),('/modes','Modos Kairos'),('/mode/portafolio','Portafolio'),('/mode/balancer','Balancer'),('/mode/compras','Compras'),('/mode/ventas','Ventas'),('/mode/forecast','Forecast'),('/mode/tradingbot','TradingBot'),('/snapshot-admin','Snapshot')] %}
+      {% for url,title in [('/', 'Dashboard'),('/modes','Modos Kairos'),('/mode/portafolio','Portafolio'),('/mode/balancer','Balancer'),('/mode/compras','Compras'),('/mode/ventas','Ventas'),('/mode/forecast','Forecast'),('/mode/tradingbot','TradingBot')] %}
       <a class="global-nav-link {{ 'active' if request.path == url else '' }}" href="{{ url }}">{{ title }}</a>
       {% endfor %}
     </nav>

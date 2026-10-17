@@ -15,13 +15,11 @@ from urllib.parse import urlsplit
 
 from flask import Flask, Response, jsonify, render_template, request, abort, redirect
 from fastmcp import Client
-import snapshot_store as store
 from forecast_math import derive_reference_anchors
 
 BASE = Path(__file__).parent
 app = Flask(__name__)
-SNAPSHOT = json.loads((BASE / 'data/snapshot_master_2026-10-15.json').read_text())
-BUNDLED_SNAPSHOT = json.loads((BASE / 'data/snapshot_master_2026-10-15.json').read_text())
+SNAPSHOT = json.loads((BASE / 'data/snapshot_master_2026-10-17.json').read_text())
 CONFIG = json.loads((BASE / 'data/config.json').read_text())
 BSI_ANCHORS = json.loads((BASE / 'data/bsi_anchors.json').read_text())
 COST_BASIS = json.loads((BASE / 'data/cost_basis_verified.json').read_text()).get('prices', {})
@@ -60,84 +58,6 @@ def authenticate():
     username = os.getenv('KAIROS_WEB_USER', 'kairos')
     if not auth or not secrets.compare_digest(auth.username or '', username) or not secrets.compare_digest(auth.password or '', password):
         return Response('Autenticación requerida', 401, {'WWW-Authenticate':'Basic realm="Kairos Web"', 'Cache-Control':'no-store'})
-
-@app.before_request
-def load_active_snapshot():
-    global SNAPSHOT
-    if not os.getenv('DATABASE_URL') or request.path=='/health':return
-    try:
-        active=store.latest()
-        SNAPSHOT=active[1] if active else BUNDLED_SNAPSHOT
-    except Exception:
-        app.logger.exception('Persistent snapshot unavailable')
-        if request.path.startswith('/api/snapshot') or request.path=='/snapshot-admin':
-            return jsonify({'status':'DATA_ERROR','message':'Base de snapshots inaccesible'}),503
-        # Avoid silently falling back to an older portfolio.
-        return jsonify({'status':'DATA_ERROR','message':'Base de snapshots temporalmente inaccesible; no se usan saldos históricos'}),503
-
-def _admin_ok():
-    configured=os.getenv('KAIROS_SNAPSHOT_ADMIN_TOKEN','')
-    token=request.headers.get('X-Kairos-Admin-Token','')
-    return bool(configured) and bool(token) and secrets.compare_digest(configured,token)
-
-def _origin_ok():
-    from urllib.parse import urlsplit
-    origin=request.headers.get('Origin','')
-    if not origin:return False
-    a=urlsplit(origin);b=urlsplit(request.host_url)
-    return a.scheme=='https' and a.netloc==b.netloc or (app.testing and a.netloc==b.netloc)
-
-@app.route('/snapshot-admin')
-def snapshot_admin():
-    return render_template('snapshot_admin.html',master='5.3.5')
-
-@app.route('/api/snapshot/status')
-def snapshot_status():
-    active=store.latest() if os.getenv('DATABASE_URL') else None
-    return jsonify({'status':'OK','persistent':bool(os.getenv('DATABASE_URL')),'active_version':active[0] if active else 'bundled', 'snapshot_date':SNAPSHOT['units_snapshot_as_of']})
-
-@app.route('/api/snapshot/preview',methods=['POST'])
-def snapshot_preview():
-    if not _origin_ok() or not _admin_ok():return jsonify({'status':'DENIED'}),403
-    if request.content_length and request.content_length>100000:return jsonify({'status':'TOO_LARGE'}),413
-    try:
-        candidate=store.validate(request.get_json(force=True),SNAPSHOT)
-        deltas=[{'token':k,'before':SNAPSHOT['holdings_total'][k],'after':candidate['holdings_total'][k]} for k in sorted(store.SYMBOLS) if abs(candidate['holdings_total'][k]-SNAPSHOT['holdings_total'][k])>1e-9]
-        return jsonify({'status':'PREVIEW','digest':store.digest(candidate),'candidate':candidate,'deltas':deltas,'usdt_before':SNAPSHOT['physical_total_USDT'],'usdt_after':candidate['physical_total_USDT']})
-    except (ValueError,TypeError) as e:return jsonify({'status':'INVALID','message':str(e)}),422
-
-@app.route('/api/snapshot/activate',methods=['POST'])
-def snapshot_activate():
-    global SNAPSHOT
-    if not _origin_ok() or not _admin_ok():return jsonify({'status':'DENIED'}),403
-    if not os.getenv('DATABASE_URL'):return jsonify({'status':'CONFIG_REQUIRED'}),503
-    try:
-        body=request.get_json(force=True)
-        candidate=store.validate(body['candidate'],SNAPSHOT)
-        if not secrets.compare_digest(store.digest(candidate),str(body['digest'])):return jsonify({'status':'MISMATCH','message':'Previsualiza nuevamente antes de confirmar'}),409
-        with _FETCH_LOCK:
-            version,digest=store.activate(candidate)
-            SNAPSHOT=candidate
-            with _MARKET_LOCK:_MARKET_CACHE.update(stored=0.0,observed=None,dashboard=None)
-        return jsonify({'status':'ACTIVATED','version':version,'digest':digest,'date':candidate['units_snapshot_as_of']})
-    except (ValueError,TypeError,KeyError) as e:return jsonify({'status':'INVALID','message':str(e)}),422
-
-@app.route('/api/snapshot/history')
-def snapshot_history():
-    if not _admin_ok():return jsonify({'status':'DENIED'}),403
-    return jsonify({'status':'OK','versions':store.versions()})
-
-@app.route('/api/snapshot/restore',methods=['POST'])
-def snapshot_restore():
-    global SNAPSHOT
-    if not _origin_ok() or not _admin_ok():return jsonify({'status':'DENIED'}),403
-    try:
-        version=int(request.get_json(force=True)['version'])
-        with _FETCH_LOCK:
-            SNAPSHOT=store.restore(version)
-            with _MARKET_LOCK:_MARKET_CACHE.update(stored=0.0,observed=None,dashboard=None)
-        return jsonify({'status':'RESTORED','version':version})
-    except (ValueError,TypeError,KeyError) as e:return jsonify({'status':'INVALID','message':str(e)}),422
 
 @app.after_request
 def headers(resp):

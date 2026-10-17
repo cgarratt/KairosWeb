@@ -1,18 +1,18 @@
 {
   "basis": "Average acquisition cost per token in USDT, user-declared spreadsheet snapshot. Rounded historical averages; not independently exchange-certified.",
-  "as_of": "2026-10-16",
-  "source": "user supplied portfolio screenshot 2026-10-16",
+  "as_of": "2026-10-17",
+  "source": "user supplied consolidated portfolio screenshot 2026-10-17",
   "prices": {
-    "BTC": 61496.793,
+    "BTC": 62590.056,
     "ETH": 1746.377,
-    "SOL": 158.67,
-    "LINK": 30.02501,
+    "SOL": 147.799,
+    "LINK": 28.65241,
     "HYPE": 10.05479,
     "HBAR": 0.19816,
     "SUI": 3.624,
     "ONDO": 1.24405,
-    "PUMP": 0.01686,
-    "PLUME": 0.12223,
+    "PUMP": 0.01435,
+    "PLUME": 0.08913,
     "VIRTUAL": 1.67478,
     "PEPE": 1.573e-05
   }
