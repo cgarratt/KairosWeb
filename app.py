@@ -30,7 +30,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.3'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.4'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -515,7 +515,25 @@ def build_mode_payload(slug, d, observed):
              'floor':approved_numeric('STRUCTURAL_USDT_TARGET')*p,'max_percent':max_percent,'reference_cap':reference_cap,
              'crypto_value':d['crypto_value']}
     if slug == 'compras':
-        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
+        from o2_history import estimate_post_o1
+        from concurrent.futures import ThreadPoolExecutor
+        # Historical context is informative only; never substitutes a certified O1.
+        # A missing or invalid history yields unknown colors, not an invented hit.
+        def historical_row(row):
+            if not (row.get('c1_price') and row.get('c2_price')):
+                return row['token'], {'status':'NO_REFERENCE','certified':False}
+            symbol=row['token']+'USDT'
+            try:
+                data=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
+                                        {'symbol':symbol,'interval':'1d','limit':365})
+                if data.get('status')!='OK' or not data.get('closed_only'):
+                    raise ValueError('MCP history invalid')
+                return row['token'], estimate_post_o1(row['c1_price'],row['c2_price'],data.get('records'))
+            except Exception:
+                return row['token'], {'status':'DATA_ERROR','certified':False}
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            o2_histories=dict(pool.map(historical_row,purchase_tokens))
+        return {'o2_histories':o2_histories,'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
             'kind':'compras', 'current':purchase_current, 'tokens':purchase_tokens,
             'o2_level_reference':O2_LEVELS['source'],
             'forecast_o2_allocation':o2_weights, 'o2_levels':O2_LEVELS['levels'],
