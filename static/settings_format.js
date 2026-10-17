@@ -9,7 +9,7 @@
   const labels={DRIFT_BAND_PP:'Tolerancia de desvío del Balancer',STRUCTURAL_USDT_TARGET:'Objetivo estructural de liquidez',C1_BAG_FRACTION_P:'Presupuesto C1',C2_BAG_FRACTION_P:'Presupuesto C2',
     O3_BTC_PROCEEDS_FRACTION:'Ventas O3: proporción destinada a BTC',O3_USDT_PROCEEDS_FRACTION:'Ventas O3: proporción mantenida en USDT',
     O5_BTC_PROCEEDS_FRACTION:'Ventas O5: proporción propuesta para BTC',O5_USDT_PROCEEDS_FRACTION:'Ventas O5: proporción mantenida en USDT',
-    O5_STAGED_TRANCHES:'Tramos de venta históricos de O5',
+    O5_STAGED_TRANCHES:'Tramos de venta históricos de O5 (referencia, no editar)',
     FORECAST_O2_FIB_ALLOCATION:'Forecast O2: reparto de compras Fib 38.2 / 50 / 61.8 / 78.6',
     FORECAST_O3_FIB_ALLOCATION:'Forecast O3: reparto de ventas Fib 1.618 / 2.618 / 3.618 / 4.618',
     FORECAST_O4_FIB_ALLOCATION:'Forecast O4: reparto de recompras Fib 38.2 / 50 / 61.8 / 78.6',
@@ -19,7 +19,14 @@
     QF_ACCOUNT_RISK_PER_TRADE:'Riesgo máximo por operación QF',QF_ACCOUNT_RISK_TOTAL:'Riesgo agregado máximo QF',
     MAX_LEVERAGE:'Apalancamiento máximo',MAX_OPEN_POSITIONS:'Número máximo de posiciones QF',
     TRIGGER_STRICT_GT:'Umbral de activación BSI',PROXIMITY_BAND:'Distancia de proximidad para alertas'};
+  for(const stage of ['O2','O3','O4','O5']){
+    const levels=(stage==='O2'||stage==='O4')?[['382','38.2%'],['500','50%'],['618','61.8%'],['786','78.6%']]:[['1618','1.618'],['2618','2.618'],['3618','3.618'],['4618','4.618']];
+    for(const [suffix,description] of levels){
+      labels[`FORECAST_${stage}_FIB_${suffix}_PCT`]=`Onda ${stage}: Fib ${description} · asignación`;
+    }
+  }
   function scale(entry){const k=entry.key||'';
+    if(/^FORECAST_O[2345]_FIB_(?:382|500|618|786|1618|2618|3618|4618)_PCT$/.test(k))return 'percent-direct';
     if(k==='DRIFT_BAND_PP')return 'pp';
     if(percentDirectKeys.has(k))return 'percent-direct';
     if(fractionKeys.has(k)||String(entry.unit||'').includes('fraction'))return 'fraction';

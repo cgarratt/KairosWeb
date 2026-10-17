@@ -1,4 +1,4 @@
-"""KairosWeb v1.4.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
+"""KairosWeb v1.5.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
 import asyncio
 import json
 import os
@@ -27,7 +27,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = "1.4.0"  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = "1.5.0"  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1127,6 +1127,25 @@ def pivot_preliminary_endpoint():
         return jsonify({'status':'INVALID_TOKEN'}),400
     try:
         from pivot_candidates import candidates_binance, candidates_hype, add_uncertified_daily_extrema
+        # Lightweight O1-only route avoids the slower H4 5L/5R cycle scanner.
+        # It reads the provisional archived CL date and uses fully closed 1D
+        # Spot candles; it does not alter official pivots or certify Elliott.
+        if request.args.get('o1_only') == '1':
+            from kairos_sheets_features import read_ranges
+            archive=archive_candidates(read_ranges({'archive':ARCHIVE_A1})['archive'],g.kairos_state['parameters'])
+            record=next(x for x in archive if x['token']==token)
+            if record.get('o1') is None and record.get('cl_date') and token!='HYPE':
+                from datetime import date
+                delta=(datetime.now(timezone.utc).date()-date.fromisoformat(str(record['cl_date'])[:10])).days
+                count=min(999,max(35,delta+18))
+                symbol='PUMP' if token=='PUMPFUN' else token
+                daily=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
+                                         {'symbol':symbol+'USDT','interval':'1d','limit':count})
+                record=add_uncertified_daily_extrema(record,daily)
+            return jsonify({'status':'OK','scope':'EXPLORATORY_ONLY','certified':False,
+                           'source':'BINANCE_SPOT_CLOSED_WEEK' if token!='HYPE' else 'HYPERLIQUID_ARCHIVED',
+                           'observed_utc':datetime.now(timezone.utc).isoformat(),
+                           'records':[review_result(record)]})
         if token=='HYPE':
             data=call_mcp_resilient('HYPERLIQUID_MCP_URL','get_hype_spot_ohlcv',
                       {'interval':'1d','start_date':'2024-11-29','limit':750})
@@ -1145,7 +1164,8 @@ def pivot_preliminary_endpoint():
             record=candidates_binance(token,raw,selected_low=selected)
             if record.get('status')!='DATA_ERROR' and record.get('o1') is None and record.get('cl_date'):
                 try:
-                    count=min(999,max(60,int((raw.get('coverage') or {}).get('daily_candles') or 250)))
+                    from datetime import date
+                    count=min(999,max(35,(datetime.now(timezone.utc).date()-date.fromisoformat(record['cl_date'])).days+18))
                     daily=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
                                             {'symbol':symbol+'USDT','interval':'1d','limit':count})
                     record=add_uncertified_daily_extrema(record,daily)

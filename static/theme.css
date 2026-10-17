@@ -222,3 +222,14 @@
 :root[data-theme="dark"] .fc-stage-weights{border-color:#415876}
 :root[data-theme="dark"] .fc-stage-levels input{background:#102039;border-color:#4b6688;color:#f2f7ff}
 .fc-stage-levels input:focus-visible{outline:2px solid #64b0fa;outline-offset:2px}
+/* v1.5 Settings groups: shared colors support light and navy themes. */
+.parameter-jump{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px}
+.parameter-jump-link{display:inline-block;padding:7px 11px;border-radius:12px;border:1px solid var(--border,#cbd5e1);text-decoration:none;background:var(--surface-2,#eff6ff);color:var(--text,#132643);font-size:.83rem}
+.parameter-jump-link:hover,.parameter-jump-link:focus-visible{filter:brightness(1.08);outline:2px solid var(--accent,#357dd0)}
+.parameter-group{margin:15px 0 24px;padding:14px 12px;border:1px solid var(--border,#cbd5e1);border-radius:16px;scroll-margin-top:24px}
+.parameter-group-title{font-size:1.15rem;margin:0 0 6px;font-weight:750}
+.parameter-group>.settings-hint{margin-bottom:14px}
+.parameter-group .settings-row{border-bottom:1px solid var(--border,#cbd5e1)}
+.parameter-group .settings-row:last-child{border-bottom:0}
+:root[data-theme="dark"] .parameter-jump-link{background:#213856;color:#eff6ff;border-color:#3b5271}
+:root[data-theme="dark"] .parameter-group{border-color:#344966}

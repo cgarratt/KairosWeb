@@ -1,6 +1,6 @@
 """Simulated-only 4 tranche controls; never mutate canonical Sheets."""
 from pathlib import Path
-from forecast_fibo_policy import DEFAULTS, STAGE_KEYS, parse_weights, stringify_weights, defaults_from_master, ForecastAllocationError
+from forecast_fibo_policy import DEFAULTS, STAGE_KEYS, TRANCHE_KEYS, parse_weights, stringify_weights, defaults_from_master, ForecastAllocationError
 from forecast_math import derive_reference_anchors
 from test_sheets_features import demo_master
 from google_sheets_master import SHEETS
@@ -28,20 +28,32 @@ class ForecastPolicyTests(unittest.TestCase):
   raw=demo_master();params=raw[SHEETS['parameters']]
   with patch('kairos_sheets_features._remote_data',return_value=raw):
    data=settings_data()
-  row=next(x for x in data['sections']['parameters'] if x['key']=='FORECAST_O3_FIB_ALLOCATION')
-  self.assertEqual(row['value'],'40,30,20,10')
+  row=next(x for x in data['sections']['parameters'] if x['key']=='FORECAST_O3_FIB_1618_PCT')
+  self.assertEqual(row['value'],40)
+  self.assertEqual(row['type'],'number')
   self.assertEqual(row['status'],'APROBADO_SIMULACION')
-  self.assertFalse(any(x and len(x)>1 and x[1]=='FORECAST_O3_FIB_ALLOCATION' for x in params))
- def test_admin_save_provisions_and_audits_only_forecast_keys(self):
-  raw=demo_master()
-  before=len(raw[SHEETS['parameters']])
-  changes,state=prepare_changes(raw,'parameters',[{'key':'FORECAST_O3_FIB_ALLOCATION','value':'30,30,30,10'},
-     {'key':'FORECAST_O2_FIB_ALLOCATION','value':'10,40,30,20'}],evidence='Simulación aprobada por usuario')
-  self.assertEqual(state['parameters']['FORECAST_O3_FIB_ALLOCATION']['value'],'30,30,30,10')
+  self.assertEqual(len([x for x in data['sections']['parameters'] if x['key'] in TRANCHE_KEYS['o3']]),4)
+  self.assertFalse(any(x and len(x)>1 and x[1]=='FORECAST_O3_FIB_1618_PCT' for x in params))
+ def test_admin_save_provisions_complete_four_numeric_rows(self):
+  raw=demo_master();before=len(raw[SHEETS['parameters']])
+  changes,state=prepare_changes(raw,'parameters',[
+    {'key':'FORECAST_O3_FIB_1618_PCT','value':30},
+    {'key':'FORECAST_O3_FIB_2618_PCT','value':40},
+    {'key':'FORECAST_O2_FIB_500_PCT','value':40},
+    {'key':'FORECAST_O2_FIB_382_PCT','value':20}],evidence='Simulación aprobada por usuario')
+  self.assertEqual(defaults_from_master(state['parameters'])['o3'],[30,40,20,10])
+  self.assertEqual(defaults_from_master(state['parameters'])['o2'],[20,40,40,0])
   self.assertEqual(len(raw[SHEETS['parameters']]),before)
+  self.assertEqual(len([k for k in TRANCHE_KEYS['o3'] if k in state['parameters']]),4)
+  self.assertEqual(len([k for k in TRANCHE_KEYS['o2'] if k in state['parameters']]),4)
   self.assertTrue(any(k=='parameters' and row>=before and col==1 for k,row,col,_ in changes))
   with self.assertRaises(SettingsError):
-   prepare_changes(raw,'parameters',[{'key':'FORECAST_O5_FIB_ALLOCATION','value':'20,20,20,20'}],evidence='Config inválida')
+   prepare_changes(raw,'parameters',[{'key':'FORECAST_O5_FIB_1618_PCT','value':45}],evidence='Config inválida')
+ def test_partial_legacy_and_individual_parameters_rejected(self):
+  with self.assertRaises(ForecastAllocationError):
+   defaults_from_master({'FORECAST_O2_FIB_382_PCT':{'value':10,'status':'APROBADO_SIMULACION'}})
+  with self.assertRaises(SettingsError):
+   prepare_changes(demo_master(),'parameters',[{'key':'O5_STAGED_TRANCHES','value':'25,25,25,25'}],evidence='Reparto obsoleto')
  def test_expected_html_sections(self):
   s=(ROOT/'templates/forecast.html').read_text()
   self.assertIn('forecast-weights',s)

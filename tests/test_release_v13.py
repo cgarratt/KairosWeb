@@ -58,16 +58,28 @@ class PivotO1Tests(unittest.TestCase):
                   'cycle_high':{'price':126199.63,'date_utc':'2025-10-06T00:00:00Z'},
                   'cycle_low':{'price':57800.19,'date_utc':'2026-07-01T00:00:00Z'},'wave_pivots':{}})
     def test_o1_post_cl_max_is_preliminary_with_date(self):
-        a=self.sample();d={'status':'OK','records':[
-           {'open_utc':'2026-06-29T00:00:00Z','high':'99000'},
-           {'open_utc':'2026-07-02T00:00:00Z','high':'71200'},
-           {'open_utc':'2026-09-15T00:00:00Z','high':'92200'},
-           {'open_utc':'2026-10-15T00:00:00Z','high':'81000'}]}
-        r=add_uncertified_daily_extrema(a,d)
+        from datetime import date, timedelta
+        a=self.sample();days=[]
+        # Include a very high incomplete week and a prior-to-CL high: neither
+        # can substitute a highest COMPLETE post-CL UTC week.
+        for monday,peak,peakday in [(date(2026,7,6),71200,3),
+                                    (date(2026,9,14),92200,1),
+                                    (date(2026,10,12),81000,3)]:
+            for i in range(7 if monday!=date(2026,10,12) else 5):
+                day=monday+timedelta(days=i)
+                days.append({'open_utc':day.isoformat()+'T00:00:00Z',
+                             'high':str(peak if i==peakday else peak-1000)})
+        days.append({'open_utc':'2026-06-29T00:00:00Z','high':'99000'})
+        r=add_uncertified_daily_extrema(a,{'status':'OK','records':days})
         self.assertEqual(r['o1'],92200)
         self.assertEqual(r['o1_date'],'2026-09-15')
+        self.assertEqual(r['o1_preliminary_week_utc'],'2026-09-14')
         self.assertFalse(r['o1_certified'])
         self.assertIsNone(r['o2'])
+    def test_partial_weeks_do_not_produce_o1(self):
+        a=self.sample()
+        r=add_uncertified_daily_extrema(a,{'status':'OK','records':[{'open_utc':'2026-09-15T00:00:00Z','high':'92200'}]})
+        self.assertIsNone(r['o1'])
     def test_keep_weekly_candidate(self):
         a=self.sample();a['o1']=88888;a['o1_date']='2026-08-01'
         r=add_uncertified_daily_extrema(a,{'status':'OK','records':[{'open_utc':'2026-08-05T00:00:00Z','high':'100000'}]})

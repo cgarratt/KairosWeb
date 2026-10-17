@@ -2,13 +2,25 @@
   'use strict';
   const fmt=window.KairosFormatting;
   const names={units:'Maestro de unidades',targets:'Objetivos y Tiers',tier_custody:'Custodia por Tier',
-    liquidity:'Liquidez por venue',parameters:'Parámetros y plan de ventas',pivots:'Pivotes y referencias',mcp:'Estado de conexiones MCP'};
+    liquidity:'Liquidez por venue',parameters:'Parámetros',pivots:'Pivotes y referencias',mcp:'Estado de conexiones MCP'};
   const desc={units:'02_POSICIONES · Unidades HODL, Core y Exchange; inversión remanente. Total y costo medio se calculan automáticamente.',
     targets:'02_POSICIONES · Objetivos de los 12 activos; la suma debe ser 100%.',
     tier_custody:'04_CUSTODIA · Porcentajes simulados por Tier; no realiza traspasos reales.',
     liquidity:'03_LIQUIDEZ · Saldos USDT por venue; Quantfury se cuenta una sola vez.',
     parameters:'12_PARAMETROS_KAIROS · Valores aprobados, porcentajes y planes de ventas. Cada parámetro describe su impacto.',
     pivots:'07_PIVOTES · Cada onda es un candidato PRELIMINAR sin certificación; guardar NO genera órdenes.',mcp:'Diagnóstico MCP independiente del Master. Consultas de solo lectura y reconexión sin reiniciar Render.'};
+  const PARAM_GROUPS=[
+    {id:'portfolio',name:'Portafolio',description:'Objetivos y patrimonio, parámetros de asignación estructural.',keys:['STRUCTURAL_USDT_TARGET']},
+    {id:'balancer',name:'Liquidez y Balancer',description:'Desviaciones y presupuestos operativos C1/C2. No se suman otra vez a Forecast.',keys:['DRIFT_BAND_PP','C1_BAG_FRACTION_P','C2_BAG_FRACTION_P','ORDINARY_DEFAULT_USDT_TARGET']},
+    {id:'o2',name:'Compras O2 · Forecast',description:'Cuatro retrocesos independientes: 100% del presupuesto máximo de 25% P de O2.',prefix:'FORECAST_O2_FIB_'},
+    {id:'o3',name:'Ventas O3 · Forecast',description:'Cuatro extensiones independientes: 100% de las unidades elegibles para O3. Objetivo 40% USDT.',prefix:'FORECAST_O3_FIB_',keys:['O3_BTC_PROCEEDS_FRACTION','O3_USDT_PROCEEDS_FRACTION']},
+    {id:'o4',name:'Compras O4 · Forecast',description:'Cuatro retrocesos independientes: 100% del presupuesto máximo de 25% P de O4.',prefix:'FORECAST_O4_FIB_'},
+    {id:'o5',name:'Ventas O5 · Forecast',description:'Cuatro extensiones independientes: 100% de las unidades elegibles. O5 no se detiene por el piso 40% USDT.',prefix:'FORECAST_O5_FIB_',keys:['O5_BTC_PROCEEDS_FRACTION','O5_USDT_PROCEEDS_FRACTION']},
+    {id:'trading',name:'Trading QF',description:'Riesgo, margen y apalancamiento. TradingBot seguirá WATCH sin verificar Quantfury.',keys:['RISK_REWARD_MIN','QF_MARGIN_CAP_PER_POSITION','QF_ACCOUNT_RISK_PER_TRADE','QF_ACCOUNT_RISK_TOTAL','MAX_LEVERAGE','MAX_OPEN_POSITIONS']},
+    {id:'bsi',name:'Indicadores y BSI',description:'Los umbrales no desbloquean por sí solos BSI SELL.',keys:['TRIGGER_STRICT_GT']},
+    {id:'alerts',name:'Alertas',description:'Proximidad de las alertas de Kairos.',keys:['PROXIMITY_BAND']}
+  ];
+  function parameterGroup(entry){return PARAM_GROUPS.find(g=>(g.keys||[]).includes(entry.key)||g.prefix&&entry.key.startsWith(g.prefix))||PARAM_GROUPS[0];}
   const sectionFields={units:[['hodl','HODL'],['core','Core'],['exchange','Exchange'],['investment_total','Inversión remanente (USDT)']],
     targets:[['tier','Tier'],['target','Objetivo (%)']],
     tier_custody:[['hodl','HODL (%)'],['core','Core (%)'],['exchange','Exchange (%)']],
@@ -32,7 +44,7 @@
     if(tab==='units'&&field==='investment_total')return Number(value).toFixed(2);
     return value===null||value===undefined?'':String(value);
   }
-  function makeField(item,entry,index,field,label){const holder=el('div','settings-field');const name=el('label','',label);
+  function makeField(item,entry,index,field,label){const holder=el('div','settings-field');const name=el('label','',tab==='parameters'&&entry.key?.endsWith('_PCT')?'Asignación (%)':label);
     let input;if(field==='tier'){
       input=el('select');for(const v of ['T1','T2','T3']){const option=el('option','',v);option.value=v;input.append(option);}input.value=entry[field];
     }else{
@@ -66,6 +78,14 @@
       box.append(el('strong','',`Total acumulado: ${money(total)}`),el('span','',`Reserva QF (incluida): ${money(qf)}`),
         el('span','',`Liquidez operativa: ${money(total-qf)}`),el('span','',`Total Master publicado: ${money(prev)}`),
         el('span','',`Variación propuesta: ${money(total-prev)} · se conciliará al guardar`));
+    }else if(tab==='parameters'){
+      for(const stage of ['O2','O3','O4','O5']){
+        const group=state.sections.parameters.map((r,i)=>({r,i})).filter(x=>x.r.key.startsWith(`FORECAST_${stage}_FIB_`) && x.r.key.endsWith('_PCT'));
+        if(group.length!==4)continue;
+        const total=group.reduce((s,x)=>s+rowNum(x.i,'value'),0);
+        const tag=el('span',Math.abs(total-100)>1e-6?'invalid-value':'valid-value',`${stage} · suma de tramos: ${pc(total)} / 100%`);
+        box.append(tag);
+      }
     }else return;
     totals.append(box);
   }
@@ -94,6 +114,18 @@
     if(tab==='mcp'){body.textContent='';return;}
     if(!state){body.textContent='Google Sheets no disponible.';return;}
     const rows=state.sections[tab]||[];
+    const groupSlots={};
+    if(tab==='parameters'){
+      const jump=el('nav','parameter-jump');jump.setAttribute('aria-label','Grupos de parámetros');
+      for(const group of PARAM_GROUPS){
+        const section=el('section','parameter-group');section.id='parameter-group-'+group.id;
+        section.append(el('h4','parameter-group-title',group.name),el('p','settings-hint',group.description));
+        const entries=el('div','parameter-group-entries');section.append(entries);groupSlots[group.id]=entries;
+        body.append(section);
+        const link=el('a','parameter-jump-link',group.name);link.href='#'+section.id;jump.append(link);
+      }
+      body.prepend(jump);
+    }
     for(let index=0;index<rows.length;index++){
       const entry=rows[index];const item=el('div','settings-row '+(tab==='parameters'?'param ':''));
       if(tab==='pivots')item.classList.add('pivots');
@@ -117,7 +149,8 @@
         text.textContent='Actual: '+(entry.status||'SIN_DATO')+' · C1/C2 históricas son referencias; editar no certifica';
         item.append(text);
       }
-      body.append(item);
+      if(tab==='parameters')groupSlots[parameterGroup(entry).id].append(item);
+      else body.append(item);
     }
     updateComputed();
   }
@@ -184,6 +217,11 @@
       if(evidence.length<8)throw Error('Indica justificación o evidencia (mínimo 8 caracteres).');
       if(tab==='targets'&&Math.abs(state.sections.targets.reduce((s,_,i)=>s+rowNum(i,'target'),0)-100)>.000001)throw Error('Los objetivos deben sumar 100%.');
       if(tab==='tier_custody')for(let i=0;i<state.sections.tier_custody.length;i++)if(Math.abs(['hodl','core','exchange'].reduce((s,f)=>s+rowNum(i,f),0)-100)>.000001)throw Error('Custodia de cada Tier debe sumar 100%.');
+      if(tab==='parameters')for(const stage of ['O2','O3','O4','O5']){
+        const group=state.sections.parameters.map((r,i)=>({r,i})).filter(x=>x.r.key.startsWith(`FORECAST_${stage}_FIB_`)&&x.r.key.endsWith('_PCT'));
+        if(group.length!==4 || Math.abs(group.reduce((s,x)=>s+rowNum(x.i,'value'),0)-100)>1e-6)
+          throw Error(`${stage}: las cuatro asignaciones deben sumar 100%`);
+      }
     }catch(e){message('NO VALIDADO: '+e.message);return;}
     const accepted=window.confirm('Se validará y publicará una nueva revisión auditada de Google Sheets. ¿Continuar?');if(!accepted)return;
     save.disabled=true;message('Validando integridad, publicando y recargando el Master…');
@@ -195,7 +233,15 @@
   function applyPivotCandidate(rec){
     if(!rec||!state||!Array.isArray(state.sections?.pivots))return;
     if(!['CANDIDATO_ARCHIVADO_NO_CERTIFICADO','CANDIDATO_MCP_NO_CERTIFICADO','DATA_ERROR'].includes(rec.status))return;
-    if(rec.status!=='DATA_ERROR')pivots[rec.token]=rec;
+    if(rec.status!=='DATA_ERROR'){
+      const previous=pivots[rec.token];
+      // A partial MCP refresh must not wipe an already observed, unconfirmed
+      // O1 from this session. User-edited fields remain even more protected.
+      if(previous?.o1>0 && !(rec.o1>0))rec={...rec,o1:previous.o1,o1_date:previous.o1_date,
+        o1_preliminary_method:previous.o1_preliminary_method,
+        warning:(rec.warning||'')+'; O1 preliminar anterior conservado por respuesta MCP parcial'};
+      pivots[rec.token]=rec;
+    }
     if(tab!=='pivots')return;
     const ix=state.sections.pivots.findIndex(x=>x.token===rec.token);
     if(ix<0)return;
@@ -215,7 +261,7 @@
     if(info){
       const detail=rec.status==='DATA_ERROR'?'MCP no disponible; sin sustitución de campos oficiales':
         `CH: ${rec.cycle_high??'N/D'} (${rec.ch_date||'fecha pendiente'}) · CL: ${rec.cycle_low??'N/D'} (${rec.cl_date||'fecha por verificar'}) · `+
-        `O1: ${rec.o1??'N/D'} · O2: ${rec.o2??'N/D'} · O3: ${rec.o3??(rec.o3_unconfirmed_high!=null?String(rec.o3_unconfirmed_high)+' (máx. observado sin 5R)':'N/D')}`;
+        `O1: ${rec.o1??'N/D'} (${rec.o1_date||'fecha pendiente'}; PRELIMINAR, NO CERTIFICADO) · O2: ${rec.o2??'N/D'} · O3: ${rec.o3??(rec.o3_unconfirmed_high!=null?String(rec.o3_unconfirmed_high)+' (máx. observado sin 5R)':'N/D')}`;
       info.textContent=`${rec.status} · ${rec.record_origin||rec.source||'MCP'} · ${detail} · ${rec.warning||'No certificado, sin órdenes'}`;
     }
   }
@@ -244,12 +290,17 @@
   async function enrichMissingO1(){
     if(autoO1Started||!state||tab!=='pivots')return;
     autoO1Started=true;
-    const candidates=(state.sections.pivots||[]).filter(x=>(x.o1===null||x.o1===undefined) && pivots[x.token] && pivots[x.token].cycle_low>0 && pivots[x.token].o1==null);
+    const all=(state.sections.pivots||[]).filter(x=>(x.o1===null||x.o1===undefined) && pivots[x.token] && pivots[x.token].cycle_low>0 && pivots[x.token].o1==null);
+    const candidates=all.filter(x=>pivots[x.token].cl_date);
+    for(const missing of all.filter(x=>!pivots[x.token].cl_date)){
+      const info=body.querySelector(`[data-pivot-info="${missing.token}"]`);
+      if(info)info.textContent+=' · O1 pendiente: fecha del CL seleccionado sin confirmar; no usar mínimo bruto excluido';
+    }
     if(!candidates.length)return;
     const progress=document.getElementById('settings-preliminary-progress');let next=0,done=0,ok=0;
     progress.textContent+=` · Buscando automáticamente máximos O1 preliminares: 0/${candidates.length}`;
     async function worker(){while(next<candidates.length){const rec=candidates[next++];try{
-      const response=await getPivotPayload('/api/settings/pivots/preliminary?token='+encodeURIComponent(rec.token));
+      const response=await getPivotPayload('/api/settings/pivots/preliminary?o1_only=1&token='+encodeURIComponent(rec.token));
       const result=(response.records||[]).find(x=>x.token===rec.token);
       if(result&&result.status!=='DATA_ERROR'&&result.o1>0){applyPivotCandidate(result);ok++;}
     }catch(e){const info=body.querySelector(`[data-pivot-info="${rec.token}"]`);if(info)info.textContent+=' · O1 MCP pendiente: '+e.message;}
@@ -279,7 +330,17 @@
             const ix=state.sections.pivots.findIndex(x=>x.token===token);
             const hint=body.querySelector(`[data-pivot-info="${token}"]`);
             if(hint)hint.textContent+=(hint.textContent?' · ':'')+`Actualización MCP falló: ${r?.warning||'sin respuesta'}`;
-          }else{applyPivotCandidate(r);ok++;}
+          }else{
+            applyPivotCandidate(r);ok++;
+            if(token!=='HYPE'&&!(r.o1>0)&&pivots[token]?.cl_date){
+              try{
+                const fast=await getPivotPayload('/api/settings/pivots/preliminary?o1_only=1&token='+encodeURIComponent(token));
+                const proposed=(fast.records||[]).find(x=>x.token===token);
+                if(proposed?.o1>0)applyPivotCandidate(proposed);
+              }catch(e){const hint=body.querySelector(`[data-pivot-info="${token}"]`);
+                if(hint)hint.textContent+=' · O1 pendiente por MCP: '+e.message;}
+            }
+          }
         }catch(e){failed++;const hint=body.querySelector(`[data-pivot-info="${token}"]`);if(hint)hint.textContent+=' · MCP no disponible para actualizar';}
         progress.textContent=`Actualización histórica MCP: ${ok+failed}/${tokens.length} consultados · ${ok} correctos · ${failed} pendientes. No se ha publicado nada.`;
       }

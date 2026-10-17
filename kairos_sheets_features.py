@@ -14,7 +14,8 @@ import os
 import threading
 from urllib.parse import quote
 
-from forecast_fibo_policy import STAGE_KEYS, DEFAULTS, stringify_weights, parse_weights, ForecastAllocationError
+from forecast_fibo_policy import (STAGE_KEYS, DEFAULTS, stringify_weights, parse_weights, ForecastAllocationError,
+    TRANCHE_KEYS, TRANCHES, ALL_TRANCHE_KEYS, STAGE_FOR_KEY, validate_weights, defaults_from_master)
 from google_sheets_master import SHEET_ID_DEFAULT, SHEETS, SheetDataError, parse_master, _remote_data
 
 SPREADSHEET_HOST = "https://sheets.googleapis.com/v4/spreadsheets"
@@ -29,14 +30,12 @@ EDITABLE_PARAM_KEYS = frozenset({
     'C1_BAG_FRACTION_P','C2_BAG_FRACTION_P',
     'O3_BTC_PROCEEDS_FRACTION','O3_USDT_PROCEEDS_FRACTION',
     'O5_BTC_PROCEEDS_FRACTION','O5_USDT_PROCEEDS_FRACTION',
-    'O5_STAGED_TRANCHES','ORDINARY_DEFAULT_USDT_TARGET',
-    'FORECAST_O2_FIB_ALLOCATION','FORECAST_O3_FIB_ALLOCATION',
-    'FORECAST_O4_FIB_ALLOCATION','FORECAST_O5_FIB_ALLOCATION',
+    'ORDINARY_DEFAULT_USDT_TARGET',
     'RISK_REWARD_MIN','QF_MARGIN_CAP_PER_POSITION',
     'QF_ACCOUNT_RISK_PER_TRADE','QF_ACCOUNT_RISK_TOTAL',
     'MAX_LEVERAGE','MAX_OPEN_POSITIONS',
     'TRIGGER_STRICT_GT','PROXIMITY_BAND',
-})
+}) | ALL_TRANCHE_KEYS
 VALID_CATEGORIES = frozenset(('units','targets','tier_custody','liquidity','parameters','pivots'))
 
 
@@ -369,30 +368,31 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
         for x in entries:
             key=x.get('key')
             if key not in EDITABLE_PARAM_KEYS:raise SettingsError('Parámetro protegido o no implementado: '+str(key))
-            stage_key=key in STAGE_KEYS.values()
+            is_tranche=key in ALL_TRANCHE_KEYS
             try:row=_find_row(b,'parameters',key,column=1)
             except SettingsError:
-                if not stage_key:raise
-                # New forecast-only policy keys: provision when admin first publishes.
-                # No unsafe implicit write at application startup.
+                if not is_tranche:raise
+                # Create one numeric cell per Fibonacci tranche only when an
+                # administrator intentionally publishes it (never on GET).
                 row=len(b[SHEETS['parameters']])
-                if row>=175:raise SettingsError('Sin espacio libre para parámetro Forecast')
-                stage=next(k for k,v in STAGE_KEYS.items() if v==key)
-                metadata=['FORECAST',key,','.join(str(t) for t in DEFAULTS[stage]),'string',
-                  '% de presupuesto de onda' if stage in ('o2','o4') else '% de unidades elegibles',
+                if row>=175:raise SettingsError('Sin espacio libre para parámetros Forecast')
+                stage=STAGE_FOR_KEY[key];idx=TRANCHE_KEYS[stage].index(key)
+                label=TRANCHES[stage][idx][1]
+                metadata=['FORECAST',key,float(DEFAULTS[stage][idx]),'number',
+                  '% de presupuesto 25% P' if stage in ('o2','o4') else '% de unidades elegibles',
                   'APROBADO_SIMULACION','SIMULACION','KairosWeb Settings · aprobación del usuario',
-                  'Cuatro pesos en orden Fibonacci; 100% del presupuesto/pool congelado. No genera órdenes.','ALTA']
+                  f'{stage.upper()} Fib {label}: tramo independiente del pool congelado de la onda. No modifica la política operativa.', 'ALTA']
                 for col,v in enumerate(metadata):
-                    if col in (2,7):_set(b,'parameters',row,col,v)  # value/source written below once
+                    if col in (2,7):_set(b,'parameters',row,col,v)
                     else:change('parameters',row,col,v)
-            old=_get(b,'parameters',row,2);ptype=_get(b,'parameters',row,3)
-            approved=('APROBADO','APROBADO_CONDICIONAL','APROBADO_SIMULACION') if stage_key else ('APROBADO','APROBADO_CONDICIONAL')
+            ptype=_get(b,'parameters',row,3)
+            approved=('APROBADO','APROBADO_SIMULACION') if is_tranche else ('APROBADO','APROBADO_CONDICIONAL')
             if _get(b,'parameters',row,5) not in approved:
                 raise SettingsError('Parámetro no aprobado')
             value=x.get('value')
-            if stage_key:
-                try:value=stringify_weights(value)
-                except ForecastAllocationError as e:raise SettingsError(str(e)) from e
+            if is_tranche:
+                value=_numeric(value,key)
+                if value>100:raise SettingsError(key+': máximo 100%')
             elif ptype in ('number','integer'):
                 value=_numeric(value,key)
                 if ptype=='integer':
@@ -400,15 +400,29 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
                     value=int(value)
                 if 'FRACTION' in key or key.endswith('_TARGET') or key.endswith('_BAND') or key=='PROXIMITY_BAND':
                     if value>1:raise SettingsError(key+': debe estar entre 0 y 1')
-            elif key=='O5_STAGED_TRANCHES':
-                if not isinstance(value,str):raise SettingsError('Tramos deben ser texto coma-separado')
-                try:tranches=[int(x.strip()) for x in value.split(',')]
-                except ValueError:raise SettingsError('Tramos inválidos')
-                if len(tranches)!=4 or any(x<0 for x in tranches) or sum(tranches)!=100:raise SettingsError('4 tramos deben sumar 100')
-                value=','.join(str(x) for x in tranches)
             else:raise SettingsError('Tipo de parámetro no editable')
             change('parameters',row,2,value)
             change('parameters',row,7,'Aprobación administrativa KairosWeb · '+evidence.strip()[:95])
+    if category=='parameters':
+        # The first edit to any one of the four stage fields creates a COMPLETE
+        # four-row stage. Unchanged defaults are materialized alongside edited
+        # values, so partial allocations never enter the published Master.
+        originals={r[1]:{'value':r[2],'status':r[5]} for r in raw[SHEETS['parameters']][1:] if len(r)>5 and r[1]}
+        baseline=defaults_from_master(originals)
+        present={r[1] for r in b[SHEETS['parameters']][1:] if len(r)>1 and r[1]}
+        for stage,keys in TRANCHE_KEYS.items():
+            if not any(k in present for k in keys):continue
+            for idx,key in enumerate(keys):
+                if key in present:continue
+                row=len(b[SHEETS['parameters']])
+                if row>=175:raise SettingsError('Sin espacio libre para parámetros Forecast')
+                label=TRANCHES[stage][idx][1]
+                fields=['FORECAST',key,float(baseline[stage][idx]),'number',
+                        '% de presupuesto 25% P' if stage in ('o2','o4') else '% de unidades elegibles',
+                        'APROBADO_SIMULACION','SIMULACION','KairosWeb Settings · aprobación del usuario',
+                        f'{stage.upper()} Fib {label}: tramo individual, simulación no ejecutable', 'ALTA']
+                for col,val in enumerate(fields):change('parameters',row,col,val)
+                present.add(key)
     # Repair derived preview fields without modifying the Google Sheets formulas.
     if category=='liquidity':
         rows=b[SHEETS['liquidity']]
@@ -435,6 +449,8 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
                 raise SettingsError(base+': BTC + USDT debe sumar 100%')
         if float(pm['C1_BAG_FRACTION_P'])+float(pm['C2_BAG_FRACTION_P'])>1:
             raise SettingsError('Presupuesto C1+C2 supera 100% del patrimonio')
+        try:defaults_from_master({r[1]:{'value':r[2],'status':r[5]} for r in b[SHEETS['parameters']][1:] if len(r)>5 and r[1]})
+        except ForecastAllocationError as exc:raise SettingsError('Forecast: '+str(exc)) from exc
     # Update parameter parse_master O5 policy contract handled by validator.
     try:state=parse_master(b)
     except SheetDataError as exc:raise SettingsError('Validación del Master falló: '+str(exc)) from exc
@@ -449,19 +465,19 @@ def settings_data():
     liquidity=[{'venue':r[0],'usdt':r[1],'classification':r[2]} for r in rows('liquidity')[1:] if len(r)>2 and r[2] in ('OPERATIVO','TRADING_QF')]
     custody=[{'tier':r[0],'hodl':r[1],'core':r[2],'exchange':r[3]} for r in rows('custody')[1:] if r and r[0] in ('T1','T2','T3')]
     params=[{'key':r[1],'module':r[0],'value':r[2],'unit':r[4], 'type':r[3], 'status':r[5], 'module_name':r[0], 'description':r[8] if len(r)>8 else '', 'source':r[7] if len(r)>7 else ''} for r in rows('parameters')[1:] if len(r)>5 and r[1] in EDITABLE_PARAM_KEYS]
-    # Virtual defaults for newly introduced forecast knobs. Their first authorized
-    # modification provisions one real 12_PARAMETROS_KAIROS row with audit.
-    from forecast_fibo_policy import defaults_from_master
+    # 16 separately editable numeric values; draft defaults never edit Sheets.
     existing={r['key'] for r in params}
     defaults=defaults_from_master(state['parameters'])
-    for stage,key in STAGE_KEYS.items():
-        if key not in existing:
-            params.append({'key':key,'module':'FORECAST',
-              'value':','.join(f'{v:g}' for v in defaults[stage]),
-              'unit':'% of eligible pool' if stage in ('o3','o5') else '% of 25% P budget',
-              'type':'string','status':'APROBADO_SIMULACION','module_name':'FORECAST',
-              'description':'Pesos Fibonacci para '+stage.upper()+': 4 tramos suman 100%; solo simulación, sin órdenes.',
-              'source':'Configuración inicial KairosWeb v1.4.0; se registra en Sheet al guardar'})
+    for stage,keys in TRANCHE_KEYS.items():
+        for i,key in enumerate(keys):
+            if key not in existing:
+                label=TRANCHES[stage][i][1]
+                params.append({'key':key,'module':'FORECAST',
+                  'value':defaults[stage][i],
+                  'unit':'% de presupuesto 25% P' if stage in ('o2','o4') else '% de unidades elegibles',
+                  'type':'number','status':'APROBADO_SIMULACION','module_name':'FORECAST',
+                  'description':f'{stage.upper()}: nivel Fibonacci {label}. Uno de cuatro tramos independientes que suman 100%. Solo simulación.',
+                  'source':'Distribución simulada inicial; se escribe en Sheet solo al guardar'})
     pivots=[{'token':r[0],'cycle_low':r[1] if len(r)>1 else None,
              'o1':r[3] if len(r)>3 else None,'o2':r[5] if len(r)>5 else None,
              'o3':r[7] if len(r)>7 else None,'o4':r[8] if len(r)>8 else None,'o5':r[9] if len(r)>9 else None,
