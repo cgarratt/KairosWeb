@@ -1,0 +1,12 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fmt=require('../static/settings_format.js');
+assert.equal(fmt.toDisplay(.2,{key:'STRUCTURAL_USDT_TARGET',unit:'fraction P'}),'20');
+assert.equal(fmt.fromDisplay('20%',{key:'STRUCTURAL_USDT_TARGET',unit:'fraction P'}),.2);
+assert.equal(fmt.fromDisplay('2.5%',{key:'QF_ACCOUNT_RISK_PER_TRADE',unit:'fraction reserve'}),.025);
+assert.equal(fmt.toDisplay(1,{key:'DRIFT_BAND_PP',unit:'pp'}),'1');
+assert.equal(fmt.fromDisplay('1',{key:'DRIFT_BAND_PP',unit:'pp'}),1);
+assert.equal(fmt.fromDisplay('20%',{key:'TRIGGER_STRICT_GT',unit:'%'}),20);
+assert.equal(fmt.fromDisplay('20,20,30,30',{key:'O5_STAGED_TRANCHES'}),'20,20,30,30');
+assert.throws(()=>fmt.fromDisplay('20,20,30,40',{key:'O5_STAGED_TRANCHES'}));
+console.log('PASS: conversions pct/pp/risk/BSI/tranches');

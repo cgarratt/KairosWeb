@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}Administración · KairosWeb{% endblock %}
+{% block content %}
+<section class="panel" style="max-width:610px;margin:20px auto">
+  <h2>Acceso administrativo</h2>
+  <p class="sub">Autorización adicional para modificar Google Sheets. Sesión privada de 30 minutos; la clave no se incluye en formularios de Configuración.</p>
+  {% if error %}<p class="callout danger">{{ error }}</p>{% endif %}
+  {% if not not_configured %}<form action="{{ url_for('admin_login') }}" method="post" class="admin-login-form">
+    <label>Clave de administración<input required type="password" name="admin_key" autocomplete="current-password"></label>
+    <button class="btn primary" type="submit">Iniciar sesión</button>
+  </form>{% endif %}
+  <p><a class="btn" href="{{ url_for('settings_page') }}">Volver a Configuración</a></p>
+</section>
+{% endblock %}

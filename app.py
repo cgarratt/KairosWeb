@@ -10,24 +10,29 @@ import logging
 import hashlib
 import hmac
 import httpx
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from flask import Flask, Response, jsonify, render_template, request, abort, redirect, g
+from flask import Flask, Response, jsonify, render_template, request, abort, redirect, g, session, url_for
 from fastmcp import Client
 from forecast_math import derive_reference_anchors
 from werkzeug.local import LocalProxy
 from google_sheets_master import get_state, SheetDataError, public_failure_code, cache_status as sheet_cache_status
 from hype_weekly import aggregate_weeks, HypeHistoryError
 from kairos_sheets_features import (
-    unread_alerts, mark_alert_read, settings_data, prepare_changes,
+    unread_alerts, mark_alert_read, mark_all_alerts_read, settings_data, prepare_changes,
     save_changes, SettingsError, _remote_data as _unused_remote_marker
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = "1.0.0"  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = "1.1.0-rc1"  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
+# A dedicated administrator login is required; NEVER fall back to the Basic web password.
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
+                  SESSION_COOKIE_SECURE=True, PERMANENT_SESSION_LIFETIME=timedelta(minutes=30))
+app.secret_key = os.getenv('KAIROS_SESSION_SECRET', '') or None
+
 # Bound to validated Google Sheets state, once per request.  No disk JSON source.
 SNAPSHOT=LocalProxy(lambda:g.kairos_state['snapshot'])
 COST_BASIS=LocalProxy(lambda:g.kairos_state['cost_basis'])
@@ -90,7 +95,7 @@ def authenticate():
 def bind_published_sheet():
     # The health and diagnostics endpoints remain reachable during source outages.
     independent={'/health','/api/mcp-status','/api/mcp-config-check','/api/mcp-diagnostics',
-                 '/api/alerts/unread','/api/alerts/read',
+                 '/api/alerts/unread','/api/alerts/read','/api/alerts/read-all',
                  '/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status'}
     if request.path in independent or request.path.startswith('/static/'):
         return None
@@ -929,6 +934,16 @@ def _same_origin():
     return (actual.scheme=='https' or (expected.hostname in ('localhost','127.0.0.1') and actual.scheme=='http')) and actual.netloc==expected.netloc
 
 
+@app.route('/api/alerts/read-all', methods=['POST'])
+def alerts_mark_all_read():
+    if not _same_origin():return jsonify({'status':'FORBIDDEN_ORIGIN'}),403
+    try:return jsonify(mark_all_alerts_read())
+    except SettingsError as exc:return jsonify({'status':'INVALID','reason':str(exc)}),409
+    except Exception as exc:
+        app.logger.error('Mark all alerts read class=%s',type(exc).__name__)
+        return jsonify({'status':'DATA_ERROR','message':'No se pudieron guardar los acuses en Google Sheets.'}),503
+
+
 @app.route('/api/alerts/read',methods=['POST'])
 def alerts_mark_read():
     if not _same_origin():return jsonify({'status':'FORBIDDEN_ORIGIN'}),403
@@ -950,16 +965,63 @@ def settings_page():
 
 @app.route('/api/settings/data')
 def get_settings_data():
-    try:return jsonify(settings_data())
+    try:
+        data=settings_data()
+        data['is_admin']=_admin_authorized()
+        data['csrf_token']=session.get('csrf_token') if _admin_authorized() else None
+        return jsonify(data)
     except Exception as exc:
         app.logger.error('Settings data class=%s',type(exc).__name__)
         return jsonify({'status':'DATA_ERROR','message':'No se pudo cargar Configuración desde Google Sheets.'}),503
 
 
 def _admin_authorized():
-    expected=os.getenv('KAIROS_SETTINGS_ADMIN_KEY','')
-    supplied=request.headers.get('X-Kairos-Admin-Key','')
-    return bool(expected and supplied and secrets.compare_digest(expected,supplied))
+    # Signed, HttpOnly, Secure 30-minute session; never use Basic as write permission.
+    return bool(app.secret_key and os.getenv('KAIROS_SETTINGS_ADMIN_KEY') and session.get('kairos_admin'))
+
+
+def _csrf_ok():
+    saved=session.get('csrf_token')
+    given=request.headers.get('X-Kairos-Csrf','')
+    return bool(saved and given and secrets.compare_digest(saved,given))
+
+
+@app.route('/admin/login', methods=['GET','POST'])
+def admin_login():
+    if not app.secret_key or not os.getenv('KAIROS_SETTINGS_ADMIN_KEY'):
+        return render_template('admin_login.html',not_configured=True,error='Falta KAIROS_SESSION_SECRET o KAIROS_SETTINGS_ADMIN_KEY en Render.'),503
+    if request.method=='POST':
+        if not _same_origin():return 'Origen no autorizado',403
+        supplied=request.form.get('admin_key','')
+        expected=os.getenv('KAIROS_SETTINGS_ADMIN_KEY','')
+        if supplied and secrets.compare_digest(supplied,expected):
+            session.clear();session.permanent=True
+            session['kairos_admin']=True
+            session['csrf_token']=secrets.token_urlsafe(32)
+            return redirect(url_for('settings_page'))
+        return render_template('admin_login.html',error='Clave administrativa incorrecta.',not_configured=False),403
+    return render_template('admin_login.html',error=None,not_configured=False)
+
+
+@app.route('/admin/logout',methods=['POST'])
+def admin_logout():
+    if not _same_origin() or not _csrf_ok():return jsonify({'status':'FORBIDDEN'}),403
+    session.clear();return jsonify({'status':'OK'})
+
+
+@app.route('/api/settings/save',methods=['POST'])
+def settings_save():
+    if not _same_origin():return jsonify({'status':'FORBIDDEN_ORIGIN'}),403
+    if not _admin_authorized() or not _csrf_ok():return jsonify({'status':'ADMIN_AUTH_REQUIRED','reason':'Inicia sesión administrativa para guardar cambios.'}),403
+    if not os.getenv('KAIROS_GOOGLE_WRITER_JSON'):return jsonify({'status':'WRITE_DISABLED','reason':'Sin identidad Google editora en Render.'}),503
+    body=request.get_json(silent=True) or {}
+    try:
+        # Shared transaction includes complete validation, audit log, new revision and fresh read.
+        return jsonify(save_changes(body))
+    except SettingsError as exc:return jsonify({'status':'INVALID','reason':str(exc)}),409
+    except Exception as exc:
+        app.logger.error('Settings save error id=%s type=%s',uuid.uuid4().hex[:10],type(exc).__name__)
+        return jsonify({'status':'DATA_ERROR','reason':'No se pudo verificar la publicación; revisar Google Sheets antes de reintentar.'}),503
 
 
 def _preview_signature(body, issued_at):
@@ -980,7 +1042,7 @@ def _verify_preview_token(body):
 @app.route('/api/settings/preview',methods=['POST'])
 def settings_preview():
     if not _same_origin():return jsonify({'status':'FORBIDDEN_ORIGIN'}),403
-    if not _admin_authorized():return jsonify({'status':'ADMIN_AUTH_REQUIRED'}),403
+    if not _admin_authorized() or not _csrf_ok():return jsonify({'status':'ADMIN_AUTH_REQUIRED'}),403
     body=request.get_json(silent=True) or {}
     try:
         raw=_unused_remote_marker()
@@ -1002,7 +1064,7 @@ def settings_preview():
 @app.route('/api/settings/publish',methods=['POST'])
 def settings_publish():
     if not _same_origin():return jsonify({'status':'FORBIDDEN_ORIGIN'}),403
-    if not _admin_authorized():return jsonify({'status':'ADMIN_AUTH_REQUIRED'}),403
+    if not _admin_authorized() or not _csrf_ok():return jsonify({'status':'ADMIN_AUTH_REQUIRED'}),403
     body=request.get_json(silent=True) or {}
     if body.get('confirm')!='PUBLICAR':return jsonify({'status':'CONFIRMATION_REQUIRED'}),400
     if not _verify_preview_token(body):return jsonify({'status':'PREVIEW_REQUIRED','reason':'Validación previa ausente, caducada o distinta del contenido a publicar'}),409
@@ -1011,6 +1073,40 @@ def settings_publish():
     except Exception as exc:
         app.logger.error('Settings publish error id=%s class=%s',uuid.uuid4().hex[:10],type(exc).__name__)
         return jsonify({'status':'DATA_ERROR','reason':'No se pudo publicar nueva versión del Master.'}),503
+
+
+@app.route('/api/settings/pivots/preliminary')
+def pivot_preliminary_endpoint():
+    """Explicit read-only scan. No Sheet writes and no pivot certification."""
+    try:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from pivot_candidates import candidates_binance, candidates_hype
+        names=['BTC','ETH','SOL','LINK','HBAR','SUI','ONDO','PUMPFUN','PLUME','VIRTUAL','PEPE']
+        def scan(name):
+            symbol='PUMP' if name=='PUMPFUN' else name
+            key='SUI_CL_SELECTED' if name=='SUI' else 'PUMP_CL_CANDIDATE' if name=='PUMPFUN' else None
+            selected=selected_lows.get(name) if key else None
+            return candidates_binance(name,call_mcp_resilient('BINANCE_MCP_URL','get_kairos_cycle_phase',{'symbol':symbol+'USDT'}),selected_low=selected)
+        approved_params=g.kairos_state['parameters']
+        selected_lows={k:approved_params.get('SUI_CL_SELECTED' if k=='SUI' else 'PUMP_CL_CANDIDATE',{}).get('value') for k in ('SUI','PUMPFUN')}
+        output={}
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            futures={pool.submit(scan,n):n for n in names}
+            for f in as_completed(futures):
+                name=futures[f]
+                try:output[name]=f.result()
+                except Exception:output[name]={'token':name,'status':'DATA_ERROR','warning':'MCP no disponible; no rellenar pivote'}
+        try:
+            hype=call_mcp_resilient('HYPERLIQUID_MCP_URL','get_hype_spot_ohlcv',
+                {'interval':'1d','start_date':'2024-11-29','limit':1200})
+            output['HYPE']=candidates_hype(hype, left=int(approved_params['WEEKLY_PIVOT_LEFT']['value']),right=int(approved_params['WEEKLY_PIVOT_RIGHT']['value']))
+        except Exception:output['HYPE']={'token':'HYPE','status':'DATA_ERROR','warning':'Hyperliquid histórico no disponible'}
+        return jsonify({'status':'OK','scope':'EXPLORATORY_ONLY','certified':False,
+                        'observed_utc':datetime.now(timezone.utc).isoformat(),
+                        'records':[output[n] for n in ['BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMPFUN','PLUME','VIRTUAL','PEPE']]})
+    except Exception:
+        app.logger.exception('Pivot preliminary failed')
+        return jsonify({'status':'DATA_ERROR','reason':'No se pudo completar la exploración MCP'}),503
 
 
 # Technical candidates based only on fully closed Binance Spot 4H candles.

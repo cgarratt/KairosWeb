@@ -27,3 +27,9 @@ services:
         sync: false
       - key: KAIROS_SHEETS_CACHE_SECONDS
         value: '60'
+      - key: KAIROS_GOOGLE_WRITER_JSON
+        sync: false
+      - key: KAIROS_SETTINGS_ADMIN_KEY
+        sync: false
+      - key: KAIROS_SESSION_SECRET
+        sync: false

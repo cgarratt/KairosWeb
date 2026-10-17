@@ -1,68 +1,43 @@
 (() => {
   'use strict';
-  const bell = document.getElementById('bell-open');
-  const box = document.getElementById('alerts-popover');
-  const list = document.getElementById('alerts-list');
-  const count = document.getElementById('bell-count');
-  const refresh = document.getElementById('alerts-refresh');
-  if (!bell || !box || !list || !count) return;
-  function el(tag, cls, txt) {
-    const node = document.createElement(tag);
-    if (cls) node.className=cls;
-    if (txt !== undefined) node.textContent=String(txt);
-    return node;
-  }
-  const formatDate = (iso) => {
-    const date=new Date(iso);
-    return Number.isNaN(date.getTime()) ? iso : new Intl.DateTimeFormat('es-PE', {
-      timeZone:'America/Lima',day:'2-digit',month:'2-digit',year:'numeric',
-      hour:'2-digit',minute:'2-digit',hour12:false
-    }).format(date)+' (Lima)';
-  };
-  async function load() {
-    list.textContent='Consultando Google Sheets…';
-    try {
-      const response = await fetch('/api/alerts/unread', {credentials:'same-origin',cache:'no-store'});
-      const data=await response.json();
-      if (!response.ok || data.status!=='OK') throw Error(data.message || 'No se pudo cargar Alertas 1H');
-      count.hidden=!data.unread_count;
-      count.textContent=data.unread_count>99?'99+':String(data.unread_count);
+  const bell=document.getElementById('bell-open'),box=document.getElementById('alerts-popover');
+  const list=document.getElementById('alerts-list'),count=document.getElementById('bell-count');
+  const refresh=document.getElementById('alerts-refresh'),all=document.getElementById('alerts-read-all');
+  if(!bell||!box||!list||!count||!all)return;
+  const el=(tag,cls,value)=>{const x=document.createElement(tag);if(cls)x.className=cls;if(value!==undefined)x.textContent=value;return x;};
+  const formatDate=iso=>{const t=new Date(iso);return isNaN(t.getTime())?iso:new Intl.DateTimeFormat('es-PE',{
+    timeZone:'America/Lima',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).format(t)+' (Lima)';};
+  let pending=0;
+  async function load(){
+    list.textContent='Consultando el histórico de KairosGPT…';
+    try{const r=await fetch('/api/alerts/unread',{credentials:'same-origin',cache:'no-store'}),v=await r.json();
+      if(!r.ok||v.status!=='OK')throw Error(v.message||'No disponible');
+      pending=Number(v.unread_count)||0;count.hidden=!pending;count.textContent=pending>99?'99+':String(pending);
+      all.disabled=!pending||!v.can_mark_read;
+      all.title=v.can_mark_read?'Marcar todas las alertas 1H sin leer':'Requiere credencial Google editora';
       list.replaceChildren();
-      if (!data.records.length) {list.append(el('p','settings-hint','No hay alertas 1H históricas sin leer.'));return;}
-      data.records.forEach(item=> {
-        const wrap=el('article','alert-record');
-        const top=el('div','alert-meta');
-        top.append(el('span','alert-token',item.token), el('span','',formatDate(item.created_utc)));
-        top.append(el('span','alert-flag',item.state));
-        if (item.certification && item.certification!=='CERTIFICADA') top.append(el('span','alert-flag unverified',item.certification));
-        wrap.append(top,el('p','alert-action','Acción: '+item.action));
-        const done=el('button','tiny-control','Marcar como leída');
-        done.type='button';
-        if(!data.can_mark_read){done.disabled=true;done.title='Requiere la cuenta editora de Google Sheets en Render';done.textContent='Lectura pendiente · requiere editor';}
-        done.addEventListener('click',async()=>{
-          done.disabled=true;done.textContent='Guardando…';
-          try {
-            const res=await fetch('/api/alerts/read',{
-              method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',
-              body:JSON.stringify({id:item.id})
-            });
-            const out=await res.json();
-            if (!res.ok || out.status!=='OK') throw Error(out.reason || out.message || 'No se pudo guardar');
-            await load();
-          }catch(e){done.textContent='Error: '+e.message;done.disabled=false;}
-        });
-        wrap.append(done);list.append(wrap);
-      });
-      if(data.limited)list.append(el('p','settings-hint','Vista limitada a 150 eventos. Los demás siguen registrados en el Master.'));
-    }catch(e) { count.hidden=true;list.textContent='DATA ERROR: '+e.message; }
+      if(!v.records.length){list.append(el('p','settings-hint','No quedan Alertas Kairos sin leer.'));return;}
+      for(const item of v.records){const wrap=el('article','alert-record'),heading=el('div','alert-meta');
+        heading.append(el('span','alert-token',item.token),el('span','',formatDate(item.created_utc)));
+        heading.append(el('span','alert-flag',item.state));
+        if(item.certification!=='CERTIFICADA')heading.append(el('span','alert-flag unverified',item.certification));
+        wrap.append(heading,el('p','alert-action','Acción: '+item.action));list.append(wrap);
+      }
+      if(v.limited)list.append(el('p','settings-hint','Se muestran los 150 más recientes; el botón marcará TODOS los históricos 1H sin leer.'));
+    }catch(e){count.hidden=true;all.disabled=true;list.textContent='DATA ERROR: '+e.message;}
   }
-  bell.addEventListener('click',()=>{
-    const open=box.hidden;box.hidden=!open;bell.setAttribute('aria-expanded',String(open));
-    if(open)load();
+  all.addEventListener('click',async()=>{
+    if(!pending)return;
+    if(!confirm(`¿Marcar como leídas las ${pending} alertas 1H pendientes? Se conservará su historial.`))return;
+    all.disabled=true;all.textContent='Guardando…';
+    try{const r=await fetch('/api/alerts/read-all',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:'{}'});
+      const v=await r.json();if(!r.ok||v.status!=='OK')throw Error(v.reason||v.message||'Error al actualizar');
+      await load();
+    }catch(e){list.prepend(el('p','invalid-value','No se pudieron marcar las alertas: '+e.message));all.disabled=false;}
+    finally{all.textContent='Marcar todas como leídas';}
   });
+  bell.addEventListener('click',()=>{const open=box.hidden;box.hidden=!open;bell.setAttribute('aria-expanded',String(open));if(open)load();});
   refresh.addEventListener('click',load);
-  document.addEventListener('click',e=>{if(!box.hidden && !e.target.closest('.alerts-wrap')){box.hidden=true;bell.setAttribute('aria-expanded','false');}});
-  load();
-  // Gentle refresh, no push claim. Visibility blocks repeated hidden-tab network calls.
-  setInterval(()=>{if(!document.hidden)load();},60000);
+  document.addEventListener('click',e=>{if(!box.hidden&&!e.target.closest('.alerts-wrap')){box.hidden=true;bell.setAttribute('aria-expanded','false');}});
+  load();setInterval(()=>{if(!document.hidden)load();},60000);
 })();

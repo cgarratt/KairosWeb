@@ -2,8 +2,8 @@
 {% block title %}Configuración · KairosWeb{% endblock %}
 {% block content %}
 <section class="panel">
-  <div class="hero"><div><h2>Configuración del Master</h2><p>Administración controlada de KAIROS_V5_MASTER · Google Sheets.</p></div><span class="badge warn">Vista previa → Publicación auditada</span></div>
-  <p class="settings-hint">Los cambios se guardan únicamente después de validarlos y confirmar PUBLICAR. La web no edita órdenes/fills históricos ni certifica pivotes o BSI por inferencia. Sin credencial editora, Configuración funciona solo en consulta y simulación de cambios.</p>
+  <div class="hero"><div><h2>Configuración del Master</h2><p>Google Sheets KAIROS_V5_MASTER · Guardado auditado</p></div><span class="badge info">Validar → Guardar → Sincronizar</span></div>
+  <p class="settings-hint">Los formularios nunca generan órdenes, fills ni certifican pivotes o BSI por inferencia. La fecha de la revisión se genera automáticamente en Lima. Guardar requiere una sesión administrativa activa.</p>
   <div class="settings-layout" style="margin-top:22px">
     <aside class="settings-side" id="settings-nav" aria-label="Secciones de configuración">
       <button class="settings-tab selected" type="button" data-tab="units">Maestro de unidades</button>
@@ -11,27 +11,26 @@
       <button class="settings-tab" type="button" data-tab="tier_custody">Custodia por Tier</button>
       <button class="settings-tab" type="button" data-tab="liquidity">Liquidez por venue</button>
       <button class="settings-tab" type="button" data-tab="parameters">Reglas y ventas O3/O5</button>
-      <button class="settings-tab" type="button" data-tab="pivots">Pivotes (pendientes)</button>
+      <button class="settings-tab" type="button" data-tab="pivots">Pivotes preliminares</button>
+      <div class="settings-theme-box"><strong>Aspecto de KairosWeb</strong><label><input type="radio" name="theme-choice" value="light"> ☀️ Claro</label><label><input type="radio" name="theme-choice" value="dark"> 🌙 Azul marino oscuro</label></div>
     </aside>
     <div class="settings-content">
       <h3 id="settings-title">Maestro de unidades</h3>
-      <div class="settings-hint" id="settings-desc">Fuente directa 02_POSICIONES; las compras confirmadas ingresan primero a Exchange.</div>
+      <div id="settings-desc" class="settings-hint"></div>
       <p id="settings-snapshot" class="settings-hint"></p>
+      <div id="settings-admin-state" class="settings-hint settings-admin-state"></div>
+      <div id="settings-pivots-tools" hidden><button class="btn" type="button" id="settings-preliminary">Generar pivotes preliminares MCP</button><p class="settings-hint">Usa Binance Spot MCP y Hyperliquid Spot HYPE/USDC; CH/CL/O1–O5 son propuestas exploratorias. No reemplaza valores oficiales existentes ni certifica pivotes.</p></div>
       <div id="settings-data" class="settings-fields">Cargando datos…</div>
+      <div id="settings-totals" aria-live="polite"></div>
       <div class="settings-form">
-        <label class="wide">Justificación / referencia de evidencia<input id="settings-evidence" maxlength="400" placeholder="Ej.: actualización de inventario autorizada, ticket de orden, política aprobada…"></label>
-        <label>Fecha de corte (solo saldos)<input id="settings-asof" type="date"></label>
-        <label>Clave administrativa (solo en memoria de esta página)<input id="settings-admin" type="password" autocomplete="off" placeholder="KAIROS_SETTINGS_ADMIN_KEY"></label>
+        <label class="wide">Justificación o referencia de evidencia<input id="settings-evidence" maxlength="400" placeholder="Ej.: inversión reconciliada, transferencia confirmada, ajuste aprobado…"></label>
       </div>
-      <div class="settings-buttons">
-        <button id="settings-preview" class="btn" type="button">1 · Validar cambios</button>
-        <button id="settings-publish" class="btn primary" type="button" disabled>2 · Publicar revisión</button>
-        <button id="settings-reload" class="btn" type="button">Recargar Master</button>
-      </div>
-      <div class="settings-msg" id="settings-msg" aria-live="polite">Los formularios no modifican Google Sheets hasta realizar la publicación.</div>
-      <p class="settings-hint">Una nueva revisión queda registrada en 01_CONTROL y 10_HISTORIAL. BSI SELL permanece bloqueado y TradingBot sigue en WATCH. Solo el perfil editor puede escribir en Google Sheets.</p>
+      <div class="settings-buttons"><button id="settings-save" class="btn primary" type="button" disabled>Guardar cambios</button></div>
+      <div class="settings-msg" id="settings-msg" aria-live="polite">Pendiente de conexión a Google Sheets.</div>
+      <p class="settings-hint">Se validan unidades, objetivos, custodia, liquidez y políticas antes de la publicación. El resultado queda registrado en 01_CONTROL, 10_HISTORIAL y 18_SETTINGS_AUDITORIA. KairosGPT leerá el cambio en su próxima ejecución.</p>
     </div>
   </div>
 </section>
+<script defer src="{{ url_for('static',filename='settings_format.js') }}"></script>
 <script defer src="{{ url_for('static',filename='settings_master.js') }}"></script>
 {% endblock %}

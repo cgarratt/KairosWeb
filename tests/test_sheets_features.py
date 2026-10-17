@@ -60,13 +60,13 @@ class SettingsTests(unittest.TestCase):
             prepare_changes(demo_master(),'targets',[{'token':'BTC','target':.1,'tier':'T1'}],evidence='Aprobación 2026')
     def test_units_keep_snapshot_cost_consistency(self):
         _,state=prepare_changes(demo_master(),'units',[
-            {'token':'ETH','hodl':0,'core':.5,'exchange':1,'average_cost':2}
+            {'token':'ETH','hodl':0,'core':.5,'exchange':1,'investment_total':3}
         ],evidence='Fill confirmado y conciliado',as_of_date='2026-10-17')
         assert state['snapshot']['holdings_total']['ETH']==1.5
         assert state['cost_basis']['ETH']==2
     def test_units_require_date_and_evidence(self):
         with self.assertRaises(SettingsError):
-            prepare_changes(demo_master(),'units',[{'token':'ETH','hodl':0,'core':0,'exchange':1,'average_cost':1}],evidence='Cambio 123')
+            prepare_changes(demo_master(),'units',[{'token':'ETH','hodl':0,'core':0,'exchange':1,'investment_total':1}],evidence='Cambio 123')
     def test_liquidity_reconciled_without_qf_double_count(self):
         _,state=prepare_changes(demo_master(),'liquidity',[{'venue':'Binance','usdt':50}],evidence='Ajuste conciliado 2026',as_of_date='2026-10-17')
         assert state['snapshot']['physical_total_USDT']==60

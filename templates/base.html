@@ -6,6 +6,7 @@
   <title>{% block title %}KairosWeb{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='kairos-horizon.svg') }}">
   <meta name="theme-color" content="#103d88">
+  <script>try{document.documentElement.dataset.theme=localStorage.getItem("kairosweb-theme")==="dark"?"dark":"light";}catch(e){document.documentElement.dataset.theme="light";}</script>
   <style>
     :root{--bg:#f4f8fc;--panel:#ffffff;--line:#dbe6f2;--text:#102443;--muted:#607792;--blue:#103d88;--blue2:#3293df;--green:#1fa67a;--red:#c4465a;--amber:#d58d18;--soft:#eef4fb;--shadow:0 10px 24px rgba(14,28,61,.08)}
     *{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:linear-gradient(180deg,#f8fbff 0%,var(--bg) 100%);color:var(--text)}a{text-decoration:none;color:inherit}
@@ -69,6 +70,7 @@
   th[aria-sort="ascending"],th[aria-sort="descending"]{color:#1958a2}
   </style>
   <link rel="stylesheet" href="{{ url_for('static',filename='alerts_settings.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static',filename='theme.css') }}">
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -91,16 +93,19 @@
       </div>
       <div class="right-tools">
         <div class="alerts-wrap">
-          <button type="button" class="tool-icon" id="bell-open" aria-label="Notificaciones históricas no leídas" aria-expanded="false" aria-controls="alerts-popover" title="Alertas 1H de KairosGPT">
+          <button type="button" class="tool-icon" id="bell-open" aria-label="Notificaciones históricas no leídas" aria-expanded="false" aria-controls="alerts-popover" title="Alertas Kairos">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></svg>
             <span id="bell-count" class="bell-count" hidden>0</span>
           </button>
           <div class="alerts-popover" id="alerts-popover" hidden>
-            <div class="alerts-head"><strong>Alertas 1H · No leídas</strong><button type="button" id="alerts-refresh" class="tiny-control">Actualizar</button></div>
+            <div class="alerts-head"><strong>Alertas Kairos</strong><div class="settings-buttons"><button type="button" id="alerts-read-all" class="tiny-control" disabled>Marcar todas como leídas</button><button type="button" id="alerts-refresh" class="tiny-control">Actualizar</button></div></div>
             <p class="alerts-caption">Histórico KairosGPT en Google Sheets. WATCH o PRECONFIRMADO no representan órdenes.</p>
             <div id="alerts-list" class="alerts-list" aria-live="polite">Consultando…</div>
           </div>
         </div>
+        <button type="button" class="tool-icon" data-theme-toggle title="Cambiar tema" aria-label="Activar tema oscuro" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.4A8.3 8.3 0 0 1 8.6 3.5a8.5 8.5 0 1 0 11.9 11.9Z"/></svg>
+        </button>
         <a class="tool-icon {{ 'active' if request.path == '/settings' else '' }}" href="{{ url_for('settings_page') }}" aria-label="Configuración de KairosWeb" title="Configuración y mantenimiento del Master">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 3 .6 2.1c.6.2 1.1.5 1.6.9L14 5l2 2-1 2.3c.4.5.7 1 .9 1.6L18 11v3l-2.1.6c-.2.6-.5 1.1-.9 1.6l1 2.3-2 2-2.3-1c-.5.4-1 .7-1.6.9L9.5 22h-3l-.6-2.1c-.6-.2-1.1-.5-1.6-.9l-2.3 1-2-2 1-2.3c-.4-.5-.7-1-.9-1.6L-2 14v-3l2.1-.6c.2-.6.5-1.1.9-1.6L0 6.5l2-2 2.3 1c.5-.4 1-.7 1.6-.9L6.5 3Z" transform="translate(3,0)"/><circle cx="11" cy="12.5" r="3"/></svg>
         </a>
@@ -116,5 +121,6 @@
   </div>
   <script defer src="{{ url_for('static', filename='table_sort.js') }}"></script>
   <script defer src="{{ url_for('static', filename='alert_bell.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='theme.js') }}"></script>
 </body>
 </html>

@@ -1,0 +1,50 @@
+(function (root) {
+  'use strict';
+  const fractionKeys = new Set(['STRUCTURAL_USDT_TARGET','C1_BAG_FRACTION_P','C2_BAG_FRACTION_P',
+    'O3_BTC_PROCEEDS_FRACTION','O3_USDT_PROCEEDS_FRACTION',
+    'O5_BTC_PROCEEDS_FRACTION','O5_USDT_PROCEEDS_FRACTION',
+    'ORDINARY_DEFAULT_USDT_TARGET','QF_MARGIN_CAP_PER_POSITION',
+    'QF_ACCOUNT_RISK_PER_TRADE','QF_ACCOUNT_RISK_TOTAL','PROXIMITY_BAND']);
+  const percentDirectKeys=new Set(['TRIGGER_STRICT_GT']);
+  const labels={DRIFT_BAND_PP:'Tolerancia de desvío del Balancer',STRUCTURAL_USDT_TARGET:'Objetivo estructural de liquidez',C1_BAG_FRACTION_P:'Presupuesto C1',C2_BAG_FRACTION_P:'Presupuesto C2',
+    O3_BTC_PROCEEDS_FRACTION:'Ventas O3: proporción destinada a BTC',O3_USDT_PROCEEDS_FRACTION:'Ventas O3: proporción mantenida en USDT',
+    O5_BTC_PROCEEDS_FRACTION:'Ventas O5: proporción propuesta para BTC',O5_USDT_PROCEEDS_FRACTION:'Ventas O5: proporción mantenida en USDT',
+    O5_STAGED_TRANCHES:'Tramos de venta de O5',ORDINARY_DEFAULT_USDT_TARGET:'Meta USDT en ventas ordinarias',
+    RISK_REWARD_MIN:'Relación recompensa/riesgo mínima',QF_MARGIN_CAP_PER_POSITION:'Margen máximo por posición QF',
+    QF_ACCOUNT_RISK_PER_TRADE:'Riesgo máximo por operación QF',QF_ACCOUNT_RISK_TOTAL:'Riesgo agregado máximo QF',
+    MAX_LEVERAGE:'Apalancamiento máximo',MAX_OPEN_POSITIONS:'Número máximo de posiciones QF',
+    TRIGGER_STRICT_GT:'Umbral de activación BSI',PROXIMITY_BAND:'Distancia de proximidad para alertas'};
+  function scale(entry){const k=entry.key||'';
+    if(k==='DRIFT_BAND_PP')return 'pp';
+    if(percentDirectKeys.has(k))return 'percent-direct';
+    if(fractionKeys.has(k)||String(entry.unit||'').includes('fraction'))return 'fraction';
+    if(k==='O5_STAGED_TRANCHES')return 'percent-list';
+    return 'raw';
+  }
+  function toDisplay(value,entry){if(value===null||value===undefined)return '';
+    const s=scale(entry);
+    if(s==='fraction')return String(Number((Number(value)*100).toPrecision(12)));
+    if(s==='percent-list')return String(value).split(',').map(x=>x.trim()+'%').join(' · ');
+    return String(value);
+  }
+  function fromDisplay(value,entry){const kind=scale(entry);const v=String(value).trim().replace(/%/g,'').replace(',','.');
+    if(kind==='percent-list'){
+      const xs=String(value).split(/[,;·]/).map(x=>x.replace(/%/g,'').trim());
+      if(xs.length!==4||xs.some(x=>!/^\d+(?:\.\d+)?$/.test(x)))throw Error('Cuatro porcentajes obligatorios');
+      if(Math.abs(xs.reduce((a,x)=>a+Number(x),0)-100)>0.000001)throw Error('Los cuatro tramos deben sumar 100%');
+      if(xs.some(x=>!Number.isInteger(Number(x))))throw Error('Tramos O5 deben ser porcentajes enteros');
+      return xs.join(',');
+    }
+    if(!v||!/^\d+(?:\.\d+)?$/.test(v))throw Error('Número no válido');
+    const n=Number(v);
+    if(!Number.isFinite(n))throw Error('Valor no finito');
+    if(kind==='fraction' || kind==='percent-direct'){
+      if(n>100)throw Error('Porcentaje no puede superar 100%');
+      return kind==='fraction'?n/100:n;
+    }
+    return n;
+  }
+  const api={scale,toDisplay,fromDisplay,labels};
+  if(typeof module!=='undefined'&&module.exports)module.exports=api;
+  root.KairosFormatting=api;
+})(typeof window!=='undefined'?window:globalThis);

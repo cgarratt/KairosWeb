@@ -94,7 +94,7 @@ def _header_records(rows):
     return [{k:(r[i] if i<len(r) else None) for i,k in enumerate(keys) if k} for r in rows[1:] if r and r[0]]
 
 
-def alert_inbox(blocks):
+def alert_inbox(blocks, limit=150):
     """ONLY 1H runs, unread event IDs. WATCH != order/confirmed alert."""
     runs={r.get('corrida_id'):r for r in _header_records(blocks['runs']) if str(r.get('marco','')).upper()=='1H'}
     seen={str(r.get('evento_id','')) for r in _header_records(blocks['receipts']) if r.get('leido_utc')}
@@ -119,7 +119,7 @@ def alert_inbox(blocks):
                        'is_trade_ready':False})
     result.sort(key=lambda x:(x['created_utc'],x['id']),reverse=True)
     return {'status':'OK','source':'KAIROSGPT_GOOGLE_SHEETS','scope':'UNREAD_1H_HISTORICAL',
-            'unread_count':len(result),'records':result[:150], 'limited':len(result)>150}
+            'unread_count':len(result),'records':result[:limit] if limit is not None else result, 'limited':limit is not None and len(result)>limit}
 
 
 def unread_alerts():
@@ -147,6 +147,27 @@ def mark_alert_read(event_id):
         _api('POST',':batchUpdate',write=True,payload={'requests':[request]})
         return {'status':'OK','id':event_id,'read_utc':now}
 
+
+
+def mark_all_alerts_read():
+    """One idempotent receipt batch for all historical unread 1H events, never 4H."""
+    with WRITE_LOCK:
+        blocks=read_ranges(INBOX_SHEETS)
+        unread=alert_inbox(blocks,limit=None)['records']
+        if not unread:
+            return {'status':'OK','marked':0,'already_read':True}
+        if len(unread)>1800:
+            raise SettingsError('Demasiados eventos; revisar el rango histórico antes de confirmar lectura')
+        now=datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
+        sheet_ids=_sheet_ids()
+        if '17_ALERTAS_LECTURAS' not in sheet_ids:raise SettingsError('Falta hoja de lecturas')
+        rows=[]
+        for e in unread:
+            row=[e['id'],now,'KairosWeb','LEIDO','1H']
+            rows.append({'values':[{'userEnteredValue':{'stringValue':v}} for v in row]})
+        _api('POST',':batchUpdate',write=True,payload={'requests':[{'appendCells':{
+            'sheetId':sheet_ids['17_ALERTAS_LECTURAS'],'rows':rows,'fields':'userEnteredValue'}}]})
+        return {'status':'OK','marked':len(rows),'read_utc':now}
 
 def _sheet_ids():
     response=_api('GET','',params={'fields':'sheets(properties(sheetId,title))'})
@@ -221,13 +242,13 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
             if token not in positions:raise SettingsError('Token no permitido')
             row=positions[token]
             if category=='units':
-                vals=[_numeric(x.get(k),k) for k in ('hodl','core','exchange','average_cost')]
-                units=sum(vals[:3]);cost=units*vals[3]
-                if units<=0:raise SettingsError('No puede quedar activo con unidades totales cero')
+                vals=[_numeric(x.get(k),k) for k in ('hodl','core','exchange','investment_total')]
+                units=sum(vals[:3]);cost=vals[3]
+                if units<=0:raise SettingsError('No puede quedar un activo con unidades totales cero; conservar integridad de costo medio')
                 for col,val in [(4,vals[0]),(5,vals[1]),(6,vals[2]),(9,cost),(13,units),(10,as_of_date),(11,'KairosWeb Settings · '+evidence.strip()[:95])]:
                     change('positions',row,col,val)
                 # For the preview only: formulas recompute asynchronously in Sheets.
-                _set(b,'positions',row,7,units);_set(b,'positions',row,8,vals[3]);_set(b,'positions',row,12,'OK')
+                _set(b,'positions',row,7,units);_set(b,'positions',row,8,cost/units if units else 0);_set(b,'positions',row,12,'OK')
             elif category=='targets':
                 tier=x.get('tier');target=_numeric(x.get('target'), 'target')
                 if tier not in ('T1','T2','T3') or target>1:raise SettingsError('Tier o target inválido')
@@ -316,10 +337,10 @@ def settings_data():
     raw=_remote_data();state=parse_master(raw)
     def rows(name):return raw[SHEETS[name]]
     positions=[{'token':r[0],'tier':r[2],'target':r[3],'hodl':r[4],
-                'core':r[5],'exchange':r[6],'average_cost':r[8]} for r in rows('positions')[1:] if r and r[0] in state['tokens']]
+                'core':r[5],'exchange':r[6],'investment_total':r[9],'total_units':r[7], 'average_cost':r[8]} for r in rows('positions')[1:] if r and r[0] in state['tokens']]
     liquidity=[{'venue':r[0],'usdt':r[1],'classification':r[2]} for r in rows('liquidity')[1:] if len(r)>2 and r[2] in ('OPERATIVO','TRADING_QF')]
     custody=[{'tier':r[0],'hodl':r[1],'core':r[2],'exchange':r[3]} for r in rows('custody')[1:] if r and r[0] in ('T1','T2','T3')]
-    params=[{'key':r[1],'module':r[0],'value':r[2],'unit':r[4], 'status':r[5]} for r in rows('parameters')[1:] if len(r)>5 and r[1] in EDITABLE_PARAM_KEYS]
+    params=[{'key':r[1],'module':r[0],'value':r[2],'unit':r[4], 'type':r[3], 'status':r[5], 'module_name':r[0], 'description':r[8] if len(r)>8 else '', 'source':r[7] if len(r)>7 else ''} for r in rows('parameters')[1:] if len(r)>5 and r[1] in EDITABLE_PARAM_KEYS]
     pivots=[{'token':r[0],'cycle_low':r[1] if len(r)>1 else None,
              'o1':r[3] if len(r)>3 else None,'o2':r[5] if len(r)>5 else None,
              'o3':r[7] if len(r)>7 else None,'o4':r[8] if len(r)>8 else None,'o5':r[9] if len(r)>9 else None,
@@ -335,7 +356,7 @@ def settings_data():
 def save_changes(data):
     """One atomic Sheets batch. Preview again under lock, reject stale snapshot ID."""
     expected=data.get('expected_snapshot_id');category=data.get('section');entries=data.get('entries')
-    evidence=data.get('evidence');as_of_date=data.get('as_of_date')
+    evidence=data.get('evidence');as_of_date=(datetime.now(timezone.utc).astimezone(__import__('zoneinfo').ZoneInfo('America/Lima')).date().isoformat() if category in ('units','liquidity') else None)
     with WRITE_LOCK:
         raw=_remote_data();current=parse_master(raw)
         if expected!=current['control']['snapshot_id']:

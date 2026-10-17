@@ -1,0 +1,57 @@
+/* Shared light/dark theme. Preference is local to the browser, never financial data. */
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0b1425;--panel:#15243b;--line:#344662;--text:#eef4ff;
+  --muted:#adbed5;--blue:#276cbd;--blue2:#5ba6f0;--green:#3ed9aa;
+  --red:#f17c8b;--amber:#f2bd64;--soft:#1c304c;
+  --shadow:0 12px 30px rgba(0,0,0,.3);
+}
+:root[data-theme="dark"] body{background:linear-gradient(180deg,#101f36 0%,var(--bg) 100%);color:var(--text)}
+:root[data-theme="dark"] .panel,:root[data-theme="dark"] .alerts-popover{background:var(--panel);border-color:var(--line);color:var(--text)}
+:root[data-theme="dark"] .kpi,:root[data-theme="dark"] .mode-card{background:linear-gradient(180deg,#1b304d,#14223a);border-color:var(--line)}
+:root[data-theme="dark"] .chip,:root[data-theme="dark"] .btn:not(.primary),:root[data-theme="dark"] .global-nav-link:not(.active),
+:root[data-theme="dark"] .tab-link:not(.active),:root[data-theme="dark"] .tool-icon,
+:root[data-theme="dark"] .settings-tab:not(.selected),:root[data-theme="dark"] .tiny-control{background:#203552;color:#f0f6ff;border-color:var(--line)}
+:root[data-theme="dark"] .tool-icon:hover,:root[data-theme="dark"] .tiny-control:hover{background:#284b72}
+:root[data-theme="dark"] .settings-field input,:root[data-theme="dark"] .settings-field select,
+:root[data-theme="dark"] .settings-form input,:root[data-theme="dark"] .admin-login-form input{background:#0f1d31;border-color:#3e5371;color:#f3f7ff}
+:root[data-theme="dark"] .settings-row{border-color:#334764}
+:root[data-theme="dark"] .alert-record,:root[data-theme="dark"] .settings-msg,:root[data-theme="dark"] .settings-total-panel,
+:root[data-theme="dark"] .settings-theme-box,:root[data-theme="dark"] .callout,
+:root[data-theme="dark"] .callout.info,:root[data-theme="dark"] .callout.warn,:root[data-theme="dark"] .callout.danger{background:#1e314c;border-color:#415575;color:#e4edfb}
+:root[data-theme="dark"] .alert-token,:root[data-theme="dark"] .alert-action,:root[data-theme="dark"] .settings-tab.selected{color:#fff}
+:root[data-theme="dark"] .alert-meta,:root[data-theme="dark"] .settings-field label,
+:root[data-theme="dark"] .settings-key,:root[data-theme="dark"] .settings-hint,
+:root[data-theme="dark"] .parameter-description,:root[data-theme="dark"] th{color:#b6c7e0}
+:root[data-theme="dark"] td,:root[data-theme="dark"] th{border-color:#344766}
+:root[data-theme="dark"] .bar-track,:root[data-theme="dark"] .tier-track{background:#324765}
+:root[data-theme="dark"] .donut-layout .portfolio-donut-center,:root[data-theme="dark"] .mode-donut span{background:#182943;color:#eaf3ff}
+:root[data-theme="dark"] .badge.info,:root[data-theme="dark"] .tiny-badge{background:#24496e;color:#d1eaff}
+:root[data-theme="dark"] .badge.warn,:root[data-theme="dark"] .alert-flag{background:#594427;color:#ffdb97}
+:root[data-theme="dark"] .alert-flag.unverified,:root[data-theme="dark"] .badge.danger{background:#5c343b;color:#ffb8b7}
+:root[data-theme="dark"] .list li{color:#c2d2e8}
+:root[data-theme="dark"] .settings-total-panel strong{color:#eaf4ff}
+/* Improve dark presentation on charts and muted details without changing data charts. */
+:root[data-theme="dark"] .chart-panel,:root[data-theme="dark"] .metric-card{background:var(--panel);color:var(--text)}
+:root[data-theme="dark"] .coin-icon,:root[data-theme="dark"] .logo{background:#dceefe}
+:root[data-theme="dark"] .settings-field input:focus,:root[data-theme="dark"] .settings-form input:focus{outline:2px solid #5ba6f0;outline-offset:1px}
+.settings-total-panel{display:flex;flex-wrap:wrap;gap:14px;margin:14px 0;border:1px solid var(--line);border-radius:12px;padding:13px;background:#f3f8ff;color:var(--text);align-items:center}
+.settings-total-panel strong{font-size:15px;color:#163961}.settings-total-panel span{font-size:12px}
+.settings-row.units{grid-template-columns:115px repeat(6,minmax(108px,1fr));}
+.settings-row.pivots{grid-template-columns:110px repeat(4,minmax(90px,1fr));}
+.settings-row .token-name{display:block}
+.settings-key{display:block;font-size:10px;font-weight:500;color:var(--muted);margin-top:4px}
+.parameter-description{color:var(--muted);font-size:12px;line-height:1.4;margin:6px 0 8px}
+.settings-row.param{grid-template-columns:minmax(290px,1fr) minmax(145px,220px)}
+.settings-row .computed-value{display:block;padding:9px 0;font-size:13px}
+.settings-total-panel .valid-value,.valid-value{color:#0e9067}
+.settings-total-panel .invalid-value,.invalid-value{color:#c44a60}
+.settings-admin-state{display:flex;align-items:center;gap:12px;margin:10px 0}
+.settings-admin-link{color:#2676c9;text-decoration:underline;font-weight:700}
+.settings-theme-box{padding:14px;display:grid;gap:10px;border:1px solid var(--line);border-radius:12px;background:var(--soft);font-size:12px;color:var(--text)}
+.settings-theme-box label{display:flex;align-items:center;gap:6px}
+.pivot-candidate-hint{grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.5}
+.admin-login-form{display:grid;gap:15px;margin:18px 0;max-width:450px}
+.admin-login-form label{display:grid;gap:8px}.admin-login-form input{padding:12px;border:1px solid var(--line);border-radius:10px}
+@media(max-width:1100px){.settings-row.units,.settings-row.pivots{grid-template-columns:repeat(3,minmax(100px,1fr))}.settings-row.units .settings-token,.settings-row.pivots .settings-token{grid-column:1/-1}}
+@media(max-width:680px){.settings-row.units,.settings-row.pivots{grid-template-columns:repeat(2,minmax(120px,1fr))}.alerts-head{flex-wrap:wrap}.settings-row.param{grid-template-columns:1fr}.alerts-popover{width:min(450px,calc(100vw - 24px))}}
