@@ -446,7 +446,7 @@ def build_mode_payload(slug, d, observed):
         p=d['total_value']; cash=d['usdt_total']; trading=d['trading_reserve']
         max_percent=(100*max(0.0,cash-trading)/p) if p else 0.0
         reference_cap=max(0.0,cash-trading)
-        purchase_tokens=[{'token':r['token'],'price':r['price'],'weight':r['weight'],'target':r['target'],
+        purchase_tokens=[{'token':r['token'],'tier':r['tier'],'price':r['price'],'weight':r['weight'],'target':r['target'],
             'current_usdt':r['value'],'units':r['units'],
             'gap_usdt':max(0.0,(r['target']-r['weight'])*d['crypto_value']),
             'c1_price':O2_LEVELS['levels'].get(r['token'],{}).get('c1'),

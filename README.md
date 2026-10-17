@@ -185,3 +185,7 @@ Se eliminó el botón y panel de notificaciones del encabezado global, incluido 
 
 ## v4.2.9: Tablas ordenables
 Todas las tablas HTML de una sola fila de cabecera permiten alternar ascendente/descendente por columna, ordenando importes, porcentajes y texto sin consultas MCP adicionales. Las filas tfoot permanecen al final; las dos filas de cada token en la tabla de ondas Forecast se mantienen juntas. Las cabeceras agrupadas (multirow/colspan) se excluyen para evitar ordenar por columnas ambiguas.
+
+
+## v4.3.0 — Corrección HODL T1 Forecast
+El payload del backend incluye `tier` de cada token. Antes no lo hacía, causando la liquidación incorrecta del HODL en Post-O5. La simulación rechaza cualquier token sin Tier válido y comprueba que BTC/ETH/SOL/LINK/HYPE integren el registro de protección HODL.
