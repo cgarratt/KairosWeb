@@ -1,4 +1,4 @@
-"""Kairos Web v3.2: read-only dashboard and preliminary mode pages backed by approved MCPs."""
+"""Kairos Web 5.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
 import asyncio
 import json
 import os
@@ -13,32 +13,50 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from flask import Flask, Response, jsonify, render_template, request, abort, redirect
+from flask import Flask, Response, jsonify, render_template, request, abort, redirect, g
 from fastmcp import Client
 from forecast_math import derive_reference_anchors
+from werkzeug.local import LocalProxy
+from google_sheets_master import get_state, SheetDataError, cache_status as sheet_cache_status
+from hype_weekly import aggregate_weeks, HypeHistoryError
 
 BASE = Path(__file__).parent
 app = Flask(__name__)
-SNAPSHOT = json.loads((BASE / 'data/snapshot_master_2026-10-17.json').read_text())
-CONFIG = json.loads((BASE / 'data/config.json').read_text())
-BSI_ANCHORS = json.loads((BASE / 'data/bsi_anchors.json').read_text())
-COST_BASIS = json.loads((BASE / 'data/cost_basis_verified.json').read_text()).get('prices', {})
-O2_LEVELS = json.loads((BASE / 'data/o2_reference_levels.json').read_text())
-TOKENS = [r['symbol'] for r in CONFIG['universe']]
-TARGETS = {r['symbol']: r['target'] for r in CONFIG['universe']}
-TIERS = {r['symbol']: r['tier'] for r in CONFIG['universe']}
+# Bound to validated Google Sheets state, once per request.  No disk JSON source.
+SNAPSHOT=LocalProxy(lambda:g.kairos_state['snapshot'])
+COST_BASIS=LocalProxy(lambda:g.kairos_state['cost_basis'])
+O2_LEVELS=LocalProxy(lambda:g.kairos_state['o2_levels'])
+TOKENS=LocalProxy(lambda:g.kairos_state['tokens'])
+TARGETS=LocalProxy(lambda:g.kairos_state['targets'])
+TIERS=LocalProxy(lambda:g.kairos_state['tiers'])
+PARAMETERS=LocalProxy(lambda:g.kairos_state['parameters'])
+BSI_ARCHIVE=LocalProxy(lambda:g.kairos_state['bsi_archive'])
+INTEGRAL=LocalProxy(lambda:g.kairos_state['integral'])
+
+def approved_numeric(key):
+    row=PARAMETERS.get(key)
+    if not row or row['status'] not in ('APROBADO','APROBADO_CONDICIONAL'):
+        raise SheetDataError(f'12_PARAMETROS_KAIROS: {key} no aprobado')
+    return float(row['value'])
+
+def policy_numeric(key, allowed):
+    row=PARAMETERS.get(key)
+    if not row or row['status'] not in allowed:
+        raise SheetDataError(f'12_PARAMETROS_KAIROS: {key} not permitted')
+    return float(row['value'])
+
 MODE_DEFS = [
     {'slug':'portafolio','name':'Portafolio','subtitle':'Capital integral y rentabilidad histórica','description':'Seguimiento estratégico del capital base, capital vivo, pérdidas realizadas y objetivos por segmento.'},
     {'slug':'balancer','name':'Balancer','subtitle':'Rebalanceo y liquidez','description':'Propuestas de rebalanceo, control de piso de liquidez y protección de Core.'},
     {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Simulación de compras en dos etapas; referencias Fibonacci y tabla C1/C2 en Forecast.'},
     {'slug':'ventas','name':'Ventas','subtitle':'Objetivo USDT','description':'Propuestas solo SELL para acercarse a la meta de liquidez y reducir sobrepeso.'},
-    {'slug':'tradingbot','name':'TradingBot','subtitle':'Táctico 4H','description':'Vista táctica preliminar para la reserva de trading y activos de seguimiento.'},
     {'slug':'forecast','name':'Forecast','subtitle':'Cycle Low → O5','description':'Tabla de niveles Fibonacci C1/C2 y ondas/pivotes proyectados; todo es simulación.'},
+    {'slug':'tradingbot','name':'TradingBot','subtitle':'Táctico 4H','description':'Vista táctica preliminar para la reserva de trading y activos de seguimiento.'},
 ]
 MODES_BY_SLUG = {m['slug']: m for m in MODE_DEFS}
 # Short TTL protects the MCP service from 10 simultaneous page loads, without
 # ever labeling cached observations as real-time without their original time.
-_MARKET_CACHE = {'stored': 0.0, 'observed': None, 'dashboard': None}
+_MARKET_CACHE = {'stored': 0.0, 'observed': None, 'prices': None}
 _MARKET_LOCK = threading.Lock()
 _FETCH_LOCK = threading.Lock()
 CACHE_TTL_SECONDS = 30
@@ -58,6 +76,25 @@ def authenticate():
     username = os.getenv('KAIROS_WEB_USER', 'kairos')
     if not auth or not secrets.compare_digest(auth.username or '', username) or not secrets.compare_digest(auth.password or '', password):
         return Response('Autenticación requerida', 401, {'WWW-Authenticate':'Basic realm="Kairos Web"', 'Cache-Control':'no-store'})
+
+@app.before_request
+def bind_published_sheet():
+    # The health and diagnostics endpoints remain reachable during source outages.
+    independent={'/health','/api/mcp-status','/api/mcp-config-check','/api/mcp-diagnostics',
+                 '/api/notifications','/api/notifications/ingest','/api/notifications/bridge-status',
+                 '/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status'}
+    if request.path in independent or request.path.startswith('/static/'):
+        return None
+    try:
+        g.kairos_state=get_state()
+        return None
+    except Exception as exc:
+        incident=uuid.uuid4().hex[:10]
+        app.logger.error('Kairos Sheets DATA_ERROR id=%s class=%s',incident,type(exc).__name__)
+        msg='Google Sheets Master no disponible o no cumple el contrato PUBLICADO v5.0. No se utilizan snapshots locales.'
+        if request.path.startswith('/api/'):
+            return jsonify({'status':'DATA_ERROR','origin':'GOOGLE_SHEETS','reason':msg,'error_id':incident}),503
+        return render_template('sheet_error.html',master='5.0.0',error_id=incident,message=msg),503
 
 @app.after_request
 def headers(resp):
@@ -209,24 +246,22 @@ def custody_summary(prices):
     return sums
 
 def historical_bsi(prices):
-    btc=prices['BTC']
-    btc_base=float(BSI_ANCHORS['btc_base_price'])
+    # This is an archived 4H-synchronized MCP sample, NOT a live BSI signal.
+    # Do NOT mix old TradingView anchors with current Binance quotes for trading.
+    archive=list(BSI_ARCHIVE)
     out=[]
-    for symbol in TOKENS:
-        ticker='PUMP' if symbol=='PUMPFUN' else symbol
-        if symbol=='BTC':
-            continue
-        anchor=BSI_ANCHORS.get('assets',{}).get(symbol)
-        if not anchor or not anchor.get('price'):
-            out.append({'token':ticker,'bsi':None,'status':'NO_ANCHOR'})
-            continue
-        base=float(anchor['price'])
-        bsi=100*((prices[ticker]/base)/(btc/btc_base)-1)
-        out.append({'token':ticker,'bsi':round(bsi,2),'status':'HISTORICAL_ONLY'})
+    for row in archive:
+        if row['token']=='BTC':continue
+        try: value=float(row['sample_bsi']) if row['sample_bsi'] is not None else None
+        except (TypeError,ValueError): value=None
+        out.append({'token':row['token'],'bsi':round(value,2) if value is not None else None,
+                    'status':'MCP_ARCHIVE_INFO_ONLY'})
     return {'status':'INFORMATIVE_ONLY','anchor_date':'2026-10-05',
-            'basis':'Spot Binance USDT actual vs anclas históricas TradingView USD/USDT (aproximación de paridad)',
-            'signals_enabled':False,'note':'No es una señal de venta. La monetización necesita baseline certificado, HWM y cierres sincronizados.',
-            'rows':sorted(out,key=lambda x: (x['bsi'] is None,-(x['bsi'] or 0)))}
+            'basis':'Muestra MCP histórica 4H archivada en Google Sheets (candidata, no homologada)',
+            'sample_close_utc':archive[0]['sample_close_utc'] if archive else None,
+            'signals_enabled':False,
+            'note':'BSI SELL BLOQUEADO: anclas, baseline y HWM monetizado sin certificar.',
+            'rows':sorted(out,key=lambda x:(x['bsi'] is None,-(x['bsi'] or 0)))}
 
 def forecast_sensitivity(rows, usdt):
     btc_value=next((r['value'] for r in rows if r['token']=='BTC'),0.0)
@@ -270,7 +305,8 @@ def core_dashboard(prices):
     for row in rows:
         row['weight']=row['value']/portfolio_crypto if portfolio_crypto else 0
         row['drift_pp']=(row['weight']-row['target'])*100
-        row['status']='SOBRE' if row['drift_pp']>1 else 'INFRA' if row['drift_pp']< -1 else 'OK'
+        band=approved_numeric('DRIFT_BAND_PP')
+        row['status']='SOBRE' if row['drift_pp']>band else 'INFRA' if row['drift_pp'] < -band else 'OK'
     liquidity=SNAPSHOT['physical_total_USDT']
     trading=SNAPSHOT['trading_real_fixed_USDT']
     total_value = portfolio_crypto+liquidity
@@ -284,10 +320,10 @@ def core_dashboard(prices):
         'usdt_pct':liquidity/total_value if total_value else 0,
         'crypto_pct':portfolio_crypto/total_value if total_value else 0,
         'snapshot_date':SNAPSHOT['units_snapshot_as_of'],
-        'note':'Unidades y USDT del snapshot Master 15/10/2026. No se leen balances privados de exchanges.',
+        'note':f"Google Sheets PUBLICADO {g.kairos_state['control']['snapshot_id']} · Corte {SNAPSHOT['units_snapshot_as_of']}. No se leen balances privados de exchanges.",
         'liquidity_venues':SNAPSHOT['liquidity_venues_USDT'],
-        'liquidity_floor_usdt':total_value*0.40,
-        'liquidity_headroom_usdt':liquidity-total_value*0.40,
+        'liquidity_floor_usdt':total_value*approved_numeric('STRUCTURAL_USDT_TARGET'),
+        'liquidity_headroom_usdt':liquidity-total_value*approved_numeric('STRUCTURAL_USDT_TARGET'),
         'custody_summary':custody_summary(prices),
         'profitability': portfolio_profitability(rows),
         'bsi_historical':historical_bsi(prices),
@@ -296,8 +332,8 @@ def core_dashboard(prices):
 
 def _load_live_dashboard_uncached():
     with _MARKET_LOCK:
-        if _MARKET_CACHE['dashboard'] is not None and (time.monotonic() - _MARKET_CACHE['stored']) < CACHE_TTL_SECONDS:
-            return _MARKET_CACHE['observed'], _MARKET_CACHE['dashboard']
+        if _MARKET_CACHE['prices'] is not None and (time.monotonic() - _MARKET_CACHE['stored']) < CACHE_TTL_SECONDS:
+            return _MARKET_CACHE['observed'], core_dashboard(dict(_MARKET_CACHE['prices']))
     # Shared resilient fetch with fresh session for each transient gateway failure.
     data = call_mcp_resilient('BINANCE_MCP_URL', 'get_kairos_spot_prices')
     if data.get('status') != 'OK':
@@ -324,7 +360,7 @@ def _load_live_dashboard_uncached():
         raise RuntimeError('Stale MCP data')
     dashboard=core_dashboard(prices)
     with _MARKET_LOCK:
-        _MARKET_CACHE.update(stored=time.monotonic(), observed=observed, dashboard=dashboard)
+        _MARKET_CACHE.update(stored=time.monotonic(), observed=observed, prices=dict(prices))
     return observed, dashboard
 
 def load_live_dashboard():
@@ -348,16 +384,17 @@ def bar_card(title, subtitle, items):
 
 def build_mode_payload(slug, d, observed):
     rows = sorted(d['rows'], key=lambda x: x['value'], reverse=True)
-    under = top_n(rows, key=lambda r: r['drift_pp'], n=6, reverse=False, predicate=lambda r: r['drift_pp'] < -1)
-    over = top_n(rows, key=lambda r: r['drift_pp'], n=6, reverse=True, predicate=lambda r: r['drift_pp'] > 1)
+    band=approved_numeric('DRIFT_BAND_PP')
+    under = top_n(rows, key=lambda r: r['drift_pp'], n=6, reverse=False, predicate=lambda r: r['drift_pp'] < -band)
+    over = top_n(rows, key=lambda r: r['drift_pp'], n=6, reverse=True, predicate=lambda r: r['drift_pp'] > band)
     sellable_over = [r for r in over if r['token'] != 'BTC']
     bsi_rows = [r for r in d['bsi_historical']['rows'] if r['bsi'] is not None]
     top_bsi = sorted(bsi_rows, key=lambda x: x['bsi'], reverse=True)[:6]
     top_pos = rows[0]
     top3_conc = sum(r['weight'] for r in rows[:3])
     usdt_gap = d['liquidity_floor_usdt'] - d['usdt_total']
-    c1_budget = d['total_value'] * 0.15
-    c2_budget = d['total_value'] * 0.10
+    c1_budget = d['total_value'] * approved_numeric('C1_BAG_FRACTION_P')
+    c2_budget = d['total_value'] * approved_numeric('C2_BAG_FRACTION_P')
     deficits = [abs(r['drift_pp']) for r in under]
     deficits_sum = sum(deficits) or 1
 
@@ -453,7 +490,7 @@ def build_mode_payload(slug, d, observed):
             'c2_price':O2_LEVELS['levels'].get(r['token'],{}).get('c2')}
             for r in d['rows']]
         purchase_current={'P':p,'cash':cash,'trading':trading,'cash_pct':d['usdt_pct']*100,
-             'floor':.40*p,'max_percent':max_percent,'reference_cap':reference_cap,
+             'floor':approved_numeric('STRUCTURAL_USDT_TARGET')*p,'max_percent':max_percent,'reference_cap':reference_cap,
              'crypto_value':d['crypto_value']}
     if slug == 'compras':
         return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
@@ -507,8 +544,8 @@ def build_mode_payload(slug, d, observed):
             sell_tokens.append({'token':r['token'],'price':r['price'],'weight':r['weight'],
                                 'target':r['target'],'exchange_units':exch,
                                 'max_usdt':min(excess,value), 'free_exchange_usdt':value,
-                                'overweight':r['drift_pp']>1})
-        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],'kind':'ventas','current':{'P':p,'cash':cash,'cash_pct':d['usdt_pct']*100,'floor':.40*p,'max_percent':max(70.0,d['usdt_pct']*100)},'tokens':sell_tokens, 'notes':['Solo SELL; BTC NEVER SELL. No se altera Core/HODL.','Slider desde liquidez actual hasta 70%; 40% es la selección inicial, no un límite de ventas.','Inventario disponible referencial: unidades declaradas en Exchange, SIN descontar SELL/LIMIT aún no reconciliadas.']}
+                                'overweight':r['drift_pp']>band})
+        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],'kind':'ventas','current':{'P':p,'cash':cash,'cash_pct':d['usdt_pct']*100,'floor':approved_numeric('STRUCTURAL_USDT_TARGET')*p,'max_percent':max(100*policy_numeric('SLIDER_MAX_SIMULATED_USDT_TARGET',{'APROBADO_SIMULACION'}),d['usdt_pct']*100)},'tokens':sell_tokens, 'notes':['Solo SELL; BTC NEVER SELL. No se altera Core/HODL.','Slider hasta la meta simulada configurada en Google Sheets; 40% no es límite del simulador.','Inventario referencial de Exchange; usuario declara 0 órdenes y 0 fills pendientes, sin certificación remota del exchange.']}
         needed = max(0.0, usdt_gap)
         sell_rows=[]
         for r in sellable_over:
@@ -540,9 +577,18 @@ def build_mode_payload(slug, d, observed):
         }
 
     if slug == 'tradingbot':
+        tb_policy={'reserve_usdt':d['trading_reserve'],
+            'max_loss_fraction':approved_numeric('QF_ACCOUNT_RISK_PER_TRADE'),
+            'max_margin_fraction':approved_numeric('QF_MARGIN_CAP_PER_POSITION'),
+            'max_risk_total_fraction':approved_numeric('QF_ACCOUNT_RISK_TOTAL'),
+            'max_positions':int(approved_numeric('MAX_OPEN_POSITIONS')),
+            'max_leverage':approved_numeric('MAX_LEVERAGE'),
+            'min_rr':approved_numeric('RISK_REWARD_MIN'),
+            'power_buying_reference':policy_numeric('QF_POWER_BUYING_REFERENCE',{'REFERENCIA_USUARIO_NO_BALANCE'})}
         watch = [r for r in rows if r['token'] in ('BTC','ETH','SOL','HYPE','LINK')]
         return {
             **common,
+            'tb_risk_policy':tb_policy,
             'metrics':[
                 {'label':'Reserva Trading','value':fmt_money(d['trading_reserve']),'help':'Bolsa separada de Quantfury','tone':'primary'},
                 {'label':'Activos watchlist','value':str(len(watch)),'help':'Núcleo táctico inicial','tone':'neutral'},
@@ -570,7 +616,7 @@ def build_mode_payload(slug, d, observed):
     if slug == 'alertas':
         alert_rows=[]
         for r in rows:
-            if abs(r['drift_pp']) > 1:
+            if abs(r['drift_pp']) > approved_numeric('DRIFT_BAND_PP'):
                 alert_rows.append([r['token'], 'Composición', f"{r['drift_pp']:+.1f} pp", 'Revisar peso vs target'])
         for r in top_bsi[:4]:
             if r['bsi'] > 20:
@@ -615,6 +661,9 @@ def build_mode_payload(slug, d, observed):
         return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
             'kind':'forecast', 'current':purchase_current,'tokens':purchase_tokens, 'custody':{('PUMP' if k=='PUMPFUN' else k):v for k,v in SNAPSHOT['custody_core_blocked__core_strategic__exchange'].items()}, 'cash_total':d['usdt_total'], 'trading_reserve':d['trading_reserve'],
             'pivot_rows':pivot_rows, 'o2_source':O2_LEVELS['source'],
+            'custody_policy':g.kairos_state['custody_policy'],
+            'c1_share':approved_numeric('C1_BAG_FRACTION_P')/(approved_numeric('C1_BAG_FRACTION_P')+approved_numeric('C2_BAG_FRACTION_P')),
+            'official_o5_split':approved_numeric('O5_BTC_PROCEEDS_FRACTION'),
             'reference_type':'O2_REFERENCES_RECONSTRUCTED_UNCERTIFIED',
             'notes':['38.2% y 78.2% son referencias SIN presupuesto: USDT $0.',
                'C1 (50%) y C2 (61.8%) utilizan una tabla O2 histórica, no pivotes recalculados en vivo.',
@@ -729,21 +778,24 @@ def balancer_report(d, observed):
     """
     rows=sorted(d['rows'],key=lambda r:r['value'],reverse=True)
     p=d['total_value']; cash=d['usdt_total']; crypto=d['crypto_value']
-    floor=.40*p
+    floor=approved_numeric('STRUCTURAL_USDT_TARGET')*p
     excess=max(0,cash-floor)
     gap=max(0,floor-cash)
-    c1=.15*p; c2=.10*p
+    c1=approved_numeric('C1_BAG_FRACTION_P')*p; c2=approved_numeric('C2_BAG_FRACTION_P')*p
     trading=d['trading_reserve']
     operational_25=c1+c2
     residual_after_bags=cash-operational_25-trading
-    # 5% P is the structural allocation. Formula requested by user displays
+    # The 5% P is a non-binding reference. Formula approved by the user displays
     # what remains in physical USDT after protecting C1+C2 and Trading.
+    if PARAMETERS['BALANCER_RESERVE_FORMULA']['status']!='APROBADO' or PARAMETERS['BALANCER_RESERVE_FORMULA']['value']!='MAX(0,USDT_TOTAL-0.25*P-QF_REAL)':
+        raise SheetDataError('Balancer formula has changed; engine revalidation required')
     reserve=max(0,residual_after_bags)
-    reserve_nominal=.05*p
+    reserve_nominal=policy_numeric('BALANCER_NOMINAL_REFERENCE_P',{'REFERENCIA_NO_TOPE'})*p
     # Indicative ONLY; actual commitments and reserved bags are not reconciled.
     theoretical_ceiling=max(0,min(excess,residual_after_bags,reserve+excess))
-    buy_candidates=[r for r in rows if r['drift_pp'] < -1]
-    sell_candidates=[r for r in rows if r['drift_pp'] > 1 and r['token']!='BTC']
+    band=approved_numeric('DRIFT_BAND_PP')
+    buy_candidates=[r for r in rows if r['drift_pp'] < -band]
+    sell_candidates=[r for r in rows if r['drift_pp'] > band and r['token']!='BTC']
     tokens_to_exchange={k:float(v[2]) for k,v in SNAPSHOT['custody_core_blocked__core_strategic__exchange'].items()}
     def free_declared(r):
         key='PUMPFUN' if r['token']=='PUMP' else r['token']
@@ -757,7 +809,7 @@ def balancer_report(d, observed):
         sale_preview.append({'token':r['token'],'value':value,'units':value/r['price'] if r['price'] else 0,
                              'weight':r['weight'],'target':r['target'],'drift':r['drift_pp']})
     sale_total=sum(r['value'] for r in sale_preview)
-    # Never allocate hypothetical BUY while consolidated USDT is below 40%.
+    # Hypothetical BUY uses the independent Balancer reserve; 40% is informational.
     current_cash_capacity=reserve
     projected_cash_capacity=reserve+sale_total
     buy_preview=[]
@@ -771,7 +823,7 @@ def balancer_report(d, observed):
     after_sell_crypto=max(0,crypto-sale_total)
     buy_weights={r['token']:(r['value']+next((x['value'] for x in buy_preview if x['token']==r['token']),0))/after_buy_crypto if after_buy_crypto else 0 for r in rows}
     sell_weights={r['token']:(r['value']-next((x['value'] for x in sale_preview if x['token']==r['token']),0))/after_sell_crypto if after_sell_crypto else 0 for r in rows}
-    return {'generated_at':observed,'snapshot_note':d['note'],'status_badge':'LIVE MCP',
+    return {'generated_at':observed,'snapshot_note':d['note'],'status_badge':'MCP Spot + Sheets PUBLICADO',
       'current':{'P':p,'cash':cash,'crypto':crypto,'floor':floor,'gap':gap,'excess':excess,
                  'reserve':reserve,'current_cash_capacity':current_cash_capacity,'projected_cash_capacity':projected_cash_capacity,'reserve_nominal':reserve_nominal,'residual_after_bags':residual_after_bags,'operational_25':operational_25,'c1':c1,'c2':c2,'trading':trading,
                  'operating':d['usdt_operating'],'buy_ceiling':theoretical_ceiling},
@@ -785,20 +837,20 @@ def balancer_report(d, observed):
       'buy_chart':[{'token':r['token'],'actual':r['weight']*100,'post':buy_weights[r['token']]*100,'target':r['target']*100} for r in buy_candidates],
       'sell_chart':[{'token':r['token'],'actual':r['weight']*100,'post':sell_weights[r['token']]*100,'target':r['target']*100} for r in sell_candidates],
       'buy_cash_after':cash-buy_total,'sell_cash_after':cash+sale_total,
-      'limitations':'Órdenes LIMIT/SELL pendientes, comisiones y reservas no reconciliadas: estas simulaciones NO son órdenes operativas.'}
+      'limitations':'0 órdenes abiertas y 0 fills pendientes declarados por usuario; libro privado de exchange no verificado. Simulación NO es orden ni fill.'}
 
 @app.route('/')
 def home():
-    return render_template('index.html', modes=MODE_DEFS, master='5.3.5')
+    return render_template('index.html', modes=MODE_DEFS, master='5.0.0')
 
 @app.route('/modes')
 def modes_page():
-    return render_template('modes.html', modes=MODE_DEFS, master='5.3.5')
+    return render_template('modes.html', modes=MODE_DEFS, master='5.0.0')
 
 @app.route('/mode/portafolio')
 def integral_portfolio_page():
     # Strategic historical ledger, deliberately independent of live crypto valuation.
-    values = json.loads((BASE / 'data/integral_portfolio_reference.json').read_text(encoding='utf-8'))
+    values = dict(INTEGRAL)
     base = values['historical_capital_usdt']
     segments = values['segments']
     alive = sum(x['actual_usdt'] for x in segments if x['key'] != 'lost')
@@ -816,10 +868,10 @@ def integral_portfolio_page():
         qf = live['trading_reserve']
         spot_breakdown = {'core':core_value,'exchange':exchange_value,
                           'liquidity':cash_total-qf,'trading':qf,
-                          'total':live['total_value'],'source':'Binance MCP + snapshot de unidades'}
+                          'total':live['total_value'],'source':'Binance MCP + Google Sheets PUBLICADO'}
     except Exception as exc:
         app.logger.info('Integral portfolio using historical ledger; live pricing unavailable: %s',type(exc).__name__)
-    return render_template('portfolio_integral.html', master='5.3.5', segments=segments,
+    return render_template('portfolio_integral.html', master='5.0.0', segments=segments,
                            base=base, alive=alive, lost=lost, gain_to_recover=gain_to_recover,
                            spot=spot_breakdown, spot_observed=spot_observed,
                            source_note=values['source_note'], total_recorded=sum(x['actual_usdt'] for x in segments),
@@ -836,15 +888,15 @@ def mode_page(slug):
         observed, dashboard = load_live_dashboard()
     except Exception as exc:
         diag = diagnostic_error(exc, f'mode:{slug}:market')
-        return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master='5.3.5'), 503
+        return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master='5.0.0'), 503
     try:
         payload = build_mode_payload(slug, dashboard, observed)
-        return render_template('balancer.html' if slug=='balancer' else 'trade_sim.html' if slug in ('compras','ventas') else 'forecast.html' if slug=='forecast' else 'tradingbot.html' if slug=='tradingbot' else 'mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master='5.3.5')
+        return render_template('balancer.html' if slug=='balancer' else 'trade_sim.html' if slug in ('compras','ventas') else 'forecast.html' if slug=='forecast' else 'tradingbot.html' if slug=='tradingbot' else 'mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master='5.0.0')
     except Exception as exc:
         error_id = uuid.uuid4().hex[:10]
         app.logger.exception('Kairos MODE_RENDER slug=%s ID=%s',slug,error_id)
         diag = {'code':'MODE_RENDER','error_id':error_id, 'message':'Error interno al generar el reporte del modo (no es un error MCP).'}
-        return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master='5.3.5'), 500
+        return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master='5.0.0'), 500
 
 
 # Alertas 1H + Quick Wins inbox. Never synthesizes notifications from price movement.
@@ -917,9 +969,14 @@ def tradingbot_candidates():
         return jsonify({'status':'OK','source':'Binance MCP','classification':'STRUCTURAL_SCREEN_NOT_QF_CERTIFIED',
                         'four_h':four,'one_h':one,'indicators_1h':indicators,
                         'risk_policy':{'reserve_usdt':float(SNAPSHOT['trading_real_fixed_USDT']),
-                            'max_margin_fraction':0.25,'max_loss_fraction':0.025,'aggregate_loss_fraction':0.10,
-                            'max_leverage':5,'min_rr':2,'max_positions':4},
-                        'qf_instrument_verified':False,'qf_open_positions_verified':False})
+                            'max_margin_fraction':approved_numeric('QF_MARGIN_CAP_PER_POSITION'),
+                            'max_loss_fraction':approved_numeric('QF_ACCOUNT_RISK_PER_TRADE'),
+                            'aggregate_loss_fraction':approved_numeric('QF_ACCOUNT_RISK_TOTAL'),
+                            'max_leverage':approved_numeric('MAX_LEVERAGE'),
+                            'min_rr':approved_numeric('RISK_REWARD_MIN'),
+                            'max_positions':int(approved_numeric('MAX_OPEN_POSITIONS')),
+                            'power_buying_reference':policy_numeric('QF_POWER_BUYING_REFERENCE',{'REFERENCIA_USUARIO_NO_BALANCE'})},
+                        'qf_instrument_verified':False,'qf_open_positions_verified':False,'tradingbot_state':'WATCH'})
     except Exception as exc:
         diag=diagnostic_error(exc,'tradingbot:ohlcv:'+symbol)
         return jsonify({'status':'DATA_ERROR','diagnostic':diag}),503
@@ -932,16 +989,18 @@ def notifications_bridge_status():
 
 @app.route('/health')
 def health():
-    return jsonify({'status':'UP','service':'Kairos Web','version':'4.1.9','snapshot_date':SNAPSHOT['units_snapshot_as_of']})
+    return jsonify({'status':'UP','service':'Kairos Web','version':'5.0.0','sheets_status':sheet_cache_status()})
 
 @app.route('/api/portfolio')
 def portfolio():
     try:
         observed, dashboard = load_live_dashboard()
-        return jsonify({'status':'OK', 'source':'Binance Spot MCP', 'observed_at':observed, **dashboard})
+        return jsonify({'status':'OK', 'source':'Binance Spot MCP + Google Sheets PUBLICADO',
+                    'snapshot_id':g.kairos_state['control']['snapshot_id'],
+                    'config_source':'12_PARAMETROS_KAIROS', 'observed_at':observed, **dashboard})
     except Exception as exc:
         diag = diagnostic_error(exc, 'portfolio')
-        return jsonify({'status':'DATA_ERROR','reason':diag['message'],'diagnostic':diag,'snapshot_date':SNAPSHOT['units_snapshot_as_of'], **market_cache_status()}), 503
+        return jsonify({'status':'DATA_ERROR','reason':diag['message'],'diagnostic':diag,**market_cache_status()}), 503
 
 @app.route('/api/market-status')
 def market_status_endpoint():
@@ -951,7 +1010,8 @@ def market_status_endpoint():
 def mcp_status():
     return jsonify({'binance_configured':bool(os.getenv('BINANCE_MCP_URL')),
                     'hyperliquid_configured':bool(os.getenv('HYPERLIQUID_MCP_URL')),
-                    'hyperliquid_usage':'Macro HYPE only; no Binance/HYPE price fallback'})
+                    'hyperliquid_usage':'Macro HYPE only; no Binance/HYPE price fallback',
+                    'google_sheets_configured':bool(os.getenv('KAIROS_GOOGLE_SERVICE_ACCOUNT_JSON') or os.getenv('GOOGLE_APPLICATION_CREDENTIALS'))})
 
 @app.route('/api/mcp-config-check')
 def mcp_config_check():
@@ -993,14 +1053,36 @@ def mcp_diagnostics():
 @app.route('/api/hype-macro')
 def hype_macro():
     try:
+        # Macro from closed native Spot HYPE/USDC days, aggregated ourselves to
+        # Monday-Sunday UTC full weeks; 1w provider candles may have another anchor.
         data=call_mcp_resilient('HYPERLIQUID_MCP_URL','get_hype_spot_ohlcv',
-                                  {'interval':'1w','start_date':'2024-11-29','limit':130})
-        if data.get('status') != 'OK':
-            raise RuntimeError('Hyperliquid DATA_ERROR')
-        return jsonify({'status':'OK','market':'HYPE/USDC spot, macro only','data':data})
+                                  {'interval':'1d','start_date':'2024-11-29','limit':1200})
+        weekly=aggregate_weeks(data)
+        return jsonify({'status':'OK','market':'HYPE/USDC Spot macro', 'data':weekly})
     except Exception as exc:
-        app.logger.warning('HYPE MCP error: %s', type(exc).__name__)
-        return jsonify({'status':'DATA_ERROR','reason':pretty_error(exc)}),503
+        app.logger.error('HYPE macro error type=%s', type(exc).__name__)
+        return jsonify({'status':'DATA_ERROR','origin':'HYPERLIQUID_MCP',
+                        'reason':'HYPE Spot 1D o semanas UTC completas no disponibles.'}),503
+
+@app.route('/api/sheets-status')
+def google_sheets_status():
+    # Does not reveal secrets, share names, or sheet values. Live read requested.
+    try:
+        state=get_state()
+        return jsonify({'status':'OK','source':'GOOGLE_SHEETS',
+                        'snapshot_id':state['control']['snapshot_id'],
+                        'published_utc':state['control']['publicado_utc'],
+                        'fecha_corte':state['control']['fecha_corte'],
+                        'schema_version':state['control']['schema_version'],
+                        'tokens':len(state['tokens']), 'parameter_count':len(state['parameters']),
+                        'o5_proceeds_split':{'BTC':state['parameters']['O5_BTC_PROCEEDS_FRACTION']['value'],
+                                              'USDT':state['parameters']['O5_USDT_PROCEEDS_FRACTION']['value']},
+                        'bsi_sell':'BLOQUEADO', 'tradingbot':'WATCH',
+                        'cache':sheet_cache_status()})
+    except Exception as exc:
+        app.logger.error('Sheets status failure type=%s',type(exc).__name__)
+        return jsonify({'status':'DATA_ERROR','origin':'GOOGLE_SHEETS',
+                        'reason':'Error de conexión, credenciales, publicación o integridad de Google Sheets.'}),503
 
 @app.route('/api/modes')
 def modes_api():

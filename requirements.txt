@@ -1,3 +1,5 @@
 Flask>=3.1,<4
 fastmcp>=2.12,<3
 Gunicorn>=23,<24
+google-auth>=2.35,<3
+requests>=2.31,<3

@@ -1,3 +1,11 @@
+# Kairos Web v5.0 — Google Sheets
+
+**Comenzar aquí:** [README_v5_GOOGLE_SHEETS.md](README_v5_GOOGLE_SHEETS.md).
+
+El contenido siguiente pertenece al historial de versiones anteriores; no sustituye el contrato v5:
+
+---
+
 # Kairos Web v4.0.2 — estabilidad de conexión MCP
 
 Parche sobre v4.0.1. Sin cambios de política de portafolio ni de interfaz.

@@ -11,19 +11,20 @@
 <label>Dirección<select id="tb-side"><option>LONG</option><option>SHORT</option></select></label>
 <label>Entrada USDT<input type="number" id="tb-entry" step="any" min="0" placeholder="Precio de entrada"></label>
 <label>SL · distancia %<input type="number" id="tb-risk" step="0.1" min="0.1" max="99" value="2"></label>
-<label>R:R objetivo (ej. 4 para 1:4)<input type="number" id="tb-rr" step="0.1" min="0.1" max="20" value="2"></label>
-<label>Poder de Trading QF (USDT)<input type="number" id="tb-power" step="100" min="0" value="40000"></label>
-<label>Posiciones simultáneas<input type="number" id="tb-slots" step="1" min="1" max="100" value="4"></label>
-<label>Apalancamiento (x)<input type="number" id="tb-leverage" step="0.5" min="1" max="5" value="5"></label></div>
+<label>R:R objetivo (ej. 4 para 1:4)<input type="number" id="tb-rr" step="0.1" min="0.1" max="20" value="{{ payload.tb_risk_policy.min_rr }}"></label>
+<label>Poder de Trading QF (USDT)<input type="number" id="tb-power" step="100" min="0" value="{{ payload.tb_risk_policy.power_buying_reference }}"></label>
+<label>Posiciones simultáneas<input type="number" id="tb-slots" step="1" min="1" max="100" value="{{ payload.tb_risk_policy.max_positions }}"></label>
+<label>Apalancamiento (x)<input type="number" id="tb-leverage" step="0.5" min="1" max="{{ payload.tb_risk_policy.max_leverage }}" value="{{ payload.tb_risk_policy.max_leverage }}"></label></div>
 <div class="tb-results"><div class="kpi"><div class="label">Stop Loss</div><div class="value" id="tb-sl">—</div></div><div class="kpi"><div class="label">Take Profit</div><div class="value" id="tb-tp">—</div></div><div class="kpi"><div class="label">Riesgo / beneficio</div><div class="value" id="tb-out-rr">—</div></div><div class="kpi"><div class="label">Tamaño de posición · exposición</div><div class="value" id="tb-size">—</div></div><div class="kpi"><div class="label">Margen teórico a x seleccionado</div><div class="value" id="tb-margin">—</div></div><div class="kpi"><div class="label">Pérdida / ganancia estimada</div><div class="value" id="tb-pnl">—</div></div></div>
-<p class="footer-note">QF: reserva real de referencia US$7,225, riesgo máximo US$180.63 por operación, margen máximo US$1,806.25; poder de trading US$40,000 y cuatro posiciones de US$10,000 de exposición cada una; apalancamiento 5x ajustable. El margen teórico es exposición / apalancamiento. La pérdida al SL se calcula sobre exposición, antes de spreads, comisiones, financiación y deslizamiento. No se ejecutan órdenes.</p></section>
+<p class="footer-note">QF: reserva real {{ payload.tb_risk_policy.reserve_usdt }} USDT (Google Sheets), pérdida máxima {{ (payload.tb_risk_policy.reserve_usdt * payload.tb_risk_policy.max_loss_fraction)|round(2) }} USDT por operación y margen máximo {{ (payload.tb_risk_policy.reserve_usdt * payload.tb_risk_policy.max_margin_fraction)|round(2) }} USDT. El poder de compra es una referencia histórica, no un saldo certificado. Apalancamiento limitado por la política de Sheets y condiciones reales QF. El margen teórico es exposición / apalancamiento. La pérdida al SL se calcula sobre exposición, antes de spreads, comisiones, financiación y deslizamiento. No se ejecutan órdenes.</p></section>
 <style>.tb-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}.tb-fields label{font-size:12px;font-weight:700;color:#456}.tb-fields input,.tb-fields select{display:block;width:100%;margin-top:7px;border:1px solid #cfddec;border-radius:9px;padding:10px;background:white;color:#17365b}.tb-results{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0}.tb-scroll{overflow:auto;margin-bottom:20px}.tb-long{color:#128760;margin-top:20px}.tb-short{color:#b93555}.tb-status{color:#496380;font-size:13px;padding-top:10px}.tb-check{font-size:11px;line-height:1.6}.tb-lamp{display:inline-flex;align-items:center;gap:3px;margin:2px 5px 2px 0;font-size:10px;white-space:nowrap}.tb-lamp i{display:inline-block;width:10px;height:10px;border-radius:50%;background:#aeb9c8}.tb-lamp.yes i{background:#18a77f}.tb-lamp.no i{background:#db5068}.tb-lamp.unknown i{background:#aeb9c8}.tb-chip{display:inline-block;border-radius:12px;background:#fff1d8;color:#875900;padding:5px 8px;font-size:11px;font-weight:700}@media(max-width:900px){.tb-fields{grid-template-columns:repeat(2,1fr)}.tb-results{grid-template-columns:repeat(2,1fr)}}@media(max-width:580px){.tb-fields,.tb-results{grid-template-columns:1fr}}</style>
 <script>
+const tbPolicy={{ payload.tb_risk_policy|tojson }};
 const tb=id=>document.getElementById(id), fmt=n=>Number(n).toLocaleString('en-US',{maximumFractionDigits:8}),usd=n=>'$'+Number(n).toLocaleString('en-US',{maximumFractionDigits:2});
 function recalc(){let e=+tb('tb-entry').value,r=+tb('tb-risk').value/100,rr=+tb('tb-rr').value,p=+tb('tb-power').value,slots=+tb('tb-slots').value,lev=+tb('tb-leverage').value,side=tb('tb-side').value==='LONG'?1:-1;
 const fields=['tb-sl','tb-tp','tb-out-rr','tb-size','tb-margin','tb-pnl'];if(!(e>0&&r>0&&r<1&&rr>0&&rr<=20&&p>0&&slots>=1&&lev>=1)){fields.forEach(id=>tb(id).textContent='—');return;}
 let sl=e*(1-side*r),tp=e*(1+side*r*rr);
- const qfReserve=7225,lossCap=qfReserve*.025,marginCap=qfReserve*.25;
+ const qfReserve=tbPolicy.reserve_usdt,lossCap=qfReserve*tbPolicy.max_loss_fraction,marginCap=qfReserve*tbPolicy.max_margin_fraction;
  const exposure=Math.min(p/slots,lossCap/r,marginCap*lev);
 tb('tb-sl').textContent=usd(sl);tb('tb-tp').textContent=tp>0?usd(tp):'TP inválido';tb('tb-out-rr').textContent=tp>0?'1:'+fmt(rr):'N/D';tb('tb-size').textContent=usd(exposure)+' · '+fmt(exposure/e)+' u.';tb('tb-margin').textContent=usd(exposure/lev);tb('tb-pnl').textContent='−'+usd(exposure*r)+' / +'+usd(exposure*r*rr)+' (tope QF '+usd(lossCap)+')';}
 ['tb-token','tb-side','tb-entry','tb-risk','tb-rr','tb-power','tb-slots','tb-leverage'].forEach(id=>tb(id).addEventListener('input',recalc));recalc();
@@ -52,7 +53,7 @@ function assessCandidate(sym,four,one,ind,side,policy){
  const tp=valid&&minTp!=null?(long?Math.max(minTp,structural||minTp):Math.min(minTp,structural||minTp)):null;
  const effectiveRR=valid&&tp!=null&&distance>0?Math.abs(tp-entry)/distance:0;
  const riskLimit=policy.reserve_usdt*policy.max_loss_fraction;
- const maxExposure=valid&&distance>0?Math.min(40000/4,riskLimit/(distance/entry)):0;
+ const maxExposure=valid&&distance>0?Math.min(policy.power_buying_reference/policy.max_positions,policy.reserve_usdt*policy.max_margin_fraction*policy.max_leverage,riskLimit/(distance/entry)):0;
  const score= [trend,rsiOK,stochOK,structure,valid].filter(Boolean).length;
  return {sym,side,entry,sl:valid?sl:null,tp:tp>0?tp:null,score,trend,rsiOK,stochOK,structure,pivotLabel,
           riskLimit,maxExposure,effectiveRR,signal:'WATCH · VALIDACIÓN QF PENDIENTE'};
