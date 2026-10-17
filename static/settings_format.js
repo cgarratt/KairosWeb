@@ -1,12 +1,12 @@
 (function (root) {
   'use strict';
-  const fractionKeys = new Set(['STRUCTURAL_USDT_TARGET','C1_BAG_FRACTION_P','C2_BAG_FRACTION_P',
+  const fractionKeys = new Set(['STRUCTURAL_USDT_TARGET',
     'O3_BTC_PROCEEDS_FRACTION','O3_USDT_PROCEEDS_FRACTION',
     'O5_BTC_PROCEEDS_FRACTION','O5_USDT_PROCEEDS_FRACTION',
-    'ORDINARY_DEFAULT_USDT_TARGET','QF_MARGIN_CAP_PER_POSITION',
+    'QF_MARGIN_CAP_PER_POSITION',
     'QF_ACCOUNT_RISK_PER_TRADE','QF_ACCOUNT_RISK_TOTAL','PROXIMITY_BAND']);
   const percentDirectKeys=new Set(['TRIGGER_STRICT_GT']);
-  const labels={DRIFT_BAND_PP:'Tolerancia de desvío del Balancer',STRUCTURAL_USDT_TARGET:'Objetivo estructural de liquidez',C1_BAG_FRACTION_P:'Presupuesto C1',C2_BAG_FRACTION_P:'Presupuesto C2',
+  const labels={DRIFT_BAND_PP:'Tolerancia de desvío del Balancer',STRUCTURAL_USDT_TARGET:'Objetivo estructural de liquidez',
     O3_BTC_PROCEEDS_FRACTION:'Ventas O3: proporción destinada a BTC',O3_USDT_PROCEEDS_FRACTION:'Ventas O3: proporción mantenida en USDT',
     O5_BTC_PROCEEDS_FRACTION:'Ventas O5: proporción propuesta para BTC',O5_USDT_PROCEEDS_FRACTION:'Ventas O5: proporción mantenida en USDT',
     O5_STAGED_TRANCHES:'Tramos de venta históricos de O5 (referencia, no editar)',
@@ -14,7 +14,6 @@
     FORECAST_O3_FIB_ALLOCATION:'Forecast O3: reparto de ventas Fib 1.618 / 2.618 / 3.618 / 4.618',
     FORECAST_O4_FIB_ALLOCATION:'Forecast O4: reparto de recompras Fib 38.2 / 50 / 61.8 / 78.6',
     FORECAST_O5_FIB_ALLOCATION:'Forecast O5: reparto de ventas Fib 1.618 / 2.618 / 3.618 / 4.618',
-    ORDINARY_DEFAULT_USDT_TARGET:'Meta USDT en ventas ordinarias',
     RISK_REWARD_MIN:'Relación recompensa/riesgo mínima',QF_MARGIN_CAP_PER_POSITION:'Margen máximo por posición QF',
     QF_ACCOUNT_RISK_PER_TRADE:'Riesgo máximo por operación QF',QF_ACCOUNT_RISK_TOTAL:'Riesgo agregado máximo QF',
     MAX_LEVERAGE:'Apalancamiento máximo',MAX_OPEN_POSITIONS:'Número máximo de posiciones QF',
@@ -22,7 +21,8 @@
   for(const stage of ['O2','O3','O4','O5']){
     const levels=(stage==='O2'||stage==='O4')?[['382','38.2%'],['500','50%'],['618','61.8%'],['786','78.6%']]:[['1618','1.618'],['2618','2.618'],['3618','3.618'],['4618','4.618']];
     for(const [suffix,description] of levels){
-      labels[`FORECAST_${stage}_FIB_${suffix}_PCT`]=`Onda ${stage}: Fib ${description} · asignación`;
+      const idx=levels.findIndex(x=>x[0]===suffix)+1;const action=stage==='O2'||stage==='O4'?'C':'V';
+      labels[`FORECAST_${stage}_FIB_${suffix}_PCT`]=`${stage}${action}${idx} · Fib ${description} · asignación`; 
     }
   }
   function scale(entry){const k=entry.key||'';

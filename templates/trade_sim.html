@@ -7,7 +7,7 @@
 {% block content %}
 <div class="grid">
 <section class="panel span-12 hero"><div><h2>{{ mode.name }}</h2><p>{{ mode.description }}</p></div><div class="badge info">SIMULACIÓN · SIN ÓRDENES</div></section>
-<section class="panel span-12"><h2>{{ 'Despliegue de USDT para C1/C2' if mode.slug=='compras' else 'Objetivo de liquidez USDT' }}</h2><p class="sub">{{ 'Primero se atienden los déficits; el excedente se invierte entre todos los tokens, respetando la distribución objetivo.' if mode.slug=='compras' else 'Mover el slider vende primero activos sobreponderados y luego distribuye proporcionalmente entre los demás, hasta el límite de Exchange.' }}</p>
+<section class="panel span-12"><h2>{{ 'Despliegue USDT · O2C1–O2C4' if mode.slug=='compras' else 'Objetivo de liquidez USDT' }}</h2><p class="sub">{{ 'Primero se atienden los déficits; el excedente se invierte entre todos los tokens, respetando la distribución objetivo.' if mode.slug=='compras' else 'Mover el slider vende primero activos sobreponderados y luego distribuye proporcionalmente entre los demás, hasta el límite de Exchange.' }}</p>
 <div class="sim-layout" style="margin:18px 0">
 <div class="sim-metric"><small>◉ Patrimonio estimado</small><b id="portfolio-metric">—</b><small>Spot MCP + snapshot</small></div>
 <div class="sim-metric"><small>◈ USDT físico</small><b id="cash-metric">—</b><small id="cash-pct">—</small></div>
@@ -20,7 +20,7 @@
 </div>
 <p class="sim-warn" id="caution"></p></section>
 {% if mode.slug=='compras' %}
-<section class="panel span-12"><div class="hero" style="align-items:flex-start"><div><h2>Resumen de compras</h2><p class="sub">La asignación continúa calculándose aquí. La tabla detallada de precios C1/C2, Fibonacci de referencia y ondas simuladas ahora está en Forecast.</p></div><a id="forecast-detail-link" class="btn primary" href="/mode/forecast">Ver niveles y ondas en Forecast ↗</a></div><div class="sim-layout" style="margin-top:18px"><div class="sim-metric"><small>Etapa 1 · Balanceo</small><b id="buy-stage1">—</b></div><div class="sim-metric"><small>Etapa 2 · Proporcional</small><b id="buy-stage2">—</b></div><div class="sim-metric"><small>Fib C1 · 50% presupuesto</small><b id="buy-c1-total">—</b></div><div class="sim-metric"><small>Fib C2 · 61.8% presupuesto</small><b id="buy-c2-total">—</b></div></div><p class="footer-note">38.2% y 78.6%: referencias sin presupuesto; ver Forecast.</p></section>
+<section class="panel span-12"><div class="hero" style="align-items:flex-start"><div><h2>Resumen de compras</h2><p class="sub">La asignación continúa calculándose aquí. La tabla detallada O2C1–O2C4 de precios Fibonacci y ondas simuladas ahora está en Forecast.</p></div><a id="forecast-detail-link" class="btn primary" href="/mode/forecast">Ver niveles y ondas en Forecast ↗</a></div><div class="sim-layout" style="margin-top:18px"><div class="sim-metric"><small>Etapa 1 · Balanceo</small><b id="buy-stage1">—</b></div><div class="sim-metric"><small>Etapa 2 · Proporcional</small><b id="buy-stage2">—</b></div><div class="sim-metric"><small>O2C1 · Fib 38.2%</small><b id="buy-tranche-0">—</b></div><div class="sim-metric"><small>O2C2 · Fib 50%</small><b id="buy-tranche-1">—</b></div><div class="sim-metric"><small>O2C3 · Fib 61.8%</small><b id="buy-tranche-2">—</b></div><div class="sim-metric"><small>O2C4 · Fib 78.6%</small><b id="buy-tranche-3">—</b></div></div><p class="footer-note">Las cuatro asignaciones O2C1–O2C4 se configuran en Parámetros; detalles en Forecast.</p></section>
 {% else %}
 <section class="panel span-12"><h2>Candidatos SELL</h2><p class="sub">Ordenados por exceso de peso; BTC excluido. Límites de Exchange declarados, sin descontar órdenes pendientes.</p>
 <div style="overflow-x:auto"><table><thead><tr><th>Token</th><th>% Actual</th><th>% Objetivo</th><th>% Post-venta</th><th>Exchange ud.</th><th>USDT estimado</th><th>Unidades SELL</th><th>Acción</th></tr></thead><tbody id="sim-body"></tbody><tfoot id="sim-foot" style="font-weight:800;background:#eaf3ff;border-top:2px solid #91b7e9"></tfoot></table></div></section>
@@ -33,6 +33,7 @@
 <script src="{{ url_for('static', filename='purchase_plan.js') }}"></script>
 <script>
 const mode={{ payload.kind|tojson }};
+const o2Weights={{ payload.forecast_o2_allocation|default([0,60,40,0])|tojson }};
 const source={{ payload|tojson }};
 const P=source.current.P, cash=source.current.cash, trading=source.current.trading||0;
 const symbols={BTC:'bitcoin-btc',ETH:'ethereum-eth',SOL:'solana-sol',LINK:'chainlink-link',HYPE:'hyperliquid-hype',HBAR:'hedera-hbar',SUI:'sui-sui',ONDO:'ondo-finance-ondo',PUMP:'pump-fun-pump',PLUME:'plume-plume',PEPE:'pepe-pepe',VIRTUAL:'virtual-protocol-virtual'};
@@ -49,17 +50,16 @@ function paint(){let target=Number(el('allocation-slider').value);el('slider-val
 if(mode==='compras'){
   const desired=P*target/100;
   const referenceCapacity=Math.max(0,Math.min(desired,source.current.reference_cap));
-  const safeCapacity=Math.max(0,cash-.40*P);
+  const safeCapacity=Math.max(0,cash-Number(source.structural_liquidity_target??0.4)*P);
   const plan=purchasePlan(referenceCapacity,source.tokens,source.current.crypto_value);
   allocated=source.tokens.map((x,i)=>plan.balance[i]+plan.extra[i]);
   const sum=allocated.reduce((a,b)=>a+b,0);after=cash-sum;
   const initial=plan.balance.reduce((a,b)=>a+b,0),proportional=plan.extra.reduce((a,b)=>a+b,0);
   el('third-metric').textContent=dollar(trading);el('allocation-metric').textContent=dollar(sum);
-  el('caution').textContent='Etapa 1 (balanceo): '+dollar(initial)+'. Etapa 2 (todos los tokens): '+dollar(proportional)+'. Capital necesario para balanceo completo sin ventas: '+dollar(plan.required)+'. '+(sum>safeCapacity+0.01?'Por encima del piso estructural 40% (caja libre: '+dollar(safeCapacity)+'); simulación NO autorizada. ':'')+'No descuenta LIMIT ni comisiones. C1/C2 60%/40%; tabla de precios referenciales y ondas hipotéticas en Forecast.';
+  el('caution').textContent='Etapa 1 (balanceo): '+dollar(initial)+'. Etapa 2 (todos los tokens): '+dollar(proportional)+'. Capital necesario para balanceo completo sin ventas: '+dollar(plan.required)+'. '+(sum>safeCapacity+0.01?'Por encima de la meta estructural USDT (caja de referencia: '+dollar(safeCapacity)+'); simulación NO autorizada. ':'')+'No descuenta LIMIT ni comisiones. Los cuatro tramos O2C1–O2C4 y precios no certificados se detallan en Forecast.';
   el('buy-stage1').textContent=dollar(initial);
   el('buy-stage2').textContent=dollar(proportional);
-  el('buy-c1-total').textContent=dollar(sum*.6);
-  el('buy-c2-total').textContent=dollar(sum*.4);
+  o2Weights.forEach((weight,i)=>{el('buy-tranche-'+i).textContent=dollar(sum*Number(weight)/100);});
   el('forecast-detail-link').href='/mode/forecast?deploy='+encodeURIComponent(target.toFixed(4));
 }else{
   const desired=Math.max(0,P*target/100-cash);

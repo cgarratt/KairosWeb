@@ -10,8 +10,7 @@
     parameters:'12_PARAMETROS_KAIROS · Valores aprobados, porcentajes y planes de ventas. Cada parámetro describe su impacto.',
     pivots:'07_PIVOTES · Cada onda es un candidato PRELIMINAR sin certificación; guardar NO genera órdenes.',mcp:'Diagnóstico MCP independiente del Master. Consultas de solo lectura y reconexión sin reiniciar Render.'};
   const PARAM_GROUPS=[
-    {id:'portfolio',name:'Portafolio',description:'Objetivos y patrimonio, parámetros de asignación estructural.',keys:['STRUCTURAL_USDT_TARGET']},
-    {id:'balancer',name:'Liquidez y Balancer',description:'Desviaciones y presupuestos operativos C1/C2. No se suman otra vez a Forecast.',keys:['DRIFT_BAND_PP','C1_BAG_FRACTION_P','C2_BAG_FRACTION_P','ORDINARY_DEFAULT_USDT_TARGET']},
+    {id:'portfolio',name:'Portafolio',description:'Únicas dos reglas: meta general de liquidez USDT y tolerancia de desvío Balancer.',keys:['STRUCTURAL_USDT_TARGET','DRIFT_BAND_PP']},
     {id:'o2',name:'Compras O2 · Forecast',description:'Cuatro retrocesos independientes: 100% del presupuesto máximo de 25% P de O2.',prefix:'FORECAST_O2_FIB_'},
     {id:'o3',name:'Ventas O3 · Forecast',description:'Cuatro extensiones independientes: 100% de las unidades elegibles para O3. Objetivo 40% USDT.',prefix:'FORECAST_O3_FIB_',keys:['O3_BTC_PROCEEDS_FRACTION','O3_USDT_PROCEEDS_FRACTION']},
     {id:'o4',name:'Compras O4 · Forecast',description:'Cuatro retrocesos independientes: 100% del presupuesto máximo de 25% P de O4.',prefix:'FORECAST_O4_FIB_'},
@@ -25,7 +24,7 @@
     targets:[['tier','Tier'],['target','Objetivo (%)']],
     tier_custody:[['hodl','HODL (%)'],['core','Core (%)'],['exchange','Exchange (%)']],
     liquidity:[['usdt','USDT físico']],parameters:[['value','Valor']],
-    pivots:[['cycle_low','Cycle Low'],['o1','O1'],['o2','O2'],['o3','O3'],['o4','O4'],['o5','O5'],['c1_reference','C1 ref'],['c2_reference','C2 ref']]};
+    pivots:[['cycle_low','Cycle Low'],['o1','O1'],['o2','O2'],['o3','O3'],['o4','O4'],['o5','O5'],['c1_reference','O2C2 · Fib 50% (referencia histórica)'],['c2_reference','O2C3 · Fib 61.8% (referencia histórica)']]};
   const nav=document.getElementById('settings-nav'), body=document.getElementById('settings-data');
   const status=document.getElementById('settings-msg'), save=document.getElementById('settings-save');
   const hint=document.getElementById('settings-admin-state');const more=document.getElementById('settings-pivots-tools');
@@ -146,7 +145,7 @@
       }
       if(tab==='pivots'){
         const text=el('p','pivot-candidate-hint');text.dataset.pivotInfo=entry.token;
-        text.textContent='Actual: '+(entry.status||'SIN_DATO')+' · C1/C2 históricas son referencias; editar no certifica';
+        text.textContent='Actual: '+(entry.status||'SIN_DATO')+' · O2C2/O2C3 provenientes de C1/C2 históricos, no certificados';
         item.append(text);
       }
       if(tab==='parameters')groupSlots[parameterGroup(entry).id].append(item);

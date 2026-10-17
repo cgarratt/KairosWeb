@@ -28,7 +28,7 @@
 .fc-stage-levels input{min-width:0;width:100%;font-size:15px;border:1px solid #9aaec9;border-radius:8px;padding:8px;background:var(--input-bg,#fff);color:var(--text,#172c47)}
 @media(max-width:1050px){.fc-weight-grid{grid-template-columns:1fr}}
 @media(max-width:560px){.fc-stage-levels{grid-template-columns:repeat(2,minmax(0,1fr))}}
-.fc-slider{width:100%;accent-color:#266ac6}.wave-value-row{background:#f4f8fe}.wave-value-row td{border-bottom:2px solid #cfdfef}.wave-value-row td:first-child{background:#f4f8fe}
+.fc-deploy-values{display:flex;align-items:center;gap:18px;flex-wrap:wrap}.fc-deploy-values>div{display:grid;gap:3px;min-width:115px}.fc-deploy-values .fc-step{font-size:23px}.fc-slider{width:100%;accent-color:#266ac6}.wave-value-row{background:#f4f8fe}.wave-value-row td{border-bottom:2px solid #cfdfef}.wave-value-row td:first-child{background:#f4f8fe}
 
 .fc-stage{border-top:5px solid #ccddf3}
 .fc-stage .fc-heading{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
@@ -55,28 +55,30 @@
 
 <p class="footer-note">Referencia de niveles: {{ payload.o2_source }} · Cotizaciones Spot observadas: {{ payload.generated_at }} · Unidades snapshot: {{ payload.snapshot_note }}</p></section>
 <section class="panel span-12"><div class="fc-hero"><div><h2>Trayectoria hipotética por token</h2><p class="sub">Visualización de niveles por etapa, no eje temporal ni probabilidades.</p></div><div class="fc-field" style="flex:0 0 190px"><label for="chart-token">Token</label><select id="chart-token"></select></div></div><div class="fc-controls">
-<div class="fc-field"><label for="o2-choice">O2 · retroceso CL→O1</label><select id="o2-choice"><option value="0.618">61.8% · C2</option><option value="0.382">38.2%</option><option value="0.5">50% · C1</option><option value="0.786">78.6%</option></select></div>
-<div class="fc-field"><label for="o3-choice">O3 · extensión desde O2</label><select id="o3-choice"><option value="1.618">Fib 1.618</option><option value="2.618">Fib 2.618</option><option value="3.618">Fib 3.618</option><option value="4.618">Fib 4.618</option></select></div>
-<div class="fc-field"><label for="o4-choice">O4 · retroceso O2→O3</label><select id="o4-choice"><option value="0.5">Fib 50%</option><option value="0.382">Fib 38.2%</option><option value="0.618">Fib 61.8%</option><option value="0.786">Fib 78.6%</option></select></div>
-<div class="fc-field"><label for="o5-choice">O5 · extensión desde O4</label><select id="o5-choice"><option value="1.618">Fib 1.618</option><option value="2.618">Fib 2.618</option><option value="3.618">Fib 3.618</option><option value="4.618">Fib 4.618</option></select></div>
+<div class="fc-field"><label for="o2-choice">O2 · retroceso CL→O1</label><select id="o2-choice"><option value="0.382">O2C1 · Fib 38.2%</option><option value="0.5">O2C2 · Fib 50%</option><option value="0.618" selected>O2C3 · Fib 61.8%</option><option value="0.786">O2C4 · Fib 78.6%</option></select></div>
+<div class="fc-field"><label for="o3-choice">O3 · extensión desde O2</label><select id="o3-choice"><option value="1.618">O3V1 · Fib 1.618</option><option value="2.618">O3V2 · Fib 2.618</option><option value="3.618">O3V3 · Fib 3.618</option><option value="4.618">O3V4 · Fib 4.618</option></select></div>
+<div class="fc-field"><label for="o4-choice">O4 · retroceso O2→O3</label><select id="o4-choice"><option value="0.382">O4C1 · Fib 38.2%</option><option value="0.5" selected>O4C2 · Fib 50%</option><option value="0.618">O4C3 · Fib 61.8%</option><option value="0.786">O4C4 · Fib 78.6%</option></select></div>
+<div class="fc-field"><label for="o5-choice">O5 · extensión desde O4</label><select id="o5-choice"><option value="1.618">O5V1 · Fib 1.618</option><option value="2.618">O5V2 · Fib 2.618</option><option value="3.618">O5V3 · Fib 3.618</option><option value="4.618">O5V4 · Fib 4.618</option></select></div>
 </div><svg id="waves-chart" class="fc-chart" viewBox="0 0 740 310" role="img" aria-label="Precios hipotéticos por onda"></svg><p class="fc-legend" id="chart-info">Selecciona un token con referencias disponibles.</p></section>
 
 <section class="panel span-12">
-<h2>Asignación USDT para referencias Fibonacci O2</h2><p class="sub">La asignación reutiliza exactamente las dos etapas del modo Compras: balanceo inicial y distribución proporcional. O2 y O4 usan un presupuesto máximo de 25% del patrimonio total P de cada onda; los cuatro niveles comparten el 100% de ese presupuesto. El presupuesto real gastado depende de caja libre y niveles alcanzados.</p>
-<div class="fc-controls"><div class="fc-field" style="min-width:230px;flex:2"><label for="forecast-deploy">Despliegue teórico · porcentaje del patrimonio</label><input class="fc-slider" id="forecast-deploy" type="range" min="0" max="25" value="0" step="any"><div class="fc-legend">0% — Máximo hipotético 25% de P (QF protegido; el déficit de caja se muestra aparte)</div></div><div class="fc-field"><label>Porcentaje seleccionado</label><b class="fc-step" style="font-size:26px" id="deploy-label">—</b></div></div>
-<div class="fc-metrics"><div class="fc-kpi"><small>USDT simulados</small><b id="deploy-total">—</b><small>Sin órdenes reales</small></div><div class="fc-kpi"><small>Déficit caja frente a 25% P</small><b id="deploy-shortfall">—</b><small>QF no disponible para comprar</small></div><div class="fc-kpi"><small>Balanceo</small><b id="deploy-balance">—</b><small>Etapa 1</small></div><div class="fc-kpi"><small>Fibonacci 50%</small><b id="deploy-c1">—</b><small>Reparto configurable</small></div><div class="fc-kpi"><small>Fibonacci 61.8%</small><b id="deploy-c2">—</b><small>Reparto configurable</small></div></div>
-<div class="fc-warning">Los precios de referencia son de una tabla O2 histórica, no cotizaciones en vivo ni órdenes activas. Si faltan niveles (PEPE o VIRTUAL), el presupuesto simulado se muestra pero <b>no constituye una orden colocable</b>. Las órdenes LIMIT y el inventario siguen sujetos a reconciliación.</div>
-<div class="fc-tables"><table><thead><tr><th>Token</th><th>38.2% precio</th><th>USDT</th><th>C1 · 50% precio</th><th>C1 USDT</th><th>C2 · 61.8% precio</th><th>C2 USDT</th><th>78.6% precio</th><th>USDT</th><th>TOTAL USDT</th></tr></thead><tbody id="fib-body"></tbody><tfoot id="fib-total"></tfoot></table></div>
-<p class="footer-note">38.2% y 78.6% se estiman algebraicamente a partir de las referencias C1/C2; los pivotes de origen no están certificados. Los importes del pie suman los presupuestos simulados y no modifican la liquidez física.</p>
-</section>
-<section class="panel span-12">
-<h2>Ondas y precios pivote · Cycle Low a O5</h2><p class="sub">Escenario por token. Cycle Low/O1 son anclas <strong>inferidas</strong> a partir de C1/C2; O2–O5 son niveles hipotéticos según las extensiones y retrocesos elegidos.</p>
+<h2>Ondas y precios pivote · Cycle Low a O5</h2><p class="sub">Escenario por token. Cycle Low/O1 son anclas <strong>inferidas</strong> de referencias históricas Fib 50% y Fib 61.8%; O2–O5 son niveles hipotéticos según las extensiones y retrocesos elegidos.</p>
 
 <div id="elliott-note" class="fc-warning"></div>
 <div class="fc-tables"><table><thead><tr><th>Token / Métrica</th><th>Cycle Low (S0)</th><th>O1 (SH1)</th><th>O2 (SL1)</th><th>O3 (SH2)</th><th>O4 (SL2)</th><th>O5 (SH3)</th><th>Estado</th></tr></thead><tbody id="waves-body"></tbody></table></div>
 <p class="footer-note">Secuencia de Kairos H4: O3 = O2 + extensión × (O1 − Cycle Low); O4 = O3 − retroceso × (O3 − O2); O5 = O4 + extensión × (O3 − O2). No se aplica confirmación semanal 5L/5R + BOS; ningún nivel se declara pivot confirmado.</p>
 </section>
 
+
+
+<section class="panel span-12">
+<h2>Asignación USDT para referencias Fibonacci O2</h2><p class="sub">La asignación reutiliza exactamente las dos etapas del modo Compras: balanceo inicial y distribución proporcional. O2 y O4 usan un presupuesto máximo de 25% del patrimonio total P de cada onda; los cuatro tramos O2C1–O2C4 comparten el 100% de ese presupuesto. El presupuesto real gastado depende de caja libre y niveles alcanzados.</p>
+<div class="fc-controls fc-deploy-controls"><div class="fc-field fc-deploy-slider" style="min-width:230px;flex:2"><label for="forecast-deploy">Despliegue simulado · % de patrimonio total P</label><input class="fc-slider" id="forecast-deploy" type="range" min="0" max="25" value="0" step="any"><div class="fc-legend">0% — máximo 25% de P · reserva Quantfury protegida</div></div><div class="fc-deploy-values"><div><label>Porcentaje</label><b class="fc-step" id="deploy-label">—</b></div><div><label>USDT simulado</label><b class="fc-step" id="deploy-total">—</b></div></div></div>
+<p id="deploy-shortfall" class="fc-legend" role="status" aria-live="polite"></p>
+<div class="fc-warning">Los precios O2C2 (Fib 50%) y O2C3 (Fib 61.8%) proceden de la antigua tabla C1/C2; las demás referencias se reconstruyen matemáticamente. Todos son escenarios, no órdenes. Los precios de referencia son de una tabla O2 histórica, no cotizaciones en vivo ni órdenes activas. Si faltan niveles (PEPE o VIRTUAL), el presupuesto simulado se muestra pero <b>no constituye una orden colocable</b>. Las órdenes LIMIT y el inventario siguen sujetos a reconciliación.</div>
+<div class="fc-tables"><table><thead><tr><th>Token</th><th>O2C1 · Fib 38.2%<br>Precio</th><th>O2C1 · USDT</th><th>O2C2 · Fib 50%<br>Precio</th><th>O2C2 · USDT</th><th>O2C3 · Fib 61.8%<br>Precio</th><th>O2C3 · USDT</th><th>O2C4 · Fib 78.6%<br>Precio</th><th>O2C4 · USDT</th><th>Total compras O2 · USDT</th></tr></thead><tbody id="fib-body"></tbody><tfoot id="fib-total"></tfoot></table></div>
+<p class="footer-note">O2C1 Fib 38.2% y O2C4 Fib 78.6% se estiman algebraicamente a partir de los valores históricos C1 Fib 50% / C2 Fib 61.8%; los pivotes de origen no están certificados. Los importes del pie suman los presupuestos simulados y no modifican la liquidez física.</p>
+</section>
 
 <section class="panel span-12" id="cycle-strategy">
 <h2>Simulación integral O2 → O5 · Compras, ventas y acumulación BTC</h2>
@@ -87,7 +89,7 @@
 <div class="fc-field"><label for="o5-sell">Plan O5 · % del pool elegible</label><select id="o5-sell"><option value="0">0%</option><option value="0.25">25%</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="1" selected>100%</option></select></div>
 <div class="fc-field"><label for="btc-share">Proceeds SELL · BTC / USDT (solo simulación)</label><select id="btc-share"><option value="0">0% BTC / 100% USDT</option><option value="0.25">25% BTC / 75% USDT</option><option value="0.3" selected>30% BTC / 70% USDT (O5 aprobado)</option><option value="0.5">50% BTC / 50% USDT</option><option value="0.7">70% BTC / 30% USDT</option><option value="0.75">75% BTC / 25% USDT</option><option value="1">100% BTC / 0% USDT</option></select></div></div>
 <div class="fc-stage-config"><h3>Distribución por niveles Fibonacci · simulación independiente de Google Sheets</h3><p class="sub">Cada onda tiene 4 porcentajes que deben sumar exactamente 100%; un nivel no alcanzado conserva su presupuesto o unidades.</p><div class="fc-weight-grid" id="forecast-weights"></div><div id="weights-validation" class="fc-warning" role="status"></div></div>
-<div class="fc-warning">Valores iniciales aprobados para simulación; las modificaciones aquí NO se guardan en Google Sheets. Los precios O1–O5 provienen de pivotes reconstruidos sin certificación; las compras usan presupuesto C1/C2 seleccionado y O4 hipotético. O3 respeta el objetivo USDT aprobado en el Master (40% actualmente); O5 no tiene ese límite. Capital QF separado. Se excluyen comisiones y órdenes pendientes. Ninguna orden se transmite.</div>
+<div class="fc-warning">Valores iniciales aprobados para simulación; las modificaciones aquí NO se guardan en Google Sheets. Los precios O1–O5 provienen de pivotes reconstruidos sin certificación; las compras utilizan cuatro tramos O2C1–O2C4 y O4C1–O4C4. O3 respeta el objetivo USDT aprobado en el Master ({{ (payload.o3_liquidity_target*100)|round(2) }}% actualmente); O5 no tiene ese límite. Capital QF separado. Se excluyen comisiones y órdenes pendientes. Ninguna orden se transmite.</div>
 <div class="fc-metrics"><div class="fc-kpi"><small>Patrimonio proyectado Post-O5</small><b id="o5-total">—</b></div><div class="fc-kpi"><small>BTC al cierre Post-O5</small><b id="o5-btc">—</b></div><div class="fc-kpi"><small>USDT total Post-O5</small><b id="o5-cash">—</b></div><div class="fc-kpi"><small>HODL bloqueado / Cripto</small><b id="o5-hodl">—</b></div></div>
 <h3 style="margin-top:18px">Evolución del portafolio por onda</h3>
 <div class="fc-tables"><table><thead><tr><th>Indicador</th><th>Inicio</th><th>O2</th><th>O3</th><th>O4</th><th>O5</th></tr></thead><tbody id="cycle-summary"></tbody></table></div>
@@ -99,7 +101,7 @@
 <p class="footer-note" id="cycle-note"></p>
 </section>
 
-<section class="panel span-12"><div class="callout warn"><strong>Alcance y fuentes</strong>Este Forecast no activa órdenes ni sustituye el Forecast oficial de acumulación BTC. Las referencias O2 y sus pivotes algebraicamente reconstruidos deben revisarse contra anclas aprobadas; la progresión O3/O4/O5 es una simulación parametrizada, no una predicción ni un conteo Elliott confirmado. PEPE y VIRTUAL permanecen N/D.</div></section>
+<section class="panel span-12"><div class="callout warn"><strong>Alcance y fuentes</strong>Este Forecast no activa órdenes ni sustituye el Forecast oficial de acumulación BTC. Las referencias históricas O2C2/O2C3 y los pivotes reconstruidos deben revisarse contra anclas aprobadas; la progresión O3/O4/O5 es una simulación parametrizada, no una predicción ni un conteo Elliott confirmado. PEPE y VIRTUAL permanecen N/D.</div></section>
 </div>
 <script src="{{ url_for('static', filename='purchase_plan.js') }}"></script>
 <script src="{{ url_for('static', filename='forecast_fibo_plan.js') }}"></script>
@@ -123,8 +125,8 @@ $('btc-share').value=String(fc.official_o5_split??.3);
 function stageWeights(stage){return Fibo.shares(weights[stage]);}
 function renderWeightControls(){
  const names={o2:'Compras O2',o3:'Ventas O3',o4:'Compras O4',o5:'Ventas O5'};
- const labels={buy:['38.2%','50%','61.8%','78.6%'],sell:['1.618','2.618','3.618','4.618']};
- $('forecast-weights').innerHTML=Object.keys(names).map(stage=>`<fieldset class="fc-stage-weights"><legend>${names[stage]}</legend><div class="fc-stage-levels">${weights[stage].map((v,i)=>`<label>${labels[stage==='o2'||stage==='o4'?'buy':'sell'][i]} <input type="number" min="0" max="100" step="0.1" data-forecast-stage="${stage}" data-level="${i}" value="${v}" aria-label="${names[stage]} nivel ${i+1}"/> %</label>`).join('')}</div><strong id="sum-${stage}"></strong></fieldset>`).join('');
+ const labels={o2:['O2C1 · Fib 38.2%','O2C2 · Fib 50%','O2C3 · Fib 61.8%','O2C4 · Fib 78.6%'],o3:['O3V1 · Fib 1.618','O3V2 · Fib 2.618','O3V3 · Fib 3.618','O3V4 · Fib 4.618'],o4:['O4C1 · Fib 38.2%','O4C2 · Fib 50%','O4C3 · Fib 61.8%','O4C4 · Fib 78.6%'],o5:['O5V1 · Fib 1.618','O5V2 · Fib 2.618','O5V3 · Fib 3.618','O5V4 · Fib 4.618']};
+ $('forecast-weights').innerHTML=Object.keys(names).map(stage=>`<fieldset class="fc-stage-weights"><legend>${names[stage]}</legend><div class="fc-stage-levels">${weights[stage].map((v,i)=>`<label>${labels[stage][i]} <input type="number" min="0" max="100" step="0.1" data-forecast-stage="${stage}" data-level="${i}" value="${v}" aria-label="${names[stage]} nivel ${i+1}"/> %</label>`).join('')}</div><strong id="sum-${stage}"></strong></fieldset>`).join('');
  $('forecast-weights').addEventListener('input',e=>{const inp=e.target.closest('[data-forecast-stage]');if(!inp)return;weights[inp.dataset.forecastStage][Number(inp.dataset.level)]=Number(inp.value);renderAll();});
 }
 function verifyWeights(){let errors=[];
@@ -137,9 +139,11 @@ function renderFib(){
  const cap=Fibo.budget(nums.P,fc.cash_total,fc.trading_reserve);const B=Math.min(cap.deployable,cap.maximum*Number($('o2-budget').value))*pct/25;
  const plan=purchasePlan(B,fc.tokens,nums.crypto_value),shares=stageWeights('o2');
  const amounts=fc.tokens.map((x,i)=>plan.balance[i]+plan.extra[i]);
- const total=amounts.reduce((a,b)=>a+b,0),balance=plan.balance.reduce((a,b)=>a+b,0);
- $('deploy-total').textContent=money(total);$('deploy-shortfall').textContent=money(cap.shortfall);$('deploy-balance').textContent=money(balance);
- $('deploy-c1').textContent=money(shares[1]*total);$('deploy-c2').textContent=money(shares[2]*total);
+ const total=amounts.reduce((a,b)=>a+b,0);
+ $('deploy-total').textContent=money(total);
+ const requested=nums.P*pct/100*Number($('o2-budget').value);
+ const deficit=Math.max(0,requested-total);
+ $('deploy-shortfall').textContent=deficit>0.005?`Déficit de caja para este escenario: ${money(deficit)}. El simulador no utiliza la reserva Quantfury.`:'Sin órdenes reales. USDT simulado sujeto a caja elegible y a los niveles alcanzados.';
  const pivots=new Map(fc.pivot_rows.map(p=>[p.token,p]));
  $('fib-body').innerHTML=fc.tokens.map((t,i)=>{const p=pivots.get(t.token)||{},a=amounts[i];const levels=[p.ref382,p.c1,p.c2,p.ref786];return `<tr><td>${logo(t.token)}</td>${levels.map((level,j)=>`<td>${price(level)}</td><td>${money(shares[j]*a)}</td>`).join('')}<td><b>${money(a)}</b></td></tr>`;}).join('');
  $('fib-total').innerHTML=`<tr><td>TOTAL USDT</td>${shares.map((f)=>`<td>—</td><td>${money(f*total)}</td>`).join('')}<td>${money(total)}</td></tr>`;

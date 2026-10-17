@@ -1,4 +1,4 @@
-"""KairosWeb v1.5.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
+"""KairosWeb v1.6.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
 import asyncio
 import json
 import os
@@ -18,6 +18,8 @@ from admin_origin import same_origin_allowed
 from flask import Flask, Response, jsonify, render_template, request, abort, redirect, g, session, url_for
 from fastmcp import Client
 from forecast_math import derive_reference_anchors
+from forecast_fibo_policy import defaults_from_master
+from forecast_fibo_policy import defaults_from_master
 from werkzeug.local import LocalProxy
 from google_sheets_master import get_state, SheetDataError, public_failure_code, cache_status as sheet_cache_status
 from hype_weekly import aggregate_weeks, HypeHistoryError
@@ -27,7 +29,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = "1.5.0"  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = "1.6.0"  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -58,11 +60,11 @@ def policy_numeric(key, allowed):
     return float(row['value'])
 
 MODE_DEFS = [
-    {'slug':'portafolio','name':'Portafolio','subtitle':'Capital integral y rentabilidad histórica','description':'Seguimiento estratégico del capital base, capital vivo, pérdidas realizadas y objetivos por segmento.'},
+    {'slug':'portafolio','name':'Portafolio','subtitle':'Capital integral y rentabilidad histórica','description':'Seguimiento estratégico del capital y la liquidez del portafolio.'},
     {'slug':'balancer','name':'Balancer','subtitle':'Rebalanceo y liquidez','description':'Propuestas de rebalanceo, control de piso de liquidez y protección de Core.'},
-    {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Simulación de compras en dos etapas; referencias Fibonacci y tabla C1/C2 en Forecast.'},
+    {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Simulación de compras en dos etapas; referencias Fibonacci y tabla O2C1–O2C4 en Forecast.'},
     {'slug':'ventas','name':'Ventas','subtitle':'Objetivo USDT','description':'Propuestas solo SELL para acercarse a la meta de liquidez y reducir sobrepeso.'},
-    {'slug':'forecast','name':'Forecast','subtitle':'Cycle Low → O5','description':'Tabla de niveles Fibonacci C1/C2 y ondas/pivotes proyectados; todo es simulación.'},
+    {'slug':'forecast','name':'Forecast','subtitle':'Cycle Low → O5','description':'Tabla de niveles O2C1–O2C4 y ondas/pivotes proyectados; todo es simulación.'},
     {'slug':'tradingbot','name':'TradingBot','subtitle':'Táctico 4H','description':'Vista táctica preliminar para la reserva de trading y activos de seguimiento.'},
 ]
 # Future mode enablement is centralized: disabled modes do not appear in any global nav.
@@ -408,8 +410,9 @@ def build_mode_payload(slug, d, observed):
     top_pos = rows[0]
     top3_conc = sum(r['weight'] for r in rows[:3])
     usdt_gap = d['liquidity_floor_usdt'] - d['usdt_total']
-    c1_budget = d['total_value'] * approved_numeric('C1_BAG_FRACTION_P')
-    c2_budget = d['total_value'] * approved_numeric('C2_BAG_FRACTION_P')
+    o2_weights=defaults_from_master(g.kairos_state['parameters'])['o2']
+    c1_budget = d['total_value'] * 0.25 * (o2_weights[1]/100)  # historical Fib 50% = O2C2
+    c2_budget = d['total_value'] * 0.25 * (o2_weights[2]/100)  # historical Fib 61.8% = O2C3
     deficits = [abs(r['drift_pp']) for r in under]
     deficits_sum = sum(deficits) or 1
 
@@ -496,7 +499,7 @@ def build_mode_payload(slug, d, observed):
 
     if slug in ('compras','forecast'):
         p=d['total_value']; cash=d['usdt_total']; trading=d['trading_reserve']
-        max_percent=(100*max(0.0,cash-trading)/p) if p else 0.0
+        max_percent=(min(25.0,100*max(0.0,cash-trading)/p)) if p else 0.0
         reference_cap=max(0.0,cash-trading)
         purchase_tokens=[{'token':r['token'],'tier':r['tier'],'price':r['price'],'weight':r['weight'],'target':r['target'],
             'current_usdt':r['value'],'units':r['units'],
@@ -511,7 +514,9 @@ def build_mode_payload(slug, d, observed):
         return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
             'kind':'compras', 'current':purchase_current, 'tokens':purchase_tokens,
             'o2_level_reference':O2_LEVELS['source'],
-            'notes':['La tabla de precios C1/C2 y referencias 38.2%/78.6% se encuentra en Forecast.',
+            'forecast_o2_allocation':o2_weights,
+            'structural_liquidity_target':approved_numeric('STRUCTURAL_USDT_TARGET'),
+            'notes':['La tabla O2C1–O2C4 y las referencias históricas se encuentran en Forecast.',
              'Compras mantiene su slider y la simulación de balanceo + asignación proporcional.',
              'La liquidez seleccionada es hipotética; no modifica órdenes LIMIT ni custodia.']}
         buy_rows=[]
@@ -522,12 +527,12 @@ def build_mode_payload(slug, d, observed):
             **common,
             'metrics':[
                 {'label':'USDT operativo','value':fmt_money(d['usdt_operating']),'help':'Antes de compromisos y fees','tone':'ok'},
-                {'label':'Bolsa teórica C1','value':fmt_money(c1_budget),'help':'15% del patrimonio actual','tone':'primary'},
-                {'label':'Bolsa teórica C2','value':fmt_money(c2_budget),'help':'10% del patrimonio actual','tone':'primary'},
+                {'label':'O2C2 Fib 50% · presupuesto orientativo','value':fmt_money(c1_budget),'help':'Tramo variable del 25% de P','tone':'primary'},
+                {'label':'O2C3 Fib 61.8% · presupuesto orientativo','value':fmt_money(c2_budget),'help':'Tramo variable del 25% de P','tone':'primary'},
                 {'label':'Activos con déficit','value':str(len(under)),'help':'Con banda de -1 pp','tone':'warn'},
             ],
             'highlights':[
-                'C1 corresponde a Fibonacci 50% y C2 a Fibonacci 61.8%, conforme a las reglas vigentes.',
+                'Referencias históricas C1/C2 equivalen a O2C2 (50%) y O2C3 (61.8%), respectivamente; no son órdenes nuevas.',
                 'Esta página todavía no trae anchors O2/O4 ni calcula precios límite finales.',
                 'La distribución mostrada es visual y proporcional al déficit actual de composición.',
             ],
@@ -537,7 +542,7 @@ def build_mode_payload(slug, d, observed):
                 ])
             ],
             'tables':[
-                as_table('Candidatos estructurales',['Token','Peso actual','Target','Déficit','C1 ref.','C2 ref.'], buy_rows,
+                as_table('Candidatos estructurales',['Token','Peso actual','Target','Déficit','O2C2 ref. Fib 50%','O2C3 ref. Fib 61.8%'], buy_rows,
                          'Montos referenciales; los precios Fib y la estructura aún no están conectados.')
             ],
             'callouts':[{'tone':'warn','title':'Pendiente de integración','text':'Para igualar la salida de ChatGPT faltan los anchors aprobados O1/O3/O4, los precios Fib y las órdenes existentes por exchange.'}]
@@ -611,7 +616,7 @@ def build_mode_payload(slug, d, observed):
                 {'label':'Acciones habilitadas','value':'Solo lectura','help':'Sin envío de órdenes','tone':'ok'},
             ],
             'highlights':[
-                'TradingBot debe vivir separado del portafolio estructural y de las compras C1/C2.',
+                'TradingBot debe vivir separado del portafolio estructural y de las compras por tramos O2C1–O2C4.',
                 'La vista actual sirve como base visual del estado táctico y la reserva disponible.',
                 'Falta integrar señales 1H/4H, SL/TP y el tamaño fijo por posición.',
             ],
@@ -677,14 +682,14 @@ def build_mode_payload(slug, d, observed):
             'kind':'forecast', 'current':purchase_current,'tokens':purchase_tokens, 'custody':{('PUMP' if k=='PUMPFUN' else k):v for k,v in SNAPSHOT['custody_core_blocked__core_strategic__exchange'].items()}, 'cash_total':d['usdt_total'], 'trading_reserve':d['trading_reserve'],
             'pivot_rows':pivot_rows, 'o2_source':O2_LEVELS['source'],
             'custody_policy':g.kairos_state['custody_policy'],
-            'c1_share':approved_numeric('C1_BAG_FRACTION_P')/(approved_numeric('C1_BAG_FRACTION_P')+approved_numeric('C2_BAG_FRACTION_P')),
+            'c1_share':defaults_from_master(g.kairos_state['parameters'])['o2'][1]/100,
             'official_o5_split':approved_numeric('O5_BTC_PROCEEDS_FRACTION'),
             'o3_liquidity_target':approved_numeric('STRUCTURAL_USDT_TARGET'),
             'forecast_fibo_allocations':__import__('forecast_fibo_policy').defaults_from_master(g.kairos_state['parameters']),
             'reference_type':'O2_REFERENCES_RECONSTRUCTED_UNCERTIFIED',
             'notes':['Retrocesos simulados: 38.2%, 50%, 61.8% y 78.6%; el presupuesto por onda está limitado a 25% de P.',
-               'C1 (50%) y C2 (61.8%) utilizan una tabla O2 histórica, no pivotes recalculados en vivo.',
-               'Cycle Low y O1 se reconstruyen matemáticamente de C1/C2, NO están confirmados.',
+               'Las columnas históricas C1 Fib 50% y C2 Fib 61.8% se presentan como O2C2 y O2C3; no son órdenes activas.',
+               'Cycle Low y O1 se reconstruyen matemáticamente de niveles Fib 50% / 61.8% históricos, NO están confirmados.',
                'O2/O3/O4/O5 son escenarios hipotéticos con parámetros ajustables; no son señales Elliott ni objetivos aprobados.',
                'La simulación de Forecast NO calcula BTC acumulado oficial ni probabilidades. Sin órdenes ni fills.']}
 
@@ -798,9 +803,10 @@ def balancer_report(d, observed):
     floor=approved_numeric('STRUCTURAL_USDT_TARGET')*p
     excess=max(0,cash-floor)
     gap=max(0,floor-cash)
-    c1=approved_numeric('C1_BAG_FRACTION_P')*p; c2=approved_numeric('C2_BAG_FRACTION_P')*p
+    operational_25=.25*p  # forecast purchase envelope; legacy C1/C2 are NOT added
+    c1=operational_25; c2=0.0  # read-only compatibility for older templates
     trading=d['trading_reserve']
-    operational_25=c1+c2
+    operational_25=.25*p
     residual_after_bags=cash-operational_25-trading
     # The 5% P is a non-binding reference. Formula approved by the user displays
     # what remains in physical USDT after protecting C1+C2 and Trading.
@@ -846,8 +852,8 @@ def balancer_report(d, observed):
                  'operating':d['usdt_operating'],'buy_ceiling':theoretical_ceiling},
       'metrics':[
         {'label':'USDT físico','value':fmt_money(cash),'help':f"{cash/p*100:.1f}% del patrimonio" if p else '', 'tone':'primary'},
-        {'label':'Piso 40% USDT','value':fmt_money(floor),'help':'Protección de liquidez','tone':'neutral'},
-        {'label':'Reserva Balancer estimada','value':fmt_money(reserve),'help':'USDT menos 25% P (C1/C2) y Reserva Trading, sin límite 40%','tone':'warn'},
+        {'label':'Meta estructural USDT','value':fmt_money(floor),'help':'Protección de liquidez','tone':'neutral'},
+        {'label':'Reserva Balancer estimada','value':fmt_money(reserve),'help':'USDT menos 25% P de presupuesto compras y Reserva Trading, sin límite 40%','tone':'warn'},
         {'label':'Reserva Trading','value':fmt_money(trading),'help':'Reserva separada Quantfury; incluida en USDT físico','tone':'primary'}],
       'buys':buy_preview,'sells':sale_preview,'buy_total':buy_total,'sell_total':sale_total,
       'buy_with_sales':[{'token':r['token'],'value':projected_cash_capacity*(r['target']-r['weight'])/weight_deficit if weight_deficit else 0} for r in buy_candidates],

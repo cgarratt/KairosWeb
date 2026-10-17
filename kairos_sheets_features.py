@@ -27,10 +27,8 @@ INBOX_SHEETS = {
 WRITE_LOCK = threading.Lock()
 EDITABLE_PARAM_KEYS = frozenset({
     'DRIFT_BAND_PP','STRUCTURAL_USDT_TARGET',
-    'C1_BAG_FRACTION_P','C2_BAG_FRACTION_P',
     'O3_BTC_PROCEEDS_FRACTION','O3_USDT_PROCEEDS_FRACTION',
     'O5_BTC_PROCEEDS_FRACTION','O5_USDT_PROCEEDS_FRACTION',
-    'ORDINARY_DEFAULT_USDT_TARGET',
     'RISK_REWARD_MIN','QF_MARGIN_CAP_PER_POSITION',
     'QF_ACCOUNT_RISK_PER_TRADE','QF_ACCOUNT_RISK_TOTAL',
     'MAX_LEVERAGE','MAX_OPEN_POSITIONS',
@@ -447,8 +445,6 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
         for base in ('O5','O3'):
             if abs(float(pm[f'{base}_BTC_PROCEEDS_FRACTION'])+float(pm[f'{base}_USDT_PROCEEDS_FRACTION'])-1)>1e-9:
                 raise SettingsError(base+': BTC + USDT debe sumar 100%')
-        if float(pm['C1_BAG_FRACTION_P'])+float(pm['C2_BAG_FRACTION_P'])>1:
-            raise SettingsError('Presupuesto C1+C2 supera 100% del patrimonio')
         try:defaults_from_master({r[1]:{'value':r[2],'status':r[5]} for r in b[SHEETS['parameters']][1:] if len(r)>5 and r[1]})
         except ForecastAllocationError as exc:raise SettingsError('Forecast: '+str(exc)) from exc
     # Update parameter parse_master O5 policy contract handled by validator.

@@ -27,8 +27,7 @@ SHEETS = {
 }
 SYMBOLS = frozenset(('BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMPFUN','PLUME','VIRTUAL','PEPE'))
 REQUIRED_PARAMS = ('SNAPSHOT_PROVIDER','BTC_NEVER_SELL','FRESH_DATA_FAIL_CLOSED',
-                   'DRIFT_BAND_PP','STRUCTURAL_USDT_TARGET','C1_BAG_FRACTION_P',
-                   'C2_BAG_FRACTION_P','QF_MARGIN_CAP_PER_POSITION',
+                   'DRIFT_BAND_PP','STRUCTURAL_USDT_TARGET','QF_MARGIN_CAP_PER_POSITION',
                    'QF_ACCOUNT_RISK_PER_TRADE','QF_ACCOUNT_RISK_TOTAL',
                    'RISK_REWARD_MIN','MAX_OPEN_POSITIONS','MAX_LEVERAGE',
                    'O5_BTC_PROCEEDS_FRACTION','O5_USDT_PROCEEDS_FRACTION',
@@ -107,7 +106,7 @@ def parse_master(raw):
         raise SheetDataError('unapproved structural liquidity target')
     if pv('BSI_PROVIDER')!='BINANCE_SPOT_MCP_4H_SYNC' or pv('HYPE_MACRO_PROVIDER')!='HYPERLIQUID_SPOT_HYPE_USDC_MCP':
         raise SheetDataError('market source mismatch')
-    for x in ('C1_BAG_FRACTION_P','C2_BAG_FRACTION_P','QF_MARGIN_CAP_PER_POSITION','QF_ACCOUNT_RISK_PER_TRADE','QF_ACCOUNT_RISK_TOTAL'):
+    for x in ('QF_MARGIN_CAP_PER_POSITION','QF_ACCOUNT_RISK_PER_TRADE','QF_ACCOUNT_RISK_TOTAL'):
         if _number(pv(x),x)>1: raise SheetDataError(f'{x}: invalid fraction')
     positions=[r for r in blocks['positions'][1:] if r and r[0] in SYMBOLS]
     if len(positions)!=12 or {r[0] for r in positions}!=SYMBOLS:

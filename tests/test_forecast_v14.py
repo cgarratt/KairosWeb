@@ -57,7 +57,7 @@ class ForecastPolicyTests(unittest.TestCase):
  def test_expected_html_sections(self):
   s=(ROOT/'templates/forecast.html').read_text()
   self.assertIn('forecast-weights',s)
-  self.assertIn('78.6% precio',s)
+  self.assertIn('O2C4 · Fib 78.6%',s)
   self.assertIn('25% de P',s)
   self.assertNotIn("custodyShots.push(custodyShot('Post-O5'",s)
   self.assertIn('Composición final Post-O5',s)
