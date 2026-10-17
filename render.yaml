@@ -21,3 +21,8 @@ services:
         sync: false
       - key: HYPERLIQUID_MCP_TOKEN
         sync: false
+
+      - key: DATABASE_URL
+        sync: false
+      - key: KAIROS_SNAPSHOT_ADMIN_TOKEN
+        sync: false
