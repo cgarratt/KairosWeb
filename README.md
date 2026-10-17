@@ -1,5 +1,5 @@
-# KairosWeb v1.8.0
+# KairosWeb v1.9.0
 
-Release sobre 1.7.0. Incluye motor Forecast de balanceo y splits de O3/O5 desde Master, mejoras visuales 36–41 y control global de privacidad de presentación.
+Release sobre v1.8.0. Incluye **versión abreviada en encabezado**, **semáforo informativo de niveles Fibonacci** en Forecast y **etiquetas breves de reservas USDT** en Balancer. Conserva Forecast dinámico con reglas de custodia y splits O3/O5 del Master.
 
-Leer [RELEASE_NOTES_v1.8.0.md](RELEASE_NOTES_v1.8.0.md). No modifica Google Sheets ni ejecuta órdenes.
+Leer [RELEASE_NOTES_v1.9.0.md](RELEASE_NOTES_v1.9.0.md). Despliegue manual en GitHub/Render; este paquete no escribe Google Sheets ni ejecuta órdenes.

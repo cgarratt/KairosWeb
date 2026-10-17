@@ -14,6 +14,12 @@
 .fc-tables th:first-child,.fc-tables td:first-child{text-align:left;position:sticky;left:0;background:#fff;z-index:1}
 .fc-tables thead th:first-child{background:#f6f9fe}.fc-tables tfoot td{background:#e8f1ff;font-weight:800;border-top:2px solid #85afe8}
 .fc-tables tfoot td:first-child{background:#e8f1ff}
+/* Indicadores informativos de retroceso; aplicados solo a CELDAS DE PRECIO. */
+.fc-tables td.fc-level-hit{background:rgba(23,163,115,.20)!important;color:#075d43;font-weight:800;border-left:3px solid #18ac81}
+.fc-tables td.fc-level-near{background:rgba(240,169,55,.22)!important;color:#764804;font-weight:800;border-left:3px solid #e6a23c}
+[data-theme="dark"] .fc-tables td.fc-level-hit{background:rgba(22,157,111,.28)!important;color:#8bffcf}
+[data-theme="dark"] .fc-tables td.fc-level-near{background:rgba(228,151,37,.32)!important;color:#ffe1a0}
+
 .fc-muted{font-size:12px;color:#667993}.fc-warning{border:1px solid #f2d69e;border-radius:12px;background:#fff9e9;padding:12px 15px;color:#845700;font-size:13px;margin:12px 0}
 .fc-chart{width:100%;height:310px;border:1px solid #dfebf6;border-radius:15px;background:linear-gradient(#fafcff,#f1f7ff)}
 .fc-line{stroke:#3276cc;stroke-width:3;fill:none;stroke-linejoin:round}.fc-dot{fill:#2680d5;stroke:white;stroke-width:2}
@@ -76,6 +82,7 @@
 <div class="fc-controls fc-deploy-controls"><div class="fc-field fc-deploy-slider" style="min-width:230px;flex:2"><label for="forecast-deploy">Despliegue simulado · % de patrimonio total P</label><input class="fc-slider" id="forecast-deploy" type="range" min="0" max="25" value="0" step="any"><div class="fc-legend">0% — máximo 25% de P · reserva Quantfury protegida</div></div><div class="fc-deploy-values"><div><label>Porcentaje</label><b class="fc-step" id="deploy-label">—</b></div><div><label>USDT simulado</label><b class="fc-step" id="deploy-total">—</b></div></div></div>
 <p id="deploy-shortfall" class="fc-legend" role="status" aria-live="polite"></p>
 <div class="fc-warning">Los precios O2C2 (Fib 50%) y O2C3 (Fib 61.8%) proceden de la antigua tabla C1/C2; las demás referencias se reconstruyen matemáticamente. Todos son escenarios, no órdenes. Los precios de referencia son de una tabla O2 histórica, no cotizaciones en vivo ni órdenes activas. Si faltan niveles (PEPE o VIRTUAL), el presupuesto simulado se muestra pero <b>no constituye una orden colocable</b>. Las órdenes LIMIT y el inventario siguen sujetos a reconciliación.</div>
+<p class="fc-legend" id="fibo-level-legend" role="note"><strong>Verde:</strong> referencia alcanzada por el Spot observado. <strong>Ámbar:</strong> Spot hasta 1% por encima del nivel, aún no alcanzado. Sin color: pendiente o sin precio. <strong>Referencia estimada, no certifica toques históricos post-O1</strong> ni constituye una señal ejecutable.</p>
 <div class="fc-tables"><table><thead><tr><th scope="col">Token</th><th scope="col" title="O2C1 · Fib 38.2%">Precio 38.2%</th><th scope="col" title="O2C1 · USDT">USDT</th><th scope="col" title="O2C2 · Fib 50%">Precio 50%</th><th scope="col" title="O2C2 · USDT">USDT</th><th scope="col" title="O2C3 · Fib 61.8%">Precio 61.8%</th><th scope="col" title="O2C3 · USDT">USDT</th><th scope="col" title="O2C4 · Fib 78.6%">Precio 78.6%</th><th scope="col" title="O2C4 · USDT">USDT</th><th scope="col" title="Total compras O2 · USDT">Total USDT</th></tr></thead><tbody id="fib-body"></tbody><tfoot id="fib-total"></tfoot></table></div>
 <p class="footer-note">O2C1 Fib 38.2% y O2C4 Fib 78.6% se estiman algebraicamente a partir de los valores históricos C1 Fib 50% / C2 Fib 61.8%; los pivotes de origen no están certificados. Los importes del pie suman los presupuestos simulados y no modifican la liquidez física.</p>
 </section>
@@ -107,11 +114,13 @@
 <script src="{{ url_for('static', filename='purchase_plan.js') }}"></script>
 <script src="{{ url_for('static', filename='forecast_balance.js') }}"></script>
 <script src="{{ url_for('static', filename='forecast_fibo_plan.js') }}"></script>
+<script src="{{ url_for('static', filename='forecast_level_status.js') }}"></script>
 
 <script>
 const fc={{ payload|tojson }};
 const Fibo=window.KairosForecastFibo;
 const Portfolio=window.KairosForecastBalance;
+const LevelStatus=window.KairosForecastLevelStatus;
 const weights=Object.fromEntries(Object.entries(fc.forecast_fibo_allocations||Fibo.DEFAULTS).map(([k,v])=>[k,v.slice()]));
 let lastForecastError=null;
 const $=id=>document.getElementById(id);
@@ -149,7 +158,16 @@ function renderFib(){
  const deficit=Math.max(0,requested-total);
  $('deploy-shortfall').textContent=deficit>0.005?`Déficit de caja para este escenario: ${money(deficit)}. El simulador no utiliza la reserva Quantfury.`:'Sin órdenes reales. USDT simulado sujeto a caja elegible y a los niveles alcanzados.';
  const pivots=new Map(fc.pivot_rows.map(p=>[p.token,p]));
- $('fib-body').innerHTML=fc.tokens.map((t,i)=>{const p=pivots.get(t.token)||{},a=amounts[i];const levels=[p.ref382,p.c1,p.c2,p.ref786];return `<tr><td>${logo(t.token)}</td>${levels.map((level,j)=>`<td>${price(level)}</td><td>${money(shares[j]*a)}</td>`).join('')}<td><b>${money(a)}</b></td></tr>`;}).join('');
+ $('fib-body').innerHTML=fc.tokens.map((t,i)=>{
+  const p=pivots.get(t.token)||{},a=amounts[i],levels=[p.ref382,p.c1,p.c2,p.ref786];
+  const levelsHtml=levels.map((level,j)=>{
+    const state=LevelStatus.classify({level,spot:Number(t.price)});
+    const css=state.status==='hit'?'fc-level-hit':state.status==='near'?'fc-level-near':'';
+    const label=LevelStatus.tooltip(state,Number(t.price),level);
+    return `<td class="${css}" title="${label}" data-level-status="${state.status}" data-fibo="${j}">${price(level)}</td><td>${money(shares[j]*a)}</td>`;
+  }).join('');
+  return `<tr><td>${logo(t.token)}</td>${levelsHtml}<td><b>${money(a)}</b></td></tr>`;
+}).join('');
  $('fib-total').innerHTML=`<tr><td>TOTAL USDT</td>${shares.map((f)=>`<td>—</td><td>${money(f*total)}</td>`).join('')}<td>${money(total)}</td></tr>`;
 }
 

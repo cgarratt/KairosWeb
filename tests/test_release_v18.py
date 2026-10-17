@@ -43,5 +43,5 @@ def test_privacy_toggle_all_pages_no_write():
 
 def test_version():
     text=(ROOT/'app.py').read_text()
-    assert 'APP_VERSION = "1.8.0"' in text
+    assert 'APP_VERSION = "1.9.0"' in text
     assert "'version':APP_VERSION" in text

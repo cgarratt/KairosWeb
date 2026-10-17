@@ -19,9 +19,9 @@
 <div title="Presupuesto máximo de compras por onda: 25% P" style="width:{{ 100*buy_budget/denominator }}%;background:#7dbce9"></div><div title="Balancer" style="width:{{ 100*bal/denominator }}%;background:#18a982"></div><div title="Trading" style="width:{{ 100*trading/denominator }}%;background:#eda244"></div>
 </div>
 <div class="liq-labels">
-<div><i style="background:#7dbce9"></i><span>Presupuesto compras O2/O4 · máximo 25% P (no acumulativo)</span><strong>{{ '${:,.0f}'.format(buy_budget) }}</strong><small>{{ '%.1f'|format(100*buy_budget/cash if cash else 0) }}% USDT físico</small></div>
+<div><i style="background:#7dbce9"></i><span>Presupuesto Compras</span><strong>{{ '${:,.0f}'.format(buy_budget) }}</strong><small>{{ '%.1f'|format(100*buy_budget/cash if cash else 0) }}% USDT físico</small></div>
 <div><i style="background:#18a982"></i><span>Reserva Balancer</span><strong>{{ '${:,.0f}'.format(bal) }}</strong><small>{{ '%.1f'|format(100*bal/cash if cash else 0) }}% USDT</small></div>
-<div><i style="background:#eda244"></i><span>Reserva Trading QF</span><strong>{{ '${:,.0f}'.format(trading) }}</strong><small>{{ '%.1f'|format(100*trading/cash if cash else 0) }}% USDT</small></div>
+<div><i style="background:#eda244"></i><span>Reserva Trading</span><strong>{{ '${:,.0f}'.format(trading) }}</strong><small>{{ '%.1f'|format(100*trading/cash if cash else 0) }}% USDT</small></div>
 </div>
 {% if committed>cash %}<div class="callout warn">Las bolsas nominales exceden el saldo físico: la barra usa como escala el total comprometido y no representa dinero disponible.</div>{% endif %}
 <p class="footer-note">USDT físico = presupuesto teórico de compras (25% P) + Trading + remanente; si supera caja, hay déficit. Meta estructural USDT: {{ '${:,.0f}'.format(payload.current.floor) }} (referencia separada, no restringe la Reserva Balancer). Importes teóricos sujetos a conciliación de órdenes.</p>

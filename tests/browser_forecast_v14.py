@@ -65,6 +65,17 @@ with sync_playwright() as playwright:
  updated=page.locator('#cycle-note').inner_text()
  assert init!=updated,(init,updated)
  assert not errors,errors
+ # v1.9 semaforo: verde spot bajo referencia, ámbar a 0.8% de distancia.
+ page.evaluate("fc.tokens[0].price=fc.pivot_rows[0].c1*0.999;fc.tokens[1].price=fc.pivot_rows[1].ref382*1.008;renderFib()")
+ btc=page.locator('#fib-body tr').nth(0)
+ eth=page.locator('#fib-body tr').nth(1)
+ assert btc.locator('td[data-fibo="1"][data-level-status="hit"]').count()==1
+ assert eth.locator('td[data-fibo="0"][data-level-status="near"]').count()==1
+ assert 'Verde' in btc.locator('td[data-fibo="1"]').get_attribute('title')
+ assert 'Ámbar' in eth.locator('td[data-fibo="0"]').get_attribute('title')
+ assert page.locator('#fib-body tr').first.locator('td.fc-level-hit').count()>0
+ assert page.locator('#fib-body tr').first.locator('td:nth-child(3).fc-level-hit').count()==0
+ assert not errors,errors
  path='/mnt/data/KairosWeb_v1.4.0_FORECAST_SMOKE.png'
  page.screenshot(path=path,full_page=False)
  print('PASS browser forecast v1.4.0; preview',path)

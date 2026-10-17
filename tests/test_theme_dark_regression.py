@@ -16,5 +16,5 @@ def test_shared_theme_styles_cover_notes_and_charts():
 
 def test_dark_fix_does_not_change_financial_logic():
     app=(ROOT/'app.py').read_text(encoding='utf-8')
-    assert 'APP_VERSION = "1.8.0"' in app
+    assert 'APP_VERSION = "1.9.0"' in app
     assert 'snapshot_master_2026' not in app
