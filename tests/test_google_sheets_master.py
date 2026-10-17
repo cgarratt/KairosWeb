@@ -76,6 +76,38 @@ class SheetsContract(unittest.TestCase):
     def test_orders_not_silently_ignored(self):
         raw=fake_master();raw[gs.SHEETS['orders']].append(['Binance','order-id'])
         with self.assertRaisesRegex(gs.SheetDataError,'reconcile'):gs.parse_master(raw)
+    def test_real_master_editorial_footnotes_are_not_orders(self):
+        raw=fake_master()
+        # Actual Google Sheet uses a caption in cell A58 of each operational tab.
+        for section,caption in (
+            ('orders','Al poblar órdenes: identificador único (Venue, Order ID), separar órdenes abiertas de fills, y reservar USDT antes de cualquier propuesta BUY.'),
+            ('fills','Jamás derivar fills de niveles tocados, simulaciones o LIMIT colocadas. Propuestas no son ejecución.'),
+        ):
+            rows=raw[gs.SHEETS[section]]
+            rows.extend([[] for _ in range(53)])
+            rows.append([caption])
+        state=gs.parse_master(raw)
+        self.assertEqual(state['control']['snapshot_id'],'TEST-001')
+
+    def test_footnote_with_operational_data_still_rejected(self):
+        raw=fake_master()
+        raw[gs.SHEETS['orders']].append([
+            'Al poblar órdenes: identificador único (Venue, Order ID), separar órdenes abiertas de fills, y reservar USDT antes de cualquier propuesta BUY.',
+            'order-123'])
+        with self.assertRaisesRegex(gs.SheetDataError,'reconcile'):
+            gs.parse_master(raw)
+
+    def test_unrecognized_single_cell_is_not_silently_ignored(self):
+        raw=fake_master()
+        raw[gs.SHEETS['fills']].append(['A new, unrecognized instruction that must not hide a real fill'])
+        with self.assertRaisesRegex(gs.SheetDataError,'reconcile'):
+            gs.parse_master(raw)
+
+    def test_safe_diagnostic_codes_do_not_disclose_secrets(self):
+        code=gs.public_failure_code(gs.SheetDataError('Google service account JSON invalid'))
+        self.assertEqual(code,'GOOGLE_CREDENTIALS_INVALID_JSON')
+        self.assertEqual(gs.public_failure_code(gs.SheetDataError('Google Sheets HTTP 403')),'GOOGLE_SHEETS_HTTP_403')
+
     def test_missing_credential_data_error_no_cached_state(self):
         with patch.dict(gs.os.environ,{},clear=True):
             with self.assertRaises(gs.SheetDataError):gs._remote_data()

@@ -17,7 +17,7 @@ from flask import Flask, Response, jsonify, render_template, request, abort, red
 from fastmcp import Client
 from forecast_math import derive_reference_anchors
 from werkzeug.local import LocalProxy
-from google_sheets_master import get_state, SheetDataError, cache_status as sheet_cache_status
+from google_sheets_master import get_state, SheetDataError, public_failure_code, cache_status as sheet_cache_status
 from hype_weekly import aggregate_weeks, HypeHistoryError
 
 BASE = Path(__file__).parent
@@ -90,11 +90,11 @@ def bind_published_sheet():
         return None
     except Exception as exc:
         incident=uuid.uuid4().hex[:10]
-        app.logger.error('Kairos Sheets DATA_ERROR id=%s class=%s',incident,type(exc).__name__)
+        app.logger.error('Kairos Sheets DATA_ERROR id=%s category=%s class=%s',incident,public_failure_code(exc),type(exc).__name__)
         msg='Google Sheets Master no disponible o no cumple el contrato PUBLICADO v5.0. No se utilizan snapshots locales.'
         if request.path.startswith('/api/'):
-            return jsonify({'status':'DATA_ERROR','origin':'GOOGLE_SHEETS','reason':msg,'error_id':incident}),503
-        return render_template('sheet_error.html',master='5.0.0',error_id=incident,message=msg),503
+            return jsonify({'status':'DATA_ERROR','origin':'GOOGLE_SHEETS','reason':msg,'category':public_failure_code(exc),'error_id':incident}),503
+        return render_template('sheet_error.html',master='5.0.1',error_id=incident,message=msg),503
 
 @app.after_request
 def headers(resp):
@@ -841,11 +841,11 @@ def balancer_report(d, observed):
 
 @app.route('/')
 def home():
-    return render_template('index.html', modes=MODE_DEFS, master='5.0.0')
+    return render_template('index.html', modes=MODE_DEFS, master='5.0.1')
 
 @app.route('/modes')
 def modes_page():
-    return render_template('modes.html', modes=MODE_DEFS, master='5.0.0')
+    return render_template('modes.html', modes=MODE_DEFS, master='5.0.1')
 
 @app.route('/mode/portafolio')
 def integral_portfolio_page():
@@ -871,7 +871,7 @@ def integral_portfolio_page():
                           'total':live['total_value'],'source':'Binance MCP + Google Sheets PUBLICADO'}
     except Exception as exc:
         app.logger.info('Integral portfolio using historical ledger; live pricing unavailable: %s',type(exc).__name__)
-    return render_template('portfolio_integral.html', master='5.0.0', segments=segments,
+    return render_template('portfolio_integral.html', master='5.0.1', segments=segments,
                            base=base, alive=alive, lost=lost, gain_to_recover=gain_to_recover,
                            spot=spot_breakdown, spot_observed=spot_observed,
                            source_note=values['source_note'], total_recorded=sum(x['actual_usdt'] for x in segments),
@@ -888,15 +888,15 @@ def mode_page(slug):
         observed, dashboard = load_live_dashboard()
     except Exception as exc:
         diag = diagnostic_error(exc, f'mode:{slug}:market')
-        return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master='5.0.0'), 503
+        return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master='5.0.1'), 503
     try:
         payload = build_mode_payload(slug, dashboard, observed)
-        return render_template('balancer.html' if slug=='balancer' else 'trade_sim.html' if slug in ('compras','ventas') else 'forecast.html' if slug=='forecast' else 'tradingbot.html' if slug=='tradingbot' else 'mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master='5.0.0')
+        return render_template('balancer.html' if slug=='balancer' else 'trade_sim.html' if slug in ('compras','ventas') else 'forecast.html' if slug=='forecast' else 'tradingbot.html' if slug=='tradingbot' else 'mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master='5.0.1')
     except Exception as exc:
         error_id = uuid.uuid4().hex[:10]
         app.logger.exception('Kairos MODE_RENDER slug=%s ID=%s',slug,error_id)
         diag = {'code':'MODE_RENDER','error_id':error_id, 'message':'Error interno al generar el reporte del modo (no es un error MCP).'}
-        return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master='5.0.0'), 500
+        return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master='5.0.1'), 500
 
 
 # Alertas 1H + Quick Wins inbox. Never synthesizes notifications from price movement.
@@ -989,7 +989,7 @@ def notifications_bridge_status():
 
 @app.route('/health')
 def health():
-    return jsonify({'status':'UP','service':'Kairos Web','version':'5.0.0','sheets_status':sheet_cache_status()})
+    return jsonify({'status':'UP','service':'Kairos Web','version':'5.0.1','sheets_status':sheet_cache_status()})
 
 @app.route('/api/portfolio')
 def portfolio():
@@ -1080,9 +1080,10 @@ def google_sheets_status():
                         'bsi_sell':'BLOQUEADO', 'tradingbot':'WATCH',
                         'cache':sheet_cache_status()})
     except Exception as exc:
-        app.logger.error('Sheets status failure type=%s',type(exc).__name__)
+        app.logger.error('Sheets status failure category=%s type=%s',public_failure_code(exc),type(exc).__name__)
         return jsonify({'status':'DATA_ERROR','origin':'GOOGLE_SHEETS',
-                        'reason':'Error de conexión, credenciales, publicación o integridad de Google Sheets.'}),503
+                        'reason':'Error de conexión, credenciales, publicación o integridad de Google Sheets.',
+                        'category':public_failure_code(exc)}),503
 
 @app.route('/api/modes')
 def modes_api():

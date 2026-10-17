@@ -150,8 +150,21 @@ def parse_master(raw):
     # The user declared no open orders/fills pending; this is not remote exchange proof.
     for key in ('ordenes_activas_declaradas','fills_pendientes_registro_declarados'):
         if str(ctrl.get(key))!='0':raise SheetDataError(f'01_CONTROL: {key} requires current reconciliation')
-    if any(any(v not in (None,'') for v in r) for r in blocks['orders'][1:]) or any(any(v not in (None,'') for v in r) for r in blocks['fills'][1:]):
-        raise SheetDataError('Orders/fills present: reconcile publication before using free cash')
+    # The original Master contains editorial instructions in A58 of BOTH tabs.
+    # They are NOT orders or fills. Accept ONLY the exact known footnotes with
+    # all other columns empty; reject any other nonempty cell in the data zone.
+    # This keeps the fail-closed policy for future orders/fills (even below A58).
+    _footnotes={
+        'orders':'Al poblar órdenes: identificador único (Venue, Order ID), separar órdenes abiertas de fills, y reservar USDT antes de cualquier propuesta BUY.',
+        'fills':'Jamás derivar fills de niveles tocados, simulaciones o LIMIT colocadas. Propuestas no son ejecución.',
+    }
+    for section in ('orders','fills'):
+        for rownum,r in enumerate(blocks[section][1:],start=5):
+            if not any(v not in (None,'') for v in r):
+                continue
+            if str(_cell(r,0,'')).strip()==_footnotes[section] and all(v in (None,'') for v in r[1:]):
+                continue
+            raise SheetDataError(f'{section}: operational or unrecognized entry at row {rownum}; reconcile before use')
     pivot_levels={}; old_pivot_sources=set()
     for r in blocks['pivots'][1:]:
         if not r or r[0] not in SYMBOLS:continue
@@ -231,6 +244,27 @@ def _remote_data():
         raise SheetDataError('Google Sheets unavailable')
     finally:
         session.close()
+
+
+def public_failure_code(exc):
+    """Safe diagnostics: no credentials, request headers, private keys or URLs."""
+    if not isinstance(exc,SheetDataError):
+        return 'GOOGLE_TRANSPORT_OR_AUTH_ERROR'
+    msg=str(exc)
+    if 'missing' in msg and ('KAIROS_GOOGLE_SERVICE_ACCOUNT_JSON' in msg or 'GOOGLE_APPLICATION_CREDENTIALS' in msg):
+        return 'GOOGLE_CREDENTIALS_MISSING'
+    if 'service account JSON invalid' in msg:
+        return 'GOOGLE_CREDENTIALS_INVALID_JSON'
+    if msg.startswith('Google Sheets HTTP '):
+        code=msg.rsplit(' ',1)[-1]
+        return 'GOOGLE_SHEETS_HTTP_'+code if code.isdigit() else 'GOOGLE_SHEETS_HTTP_ERROR'
+    if 'incomplete batchGet' in msg or 'unavailable' in msg:
+        return 'GOOGLE_SHEETS_INCOMPLETE'
+    if msg.startswith('orders:') or msg.startswith('fills:'):
+        return 'ORDERS_FILLS_RECONCILIATION_REQUIRED'
+    if 'PUBLICADO' in msg or 'publication' in msg:
+        return 'SHEET_NOT_PUBLISHED'
+    return 'GOOGLE_SHEETS_CONTRACT_INVALID'
 
 
 def get_state(*,force=False):
