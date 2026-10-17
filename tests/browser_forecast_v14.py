@@ -20,12 +20,12 @@ payload={'o2_source':'FAKE_MCPS_ARCHIVE','generated_at':'2026-10-17T12:00:00Z','
  'cash_total':30000,'trading_reserve':5000,'tokens':assets,'pivot_rows':pivots,'custody':cs,
  'custody_policy':{'T1':[.4,.3,.3],'T2':[0,.3,.7],'T3':[0,0,1]},
  'forecast_fibo_allocations':{'o2':[0,60,40,0],'o3':[40,30,20,10],'o4':[0,60,40,0],'o5':[20,20,30,30]},
- 'official_o5_split':.3}
+ 'official_o5_split':.3,'o3_liquidity_target':.4}
 class Req:
  path='/mode/forecast';args={};full_path='/mode/forecast'
 env=Environment(loader=FileSystemLoader(ROOT/'templates'),autoescape=True)
 env.globals.update(request=Req(),url_for=lambda endpoint,**kw:'/static/'+kw.get('filename','') if endpoint=='static' else '/mode/forecast',nav_modes=[dict(slug='forecast',name='Forecast',description='Escenario')])
-html=env.get_template('forecast.html').render(payload=payload,master='1.4.0')
+html=env.get_template('forecast.html').render(payload=payload,master='1.7.0')
 # Browser has no app server: safely inline local JS assets.
 def inject(m):
  name=m.group(1)

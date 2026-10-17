@@ -1,4 +1,4 @@
-"""KairosWeb v1.6.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
+"""KairosWeb v1.7.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
 import asyncio
 import json
 import os
@@ -29,7 +29,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = "1.6.0"  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = "1.7.0"  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',

@@ -16,7 +16,7 @@ class Req:
  path='/settings';args={};full_path='/settings'
 env=Environment(loader=FileSystemLoader(ROOT/'templates'),autoescape=True)
 env.globals.update(request=Req(),url_for=lambda endpoint,**kw:'/static/'+kw.get('filename','') if endpoint=='static' else '/settings',nav_modes=[])
-html=env.get_template('settings.html').render(master='1.6.0')
+html=env.get_template('settings.html').render(master='1.7.0')
 # Set the HTML first, then register a deterministic fake fetch and load local
 # scripts in document order; no network or privileged endpoints are invoked.
 html=re.sub(r'<script\b[^>]*>.*?</script>', '', html, flags=re.S)

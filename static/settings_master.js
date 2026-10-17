@@ -20,6 +20,18 @@
     {id:'alerts',name:'Alertas',description:'Proximidad de las alertas de Kairos.',keys:['PROXIMITY_BAND']}
   ];
   function parameterGroup(entry){return PARAM_GROUPS.find(g=>(g.keys||[]).includes(entry.key)||g.prefix&&entry.key.startsWith(g.prefix))||PARAM_GROUPS[0];}
+  // Order presentation by canonical Fib level, NOT by Google Sheets row order.
+  // Preserve the original data-index: collect() and audited writes must continue
+  // addressing the exact parameter key, even when fields are reordered visually.
+  const FIB_DISPLAY_ORDER={O2:['382','500','618','786'],O3:['1618','2618','3618','4618'],
+    O4:['382','500','618','786'],O5:['1618','2618','3618','4618']};
+  function parameterVisualRank(entry){
+    const group=parameterGroup(entry).id;
+    const groupIndex=PARAM_GROUPS.findIndex(g=>g.id===group);
+    const match=String(entry.key||'').match(/^FORECAST_(O[2345])_FIB_(\d{3,4})_PCT$/);
+    const fibRank=match?FIB_DISPLAY_ORDER[match[1]].indexOf(match[2]):-1;
+    return groupIndex*100+(fibRank<0?50:fibRank);
+  }
   const sectionFields={units:[['hodl','HODL'],['core','Core'],['exchange','Exchange'],['investment_total','Inversión remanente (USDT)']],
     targets:[['tier','Tier'],['target','Objetivo (%)']],
     tier_custody:[['hodl','HODL (%)'],['core','Core (%)'],['exchange','Exchange (%)']],
@@ -125,8 +137,10 @@
       }
       body.prepend(jump);
     }
-    for(let index=0;index<rows.length;index++){
-      const entry=rows[index];const item=el('div','settings-row '+(tab==='parameters'?'param ':''));
+    const renderOrder=rows.map((entry,index)=>({entry,index}));
+    if(tab==='parameters')renderOrder.sort((a,b)=>parameterVisualRank(a.entry)-parameterVisualRank(b.entry));
+    for(const {entry,index} of renderOrder){
+      const item=el('div','settings-row '+(tab==='parameters'?'param ':''));
       if(tab==='pivots')item.classList.add('pivots');
       if(tab==='units')item.classList.add('units');
       const primary=el('div','settings-token');
