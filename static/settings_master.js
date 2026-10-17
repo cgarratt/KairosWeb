@@ -18,7 +18,7 @@
   const status=document.getElementById('settings-msg'), save=document.getElementById('settings-save');
   const hint=document.getElementById('settings-admin-state');const more=document.getElementById('settings-pivots-tools');
   const totals=document.getElementById('settings-totals');
-  let state=null,tab='units',pivots={},preliminaryLoaded=false;
+  let state=null,tab='units',pivots={},archiveLoaded=false,refreshingPivots=false;
   function el(t,c,value){const x=document.createElement(t);if(c)x.className=c;if(value!==undefined)x.textContent=String(value);return x;}
   function message(m){status.textContent=m;}
   function numerical(v){const x=Number(v);return Number.isFinite(x)?x:0;}
@@ -29,6 +29,7 @@
   function inputValue(field,entry){const value=entry[field];
     if(tab==='targets'&&field==='target' ||tab==='tier_custody')return cleanFloat(numerical(value)*100);
     if(tab==='parameters'&&field==='value')return fmt.toDisplay(value,entry);
+    if(tab==='units'&&field==='investment_total')return Number(value).toFixed(2);
     return value===null||value===undefined?'':String(value);
   }
   function makeField(item,entry,index,field,label){const holder=el('div','settings-field');const name=el('label','',label);
@@ -37,9 +38,10 @@
     }else{
       input=el('input');input.type='text';input.inputMode='decimal';input.value=inputValue(field,entry);
       if(field==='value'&&fmt.scale(entry)==='percent-list'){input.placeholder='20%, 20%, 30%, 30%';}
+      if(tab==='units'&&field==='investment_total'){input.inputMode='decimal';input.placeholder='0.00';}
     }
     input.dataset.index=String(index);input.dataset.field=field;input.setAttribute('aria-label',label+' '+(entry.token||entry.key||entry.tier||entry.venue||''));
-    input.addEventListener('input',updateComputed);
+    input.addEventListener('input',()=>{input.dataset.userEdited='true';updateComputed();});
     holder.append(name,input);item.append(holder);
   }
   function rowNum(index,field){const v=body.querySelector(`[data-index="${index}"][data-field="${field}"]`);return v?numerical(v.value):0;}
@@ -118,6 +120,7 @@
   function fromInput(field,value,entry){
     if(field==='tier')return value;
     if(tab==='parameters'&&field==='value')return fmt.fromDisplay(value,entry);
+    if(tab==='units'&&field==='investment_total'&&!/^(?:\d+)(?:[.,]\d{1,2})?$/.test(value.trim()))throw Error('La inversión debe utilizar como máximo 2 decimales');
     if(value.trim()===''&&tab==='pivots')return null;
     const n=Number(value.replace(',','.'));
     if(!value.trim()||!Number.isFinite(n)||n<0)throw Error(`Valor inválido: ${entry.token||entry.key||entry.venue||entry.tier} · ${field}`);
@@ -132,7 +135,8 @@
       for(const [field] of sectionFields[tab]){
         const input=body.querySelector(`[data-index="${index}"][data-field="${field}"]`);
         if(!input)throw Error('Falta un campo');
-        const value=fromInput(field,input.value,entry);
+        let value=fromInput(field,input.value,entry);
+        if(tab==='units'&&field==='investment_total'&&input.dataset.userEdited!=='true')value=Number(entry.investment_total);
         if(value===null&&tab==='pivots')continue;
         if(typeof value==='number'){
           if(Math.abs(value-Number(entry[field]??0))>Math.max(1e-11,Math.abs(value)*1e-10))dirty=true;
@@ -164,7 +168,7 @@
   }
   nav.addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(!b)return;tab=b.dataset.tab;
     nav.querySelectorAll('button').forEach(x=>x.classList.toggle('selected',x===b));draw();message('Edición local; aún no se ha publicado ningún cambio.');
-    if(tab==='pivots'&&!preliminaryLoaded){preliminaryLoaded=true;loadPreliminary();}
+    if(tab==='pivots'){if(!archiveLoaded)loadArchivedPivots();else applyCachedPivots();}
   });
   save.addEventListener('click',async()=>{
     if(!state||!state.is_admin)return;
@@ -181,26 +185,84 @@
       await load();message(`Guardado confirmado en Google Sheets: ${res.snapshot_id}. KairosGPT leerá esta revisión en la siguiente ejecución.`);
     }catch(e){message('NO PUBLICADO / VERIFICAR: '+e.message);}finally{save.disabled=!state?.is_admin||!state?.write_configured;}
   });
-  async function loadPreliminary(){
-    const button=document.getElementById('settings-preliminary');button.disabled=true;message('Consultando velas históricas MCP, podría tardar…');
-    try{const r=await fetch('/api/settings/pivots/preliminary',{cache:'no-store',credentials:'same-origin'}),json=await r.json();
-      if(!r.ok||json.status!=='OK')throw Error(json.reason||'MCP no disponible');
-      for(const rec of json.records){pivots[rec.token]=rec;
-        const ix=(state.sections.pivots||[]).findIndex(x=>x.token===rec.token);if(ix<0)continue;
-        const row=state.sections.pivots[ix];
-        for(const field of ['cycle_low','o1','o2','o3','o4','o5']){
-          const control=body.querySelector(`[data-index="${ix}"][data-field="${field}"]`);
-          if(control && (row[field]===null||row[field]===undefined||row[field]==='')&&control.value===''&&rec[field]!==null&&rec[field]!==undefined){
-            control.value=String(rec[field]);
-          }
-        }
-        const label=body.querySelector(`[data-pivot-info="${rec.token}"]`);
-        if(label)label.textContent=rec.status==='DATA_ERROR'?`${rec.token}: ${rec.warning}`:
-          `CH: ${rec.cycle_high??'N/D'} (${rec.ch_date??'s/f'}) · CL: ${rec.cycle_low??'N/D'} (${rec.cl_date??'s/f'}) · ${rec.source} · ${rec.warning}`;
+  function applyPivotCandidate(rec){
+    if(!rec||!state||!Array.isArray(state.sections?.pivots))return;
+    if(!['CANDIDATO_ARCHIVADO_NO_CERTIFICADO','CANDIDATO_MCP_NO_CERTIFICADO','DATA_ERROR'].includes(rec.status))return;
+    if(rec.status!=='DATA_ERROR')pivots[rec.token]=rec;
+    if(tab!=='pivots')return;
+    const ix=state.sections.pivots.findIndex(x=>x.token===rec.token);
+    if(ix<0)return;
+    const current=state.sections.pivots[ix];
+    for(const field of ['cycle_low','o1','o2','o3','o4','o5']){
+      const input=body.querySelector(`[data-index="${ix}"][data-field="${field}"]`);
+      if(!input || input.dataset.userEdited==='true')continue;
+      // Historical/approved values from the official table always have priority.
+      if(current[field]!==null&&current[field]!==undefined&&current[field]!=='')continue;
+      const val=rec[field];
+      if(val!==null&&val!==undefined&&rec.status!=='DATA_ERROR'){
+        input.value=String(val);
+        input.dataset.preloadOrigin=rec.record_origin||rec.source||'MCP_EXPLORATORIO';
       }
-      message('Candidatos MCP precargados para revisión. Verifica y corrige los campos antes de Guardar. Ningún pivote fue certificado.');
-    }catch(err){preliminaryLoaded=false;message('DATA ERROR MCP: '+err.message);}finally{button.disabled=false;}
+    }
+    const info=body.querySelector(`[data-pivot-info="${rec.token}"]`);
+    if(info){
+      const detail=rec.status==='DATA_ERROR'?'MCP no disponible; sin sustitución de campos oficiales':
+        `CH: ${rec.cycle_high??'N/D'} (${rec.ch_date||'fecha pendiente'}) · CL: ${rec.cycle_low??'N/D'} (${rec.cl_date||'fecha por verificar'}) · `+
+        `O1: ${rec.o1??'N/D'} · O2: ${rec.o2??'N/D'} · O3: ${rec.o3??(rec.o3_unconfirmed_high!=null?String(rec.o3_unconfirmed_high)+' (máx. observado sin 5R)':'N/D')}`;
+      info.textContent=`${rec.status} · ${rec.record_origin||rec.source||'MCP'} · ${detail} · ${rec.warning||'No certificado, sin órdenes'}`;
+    }
   }
-  document.getElementById('settings-preliminary').addEventListener('click',()=>{preliminaryLoaded=true;loadPreliminary();});
+  function applyCachedPivots(){Object.values(pivots).forEach(applyPivotCandidate);}
+  async function getPivotPayload(url){
+    const response=await fetch(url,{cache:'no-store',credentials:'same-origin'});
+    const json=await response.json().catch(()=>({status:'DATA_ERROR'}));
+    if(!response.ok||!['OK','PARTIAL'].includes(json.status))throw Error(json.reason||json.status||'Error MCP');
+    return json;
+  }
+  async function loadArchivedPivots(){
+    const progress=document.getElementById('settings-preliminary-progress');
+    progress.textContent='Cargando archivo exploratorio MCP desde Google Sheets…';
+    try{
+      const response=await getPivotPayload('/api/settings/pivots/preliminary');
+      let usable=0;
+      for(const rec of response.records||[]){applyPivotCandidate(rec);if(rec.status!=='DATA_ERROR')usable++;}
+      archiveLoaded=true;
+      progress.textContent=`${usable}/12 activos con información histórica MCP archivada. Para actualizar precios extremos, pulsa «Actualizar candidatos desde MCP».`;
+      message('Datos MCP históricos preliminares cargados. No se han modificado ni certificado los pivotes del Master.');
+    }catch(e){archiveLoaded=false;progress.textContent='No se pudo consultar el archivo de candidatos: '+e.message+'; puedes intentar actualización MCP.';}
+  }
+  async function refreshLivePivots(){
+    if(refreshingPivots||!state)return;
+    refreshingPivots=true;
+    const button=document.getElementById('settings-preliminary');
+    const progress=document.getElementById('settings-preliminary-progress');
+    button.disabled=true;
+    await loadArchivedPivots();
+    const tokens=(state.sections.pivots||[]).map(r=>r.token);
+    let next=0,ok=0,failed=0;
+    progress.textContent=`Actualizando MCP por token: 0/${tokens.length}… Los candidatos archivados permanecen visibles.`;
+    async function worker(){
+      while(next<tokens.length){
+        const token=tokens[next++];
+        try{
+          const data=await getPivotPayload('/api/settings/pivots/preliminary?token='+encodeURIComponent(token));
+          const r=(data.records||[]).find(x=>x.token===token);
+          if(!r||r.status==='DATA_ERROR'){
+            failed++;
+            // Preserve archive evidence, indicate the live failure without overwriting inputs.
+            const ix=state.sections.pivots.findIndex(x=>x.token===token);
+            const hint=body.querySelector(`[data-pivot-info="${token}"]`);
+            if(hint)hint.textContent+=(hint.textContent?' · ':'')+`Actualización MCP falló: ${r?.warning||'sin respuesta'}`;
+          }else{applyPivotCandidate(r);ok++;}
+        }catch(e){failed++;const hint=body.querySelector(`[data-pivot-info="${token}"]`);if(hint)hint.textContent+=' · MCP no disponible para actualizar';}
+        progress.textContent=`Actualización histórica MCP: ${ok+failed}/${tokens.length} consultados · ${ok} correctos · ${failed} pendientes. No se ha publicado nada.`;
+      }
+    }
+    try{await Promise.all([worker(),worker()]);
+      archiveLoaded=true;
+      message(`Revisión finalizada: ${ok} tokens actualizados desde MCP; ${failed} conservaron el archivo histórico. Valida cada onda antes de Guardar; los pivotes NO están certificados.`);
+    }finally{refreshingPivots=false;button.disabled=false;}
+  }
+  document.getElementById('settings-preliminary').addEventListener('click',refreshLivePivots);
   load();
 })();

@@ -1,4 +1,4 @@
-"""KairosWeb v1.0.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
+"""KairosWeb v1.2.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
 import asyncio
 import json
 import os
@@ -13,6 +13,7 @@ import httpx
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
+from admin_origin import same_origin_allowed
 
 from flask import Flask, Response, jsonify, render_template, request, abort, redirect, g, session, url_for
 from fastmcp import Client
@@ -26,7 +27,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = "1.1.0-rc1"  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = "1.2.0"  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -115,7 +116,7 @@ def headers(resp):
     resp.headers['Cache-Control'] = 'no-store'
     resp.headers['X-Content-Type-Options'] = 'nosniff'
     resp.headers['X-Frame-Options'] = 'DENY'
-    resp.headers['Referrer-Policy'] = 'no-referrer'
+    resp.headers['Referrer-Policy'] = 'same-origin'
     return resp
 
 async def call_mcp(env_name, tool, args=None):
@@ -925,13 +926,19 @@ def alerts_unread():
                         'message':'No se pudo leer el histórico de Alertas 1H. No se muestran notificaciones de otra fuente.'}),503
 
 
-def _same_origin():
-    # Mandatory on browser write actions; protects HTTP Basic sessions from CSRF.
-    from urllib.parse import urlsplit
-    expected=urlsplit(request.host_url)
-    sent=request.headers.get('Origin') or request.headers.get('Referer') or ''
-    actual=urlsplit(sent)
-    return (actual.scheme=='https' or (expected.hostname in ('localhost','127.0.0.1') and actual.scheme=='http')) and actual.netloc==expected.netloc
+def _same_origin(*, csrf_protected_login=False):
+    # Reject explicit foreign origins.  Browser Fetch Metadata provides a safe
+    # fallback when Render/proxy/referrer policy hides Referer/Origin; only a
+    # CSRF-protected login form can fall back when metadata is completely absent.
+    return same_origin_allowed(
+        request_host=request.host,
+        origin=request.headers.get('Origin', ''),
+        referer=request.headers.get('Referer', ''),
+        fetch_site=request.headers.get('Sec-Fetch-Site', ''),
+        render_host=os.getenv('RENDER_EXTERNAL_HOSTNAME', ''),
+        public_origin=os.getenv('KAIROS_PUBLIC_ORIGIN', ''),
+        csrf_protected_login=csrf_protected_login,
+    )
 
 
 @app.route('/api/alerts/read-all', methods=['POST'])
@@ -990,8 +997,21 @@ def _csrf_ok():
 def admin_login():
     if not app.secret_key or not os.getenv('KAIROS_SETTINGS_ADMIN_KEY'):
         return render_template('admin_login.html',not_configured=True,error='Falta KAIROS_SESSION_SECRET o KAIROS_SETTINGS_ADMIN_KEY en Render.'),503
-    if request.method=='POST':
-        if not _same_origin():return 'Origen no autorizado',403
+    if request.method == 'POST':
+        supplied_token=request.form.get('login_csrf','')
+        saved_token=session.get('login_csrf','')
+        token_ok=bool(saved_token and supplied_token and
+                      secrets.compare_digest(saved_token,supplied_token))
+        # Rejected submissions must never grant an administrative session.
+        if not token_ok:
+            return render_template('admin_login.html',error='Sesión de acceso caducada o no disponible. Recarga esta página e inténtalo nuevamente.',
+                                   not_configured=False,login_csrf=session.get('login_csrf', '')),403
+        if not _same_origin(csrf_protected_login=True):
+            app.logger.warning('Admin login rejected: untrusted origin metadata (no URLs/credentials logged)')
+            return render_template('admin_login.html',error='Origen no autorizado. Abre el acceso desde la misma web.',
+                                   not_configured=False,login_csrf=session.get('login_csrf','')),403
+        # One-use login CSRF: rotate even after a wrong password.
+        session.pop('login_csrf',None)
         supplied=request.form.get('admin_key','')
         expected=os.getenv('KAIROS_SETTINGS_ADMIN_KEY','')
         if supplied and secrets.compare_digest(supplied,expected):
@@ -999,8 +1019,13 @@ def admin_login():
             session['kairos_admin']=True
             session['csrf_token']=secrets.token_urlsafe(32)
             return redirect(url_for('settings_page'))
-        return render_template('admin_login.html',error='Clave administrativa incorrecta.',not_configured=False),403
-    return render_template('admin_login.html',error=None,not_configured=False)
+        new_csrf=secrets.token_urlsafe(32)
+        session['login_csrf']=new_csrf
+        return render_template('admin_login.html',error='Clave administrativa incorrecta.',
+                               not_configured=False,login_csrf=new_csrf),403
+    login_csrf=secrets.token_urlsafe(32)
+    session['login_csrf']=login_csrf
+    return render_template('admin_login.html',error=None,not_configured=False,login_csrf=login_csrf)
 
 
 @app.route('/admin/logout',methods=['POST'])
@@ -1077,36 +1102,50 @@ def settings_publish():
 
 @app.route('/api/settings/pivots/preliminary')
 def pivot_preliminary_endpoint():
-    """Explicit read-only scan. No Sheet writes and no pivot certification."""
-    try:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        from pivot_candidates import candidates_binance, candidates_hype
-        names=['BTC','ETH','SOL','LINK','HBAR','SUI','ONDO','PUMPFUN','PLUME','VIRTUAL','PEPE']
-        def scan(name):
-            symbol='PUMP' if name=='PUMPFUN' else name
-            key='SUI_CL_SELECTED' if name=='SUI' else 'PUMP_CL_CANDIDATE' if name=='PUMPFUN' else None
-            selected=selected_lows.get(name) if key else None
-            return candidates_binance(name,call_mcp_resilient('BINANCE_MCP_URL','get_kairos_cycle_phase',{'symbol':symbol+'USDT'}),selected_low=selected)
-        approved_params=g.kairos_state['parameters']
-        selected_lows={k:approved_params.get('SUI_CL_SELECTED' if k=='SUI' else 'PUMP_CL_CANDIDATE',{}).get('value') for k in ('SUI','PUMPFUN')}
-        output={}
-        with ThreadPoolExecutor(max_workers=5) as pool:
-            futures={pool.submit(scan,n):n for n in names}
-            for f in as_completed(futures):
-                name=futures[f]
-                try:output[name]=f.result()
-                except Exception:output[name]={'token':name,'status':'DATA_ERROR','warning':'MCP no disponible; no rellenar pivote'}
+    """Review-only preliminary data. Default is archived MCP; refresh one token live.
+
+    Never issue a 12-token synchronous fan-out: transient Render/MCP delays
+    would make the entire UI hang. One-token refreshes can fail independently.
+    """
+    from pivot_preload import TOKENS, ARCHIVE_A1, archive_candidates, review_result
+    token = request.args.get('token', '').strip().upper()
+    if not token:
         try:
-            hype=call_mcp_resilient('HYPERLIQUID_MCP_URL','get_hype_spot_ohlcv',
-                {'interval':'1d','start_date':'2024-11-29','limit':1200})
-            output['HYPE']=candidates_hype(hype, left=int(approved_params['WEEKLY_PIVOT_LEFT']['value']),right=int(approved_params['WEEKLY_PIVOT_RIGHT']['value']))
-        except Exception:output['HYPE']={'token':'HYPE','status':'DATA_ERROR','warning':'Hyperliquid histórico no disponible'}
+            from kairos_sheets_features import read_ranges
+            rows = read_ranges({'archive':ARCHIVE_A1})['archive']
+            records=archive_candidates(rows,g.kairos_state['parameters'])
+            return jsonify({'status':'OK','scope':'EXPLORATORY_ONLY','certified':False,
+                            'source':'GOOGLE_SHEETS_ARCHIVED_MCP_NOT_LIVE',
+                            'observed_utc':None, 'records':records})
+        except Exception as exc:
+            app.logger.error('Pivot archive error category=%s',type(exc).__name__)
+            return jsonify({'status':'DATA_ERROR','reason':'No se pudieron recuperar los pivotes históricos archivados; revisa conexión Google Sheets.'}),503
+
+    if token not in TOKENS:
+        return jsonify({'status':'INVALID_TOKEN'}),400
+    try:
+        from pivot_candidates import candidates_binance, candidates_hype
+        if token=='HYPE':
+            data=call_mcp_resilient('HYPERLIQUID_MCP_URL','get_hype_spot_ohlcv',
+                      {'interval':'1d','start_date':'2024-11-29','limit':750})
+            record=candidates_hype(data,left=int(approved_numeric('WEEKLY_PIVOT_LEFT')),
+                                        right=int(approved_numeric('WEEKLY_PIVOT_RIGHT')))
+        else:
+            symbol='PUMP' if token=='PUMPFUN' else token
+            pkey={'SUI':'SUI_CL_SELECTED','PUMPFUN':'PUMP_CL_CANDIDATE'}.get(token)
+            param=g.kairos_state['parameters'].get(pkey,{}) if pkey else {}
+            selected=param.get('value') if param.get('status') in ('APROBADO_COMO_ANCLA_MANUAL','CANDIDATO_NO_CONFIRMADO') else None
+            raw=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_cycle_phase',{'symbol':symbol+'USDT'})
+            record=candidates_binance(token,raw,selected_low=selected)
+        record=review_result(record)
         return jsonify({'status':'OK','scope':'EXPLORATORY_ONLY','certified':False,
                         'observed_utc':datetime.now(timezone.utc).isoformat(),
-                        'records':[output[n] for n in ['BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMPFUN','PLUME','VIRTUAL','PEPE']]})
-    except Exception:
-        app.logger.exception('Pivot preliminary failed')
-        return jsonify({'status':'DATA_ERROR','reason':'No se pudo completar la exploración MCP'}),503
+                        'records':[record]})
+    except Exception as exc:
+        app.logger.warning('Pivot MCP unavailable token=%s class=%s',token,type(exc).__name__)
+        return jsonify({'status':'PARTIAL','scope':'EXPLORATORY_ONLY','certified':False,
+                        'records':[{'token':token,'status':'DATA_ERROR','certified':False,
+                                    'warning':'MCP no disponible para este activo; conserva candidato archivado y revisa el diagnóstico.'}]}),200
 
 
 # Technical candidates based only on fully closed Binance Spot 4H candles.

@@ -70,7 +70,7 @@
   th[aria-sort="ascending"],th[aria-sort="descending"]{color:#1958a2}
   </style>
   <link rel="stylesheet" href="{{ url_for('static',filename='alerts_settings.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static',filename='theme.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static',filename='theme.css') }}?v={{ master }}">
   {% block head %}{% endblock %}
 </head>
 <body>

@@ -55,3 +55,138 @@
 .admin-login-form label{display:grid;gap:8px}.admin-login-form input{padding:12px;border:1px solid var(--line);border-radius:10px}
 @media(max-width:1100px){.settings-row.units,.settings-row.pivots{grid-template-columns:repeat(3,minmax(100px,1fr))}.settings-row.units .settings-token,.settings-row.pivots .settings-token{grid-column:1/-1}}
 @media(max-width:680px){.settings-row.units,.settings-row.pivots{grid-template-columns:repeat(2,minmax(120px,1fr))}.alerts-head{flex-wrap:wrap}.settings-row.param{grid-template-columns:1fr}.alerts-popover{width:min(450px,calc(100vw - 24px))}}
+
+
+/* KairosWeb v1.1.0 RC2 — accessible dark surfaces across every mode.
+   Overrides light hard-coded template backgrounds; no portfolio logic changes. */
+:root[data-theme="dark"]{
+  --surface-raised:#1d304b;
+  --surface-inset:#233852;
+  --surface-warn:#44371f;
+  --surface-warn-line:#7a6034;
+  --surface-warn-text:#ffe6b3;
+}
+/* Content areas with previously fixed light backgrounds */
+:root[data-theme="dark"] .nested-panel,
+:root[data-theme="dark"] .liq-step,
+:root[data-theme="dark"] .liq-labels > div,
+:root[data-theme="dark"] .sim-metric,
+:root[data-theme="dark"] .control-panel,
+:root[data-theme="dark"] .fc-kpi,
+:root[data-theme="dark"] .fc-controls,
+:root[data-theme="dark"] .integral-stat,
+:root[data-theme="dark"] .settings-msg,
+:root[data-theme="dark"] .settings-total-panel,
+:root[data-theme="dark"] .settings-theme-box {
+  background:var(--surface-raised);
+  border-color:#415876;
+  color:var(--text);
+}
+/* Warning/notes are dark-gold for legibility instead of pale-yellow + light text. */
+:root[data-theme="dark"] .sim-warn,
+:root[data-theme="dark"] .fc-warning,
+:root[data-theme="dark"] .integral-warning,
+:root[data-theme="dark"] .callout.warn {
+  background:var(--surface-warn);
+  border-color:var(--surface-warn-line);
+  color:var(--surface-warn-text);
+}
+:root[data-theme="dark"] .callout.info{background:#1a3656;border-color:#4475a4;color:#e7f3ff}
+:root[data-theme="dark"] .callout.danger{background:#4a2937;border-color:#94556b;color:#ffe4e9}
+:root[data-theme="dark"] .callout strong,
+:root[data-theme="dark"] .sim-warn strong,
+:root[data-theme="dark"] .fc-warning strong,
+:root[data-theme="dark"] .integral-warning strong{color:inherit}
+/* Values and explanations retain clear hierarchy and contrast. */
+:root[data-theme="dark"] .liq-step strong,
+:root[data-theme="dark"] .liq-labels strong,
+:root[data-theme="dark"] .sim-metric b,
+:root[data-theme="dark"] .fc-kpi b,
+:root[data-theme="dark"] .integral-stat strong,
+:root[data-theme="dark"] .settings-total-panel strong {
+  color:#f2f7ff;
+}
+:root[data-theme="dark"] .liq-step small,
+:root[data-theme="dark"] .liq-labels small,
+:root[data-theme="dark"] .sim-metric small,
+:root[data-theme="dark"] .fc-kpi small,
+:root[data-theme="dark"] .fc-field label,
+:root[data-theme="dark"] .fc-muted,
+:root[data-theme="dark"] .fc-legend,
+:root[data-theme="dark"] .fc-stage .fc-chart-key,
+:root[data-theme="dark"] .fc-stage .fc-no-trades,
+:root[data-theme="dark"] .integral-stat span,
+:root[data-theme="dark"] .integral-amount,
+:root[data-theme="dark"] .integral-legend,
+:root[data-theme="dark"] .integral-breakdown-item,
+:root[data-theme="dark"] .integral-note,
+:root[data-theme="dark"] .tier-col small,
+:root[data-theme="dark"] .alert-meta,
+:root[data-theme="dark"] .alert-action {
+  color:#c1d2e9;
+}
+:root[data-theme="dark"] .liq-step.red strong,
+:root[data-theme="dark"] .integral-stat.loss strong,
+:root[data-theme="dark"] .fc-stage td.fc-negative{color:#ff98a9}
+:root[data-theme="dark"] .liq-step.green strong,
+:root[data-theme="dark"] .integral-stat.good strong,
+:root[data-theme="dark"] .fc-stage td.fc-positive,
+:root[data-theme="dark"] .settings-total-panel .valid-value{color:#6fe5ba}
+:root[data-theme="dark"] .settings-total-panel .invalid-value{color:#ff9aa8}
+:root[data-theme="dark"] .fc-stage td.fc-subdued{color:#b2c6dd}
+/* Controls and tables — no glaring white strips when using dark mode. */
+:root[data-theme="dark"] .fc-field select{background:#102039;border-color:#4b6688;color:#edf5ff}
+:root[data-theme="dark"] .fc-tables th,
+:root[data-theme="dark"] .fc-tables thead th:first-child,
+:root[data-theme="dark"] .fc-tables th:first-child{background:#243a57;color:#dce9fb}
+:root[data-theme="dark"] .fc-tables td:first-child{background:#182a42;color:#eaf3ff}
+:root[data-theme="dark"] .fc-tables tfoot td,
+:root[data-theme="dark"] .fc-tables tfoot td:first-child,
+:root[data-theme="dark"] .integral-table tfoot{background:#294362;color:#edf5ff}
+:root[data-theme="dark"] .wave-value-row,
+:root[data-theme="dark"] .wave-value-row td,
+:root[data-theme="dark"] .wave-value-row td:first-child{background:#263d5b;color:#edf5ff;border-color:#516988}
+:root[data-theme="dark"] .fc-chart,
+:root[data-theme="dark"] .fc-stage .fc-stage-chart{background:#192e49;border-color:#49627e}
+/* Tracks and visual notes must not remain full-width white blocks. */
+:root[data-theme="dark"] .tier-track,
+:root[data-theme="dark"] .bar-track,
+:root[data-theme="dark"] .token-compare-track,
+:root[data-theme="dark"] .mini-track,
+:root[data-theme="dark"] .sim-bar,
+:root[data-theme="dark"] .mix{background:#2a415e}
+:root[data-theme="dark"] .tier-col-bars,
+:root[data-theme="dark"] .vbars{border-color:#3d5572}
+:root[data-theme="dark"] .tier-caption,
+:root[data-theme="dark"] .bar-value{color:#dbe8fb}
+:root[data-theme="dark"] .fc-tag,
+:root[data-theme="dark"] .tb-chip{background:#4e3f27;color:#ffdf9b}
+:root[data-theme="dark"] .integral-table td,
+:root[data-theme="dark"] .integral-table th{border-color:#405873}
+:root[data-theme="dark"] .integral-table td{color:#e8f1ff}
+/* Native input, textarea and focus styling follows selected theme. */
+:root[data-theme="dark"] textarea,
+:root[data-theme="dark"] .settings-form textarea{background:#102039;border-color:#4b6688;color:#edf5ff}
+:root[data-theme="dark"] input::placeholder,
+:root[data-theme="dark"] textarea::placeholder{color:#a2b6d3}
+:root[data-theme="dark"] :is(button,a,input,select,textarea):focus-visible{outline:2px solid #79baff;outline-offset:2px}
+
+/* KairosWeb v1.2.0 RC1 — contrast consistency for every table, chart and total row.
+   Keep ALL information legible in dark theme; no business/data changes. */
+:root[data-theme="dark"] :is(.bar-value,.bar-label,.tier-caption,.tier-col,.chart-label,.chart-legend,.fc-chart-label,.fc-stage-label){color:#f1f6ff}
+:root[data-theme="dark"] :is(.bar-row,.bar-row strong,.bar-row b) {color:#eef5ff}
+:root[data-theme="dark"] :is(.fc-tables,.fc-tables table,.fc-tables tbody,.fc-tables tr,.fc-tables td){color:#edf5ff}
+:root[data-theme="dark"] .fc-tables :is(thead th,thead th:first-child) {background:#284463!important;color:#f5f9ff!important;border-color:#4e6887!important}
+:root[data-theme="dark"] .fc-tables :is(tbody td:first-child,tbody th:first-child){background:#1c324f!important;color:#f3f8ff!important;border-color:#4e6887!important}
+:root[data-theme="dark"] .fc-tables :is(tfoot,tfoot tr,tfoot td,tfoot th,tfoot td:first-child){background:#294765!important;color:#f7fbff!important;border-color:#6a8cac!important;font-weight:800}
+:root[data-theme="dark"] .fc-tables .wave-value-row :is(td,td:first-child,th){background:#284461!important;color:#f4f8ff!important;border-color:#567190!important}
+:root[data-theme="dark"] .fc-tables :is(.wave-value-row b,.wave-value-row strong,.wave-value-row .fc-muted){color:#d6e8ff!important}
+:root[data-theme="dark"] .fc-tables :is(.coin-tag,.coin-tag strong,.coin-text,.token-name){color:#f4f8ff!important}
+:root[data-theme="dark"] :is(.integral-table,.integral-table tbody,.integral-table td,.integral-table th){color:#edf5ff}
+:root[data-theme="dark"] :is(.integral-table tfoot,.integral-table tfoot tr,.integral-table tfoot td){background:#294765!important;color:#f7fbff!important}
+:root[data-theme="dark"] :is(tfoot td,tfoot th){background:#294765;color:#f7fbff;border-color:#557191}
+:root[data-theme="dark"] :is(.fc-chart,.fc-stage-chart,.vbars) :is(text,span,strong,small){color:#e6f2ff}
+:root[data-theme="dark"] :is(.chart-grid,.chart-axis,.fc-stage .fc-chart-key,.line-chart-labels){color:#c7daf2}
+:root[data-theme="dark"] .pivot-candidate-hint{color:#d3e3f9}
+:root[data-theme="dark"] .pivot-candidate-hint[data-status="DATA_ERROR"]{color:#ffb4b4}
+:root[data-theme="dark"] .settings-total-panel{background:#243d5c;color:#f7fbff}
