@@ -1,4 +1,4 @@
-"""Kairos v5.0: strictly read-only Google Sheets client and contract validator.
+"""KairosWeb v1.0.0: strictly read-only Google Sheets client and contract validator.
 
 No local snapshot/config JSON fallback.  Uses credentials only from Render secrets.
 Snapshot publication and per-field parameter status are independent gates.
@@ -96,9 +96,14 @@ def parse_master(raw):
     def pv(key):return params[key]['value']
     if pv('SNAPSHOT_PROVIDER')!='GOOGLE_SHEETS' or pv('BTC_NEVER_SELL') is not True or pv('FRESH_DATA_FAIL_CLOSED') is not True:
         raise SheetDataError('source/safety invariant not approved')
-    if not _almost(_number(pv('O5_BTC_PROCEEDS_FRACTION'),'O5 BTC'),0.3) or not _almost(_number(pv('O5_USDT_PROCEEDS_FRACTION'),'O5 USDT'),0.7):
-        raise SheetDataError('O5 split must be approved 30/70')
-    if not _almost(_number(pv('STRUCTURAL_USDT_TARGET'),'USDT target'),0.4):
+    # Ratios are governed by the approved Google Sheet, NOT hardcoded product constants.
+    # The initial 30/70 was explicitly approved; a later administrative revision
+    # changes the published Sheet revision and must preserve their total of 100%.
+    btc_o5=_number(pv('O5_BTC_PROCEEDS_FRACTION'),'O5 BTC')
+    usdt_o5=_number(pv('O5_USDT_PROCEEDS_FRACTION'),'O5 USDT')
+    if max(btc_o5,usdt_o5)>1 or not _almost(btc_o5+usdt_o5,1):
+        raise SheetDataError('O5 proceeds must sum to 100%')
+    if _number(pv('STRUCTURAL_USDT_TARGET'),'USDT target')>1:
         raise SheetDataError('unapproved structural liquidity target')
     if pv('BSI_PROVIDER')!='BINANCE_SPOT_MCP_4H_SYNC' or pv('HYPE_MACRO_PROVIDER')!='HYPERLIQUID_SPOT_HYPE_USDC_MCP':
         raise SheetDataError('market source mismatch')
@@ -150,21 +155,50 @@ def parse_master(raw):
     # The user declared no open orders/fills pending; this is not remote exchange proof.
     for key in ('ordenes_activas_declaradas','fills_pendientes_registro_declarados'):
         if str(ctrl.get(key))!='0':raise SheetDataError(f'01_CONTROL: {key} requires current reconciliation')
-    # The original Master contains editorial instructions in A58 of BOTH tabs.
-    # They are NOT orders or fills. Accept ONLY the exact known footnotes with
-    # all other columns empty; reject any other nonempty cell in the data zone.
-    # This keeps the fail-closed policy for future orders/fills (even below A58).
+    # Editorial notes are not transactions. Reconciled historical ledger rows may
+    # remain on the Sheet; they must not change already-published holdings.
+    # An OPEN or partially-filled order, an unverified fill or a duplicate key
+    # still fails closed. This does not verify the remote exchange order book.
     _footnotes={
         'orders':'Al poblar órdenes: identificador único (Venue, Order ID), separar órdenes abiertas de fills, y reservar USDT antes de cualquier propuesta BUY.',
         'fills':'Jamás derivar fills de niveles tocados, simulaciones o LIMIT colocadas. Propuestas no son ejecución.',
     }
+    _order_keys=set();_fill_keys=set();historical_orders=0;historical_fills=0
     for section in ('orders','fills'):
         for rownum,r in enumerate(blocks[section][1:],start=5):
-            if not any(v not in (None,'') for v in r):
-                continue
-            if str(_cell(r,0,'')).strip()==_footnotes[section] and all(v in (None,'') for v in r[1:]):
-                continue
-            raise SheetDataError(f'{section}: operational or unrecognized entry at row {rownum}; reconcile before use')
+            if not any(v not in (None,'') for v in r):continue
+            if str(_cell(r,0,'')).strip()==_footnotes[section] and all(v in (None,'') for v in r[1:]):continue
+            if section=='orders':
+                venue=str(_cell(r,0,'')).strip();order_id=str(_cell(r,1,'')).strip()
+                token=str(_cell(r,2,'')).strip();side=str(_cell(r,3,'')).upper().strip()
+                status=str(_cell(r,11,'')).upper().strip();reconciled=str(_cell(r,15,'')).upper().strip()
+                if not (venue and order_id and token in SYMBOLS.union({'PUMP'}) and side in ('BUY','SELL')
+                        and status in ('FILLED','COMPLETED','CANCELLED','CANCELED','REJECTED','EXPIRED')
+                        and reconciled in ('CONCILIADO','VERIFICADO')):
+                    raise SheetDataError(f'orders: operational or unverified entry at row {rownum}; reconcile before use')
+                key=(venue,order_id)
+                if key in _order_keys:raise SheetDataError(f'orders: duplicate (venue,order_id) at row {rownum}')
+                _order_keys.add(key);historical_orders+=1
+            else:
+                venue=str(_cell(r,0,'')).strip();order_id=str(_cell(r,1,'')).strip()
+                trade_id=str(_cell(r,2,'')).strip();token=str(_cell(r,3,'')).strip()
+                side=str(_cell(r,4,'')).upper().strip();confirmed=str(_cell(r,13,'')).upper().strip()
+                if not (venue and order_id and trade_id and token in SYMBOLS.union({'PUMP'}) and side in ('BUY','SELL')
+                        and confirmed in ('TRUE','CONCILIADO','VERIFICADO')):
+                    raise SheetDataError(f'fills: operational or unverified entry at row {rownum}; reconcile before use')
+                gross=_number(_cell(r,6),f'fills row {rownum} gross qty')
+                net=_number(_cell(r,9),f'fills row {rownum} net qty')
+                _number(_cell(r,10),f'fills row {rownum} gross USDT')
+                if gross<=0 or net>gross:raise SheetDataError(f'fills: inconsistent gross/net units at row {rownum}')
+                for i in (7,11):
+                    if _cell(r,i) is not None:_number(_cell(r,i),f'fills row {rownum} fee')
+                try:
+                    ftime=datetime.fromisoformat(str(_cell(r,5,'')).replace('Z','+00:00'))
+                    if ftime.tzinfo is None:raise ValueError('naive')
+                except ValueError as e:raise SheetDataError(f'fills: invalid timestamp at row {rownum}') from e
+                key=(venue,order_id,trade_id)
+                if key in _fill_keys:raise SheetDataError(f'fills: duplicate (venue,order_id,trade_id) at row {rownum}')
+                _fill_keys.add(key);historical_fills+=1
     pivot_levels={}; old_pivot_sources=set()
     for r in blocks['pivots'][1:]:
         if not r or r[0] not in SYMBOLS:continue
@@ -206,7 +240,7 @@ def parse_master(raw):
             'bsi_archive':bsi_rows,
             'integral':{'historical_capital_usdt':_number(meta.get('Capital inicial histórico'),'capital historical'),
                         'source_note':'Google Sheets 08_INTEGRAL: valores históricos, no precios actuales', 'segments':segments},
-            'validation':validation}
+            'validation':validation, 'historical_ledger_counts':{'orders':historical_orders,'fills':historical_fills}}
 
 
 def _remote_data():
@@ -276,6 +310,11 @@ def get_state(*,force=False):
         state=parse_master(_remote_data())
         _CACHE.update(state=state,loaded_at=time.monotonic())
         return state
+
+
+def invalidate_cache():
+    with _LOCK:
+        _CACHE.update(state=None,loaded_at=0.0)
 
 
 def cache_status():

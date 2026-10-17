@@ -72,7 +72,7 @@ class SheetsContract(unittest.TestCase):
         p=raw[gs.SHEETS['parameters']]
         for r in p:
             if len(r)>2 and r[1]=='O5_BTC_PROCEEDS_FRACTION':r[2]=.7
-        with self.assertRaisesRegex(gs.SheetDataError,'30/70'):gs.parse_master(raw)
+        with self.assertRaisesRegex(gs.SheetDataError,'sum to 100%'):gs.parse_master(raw)
     def test_orders_not_silently_ignored(self):
         raw=fake_master();raw[gs.SHEETS['orders']].append(['Binance','order-id'])
         with self.assertRaisesRegex(gs.SheetDataError,'reconcile'):gs.parse_master(raw)
@@ -95,6 +95,30 @@ class SheetsContract(unittest.TestCase):
             'Al poblar órdenes: identificador único (Venue, Order ID), separar órdenes abiertas de fills, y reservar USDT antes de cualquier propuesta BUY.',
             'order-123'])
         with self.assertRaisesRegex(gs.SheetDataError,'reconcile'):
+            gs.parse_master(raw)
+
+    def test_closed_reconciled_historical_orders_and_fills_are_not_pending(self):
+        raw=fake_master()
+        raw[gs.SHEETS['orders']].append([
+            'Binance','ord-001','ETH','BUY','LIMIT','O2',100,1,1,100,0,'FILLED',
+            '2026-10-15T12:00:00Z','2026-10-15T12:01:00Z','EXCHANGE','CONCILIADO'])
+        raw[gs.SHEETS['fills']].append([
+            'Binance','ord-001','trade-001','ETH','BUY','2026-10-15T12:01:00Z',
+            1,0,'ETH',1,100,0,'Exchange',True,'EXCHANGE','Binance|ord-001|trade-001'])
+        result=gs.parse_master(raw)
+        self.assertEqual(result['historical_ledger_counts'],{'orders':1,'fills':1})
+        self.assertEqual(result['snapshot']['holdings_total']['ETH'],1) # no double count
+
+    def test_unsettled_or_duplicate_ledger_rejected(self):
+        raw=fake_master()
+        row=['Binance','ord-001','ETH','BUY','LIMIT','O2',100,1,0,100,0,
+             'OPEN','2026-10-15T12:00:00Z','','EXCHANGE','CONCILIADO']
+        raw[gs.SHEETS['orders']].append(row)
+        with self.assertRaisesRegex(gs.SheetDataError,'reconcile'):
+            gs.parse_master(raw)
+        raw[gs.SHEETS['orders']][-1][11]='FILLED'
+        raw[gs.SHEETS['orders']].append(list(raw[gs.SHEETS['orders']][-1]))
+        with self.assertRaisesRegex(gs.SheetDataError,'duplicate'):
             gs.parse_master(raw)
 
     def test_unrecognized_single_cell_is_not_silently_ignored(self):

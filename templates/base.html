@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Kairos Web{% endblock %}</title>
+  <title>{% block title %}KairosWeb{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='kairos-horizon.svg') }}">
   <meta name="theme-color" content="#103d88">
   <style>
@@ -68,6 +68,7 @@
   .sort-arrow{font-size:13px;color:#2472c3;min-width:12px}
   th[aria-sort="ascending"],th[aria-sort="descending"]{color:#1958a2}
   </style>
+  <link rel="stylesheet" href="{{ url_for('static',filename='alerts_settings.css') }}">
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -86,19 +87,34 @@
     <div class="topbar">
       <div class="brand">
         <div class="logo"><img src="{{ url_for('static', filename='kairos-horizon.svg') }}" width="45" height="45" alt="Kairos"></div>
-        <div>
-          <h1>Kairos</h1>
-          <p>Master {{ master }} · Solo lectura · Datos Spot por MCP</p>
+        <div><h1>KairosWeb</h1><p>v{{ master }} · Google Sheets Master · Spot por MCP</p></div>
+      </div>
+      <div class="right-tools">
+        <div class="alerts-wrap">
+          <button type="button" class="tool-icon" id="bell-open" aria-label="Notificaciones históricas no leídas" aria-expanded="false" aria-controls="alerts-popover" title="Alertas 1H de KairosGPT">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></svg>
+            <span id="bell-count" class="bell-count" hidden>0</span>
+          </button>
+          <div class="alerts-popover" id="alerts-popover" hidden>
+            <div class="alerts-head"><strong>Alertas 1H · No leídas</strong><button type="button" id="alerts-refresh" class="tiny-control">Actualizar</button></div>
+            <p class="alerts-caption">Histórico KairosGPT en Google Sheets. WATCH o PRECONFIRMADO no representan órdenes.</p>
+            <div id="alerts-list" class="alerts-list" aria-live="polite">Consultando…</div>
+          </div>
         </div>
+        <a class="tool-icon {{ 'active' if request.path == '/settings' else '' }}" href="{{ url_for('settings_page') }}" aria-label="Configuración de KairosWeb" title="Configuración y mantenimiento del Master">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 3 .6 2.1c.6.2 1.1.5 1.6.9L14 5l2 2-1 2.3c.4.5.7 1 .9 1.6L18 11v3l-2.1.6c-.2.6-.5 1.1-.9 1.6l1 2.3-2 2-2.3-1c-.5.4-1 .7-1.6.9L9.5 22h-3l-.6-2.1c-.6-.2-1.1-.5-1.6-.9l-2.3 1-2-2 1-2.3c-.4-.5-.7-1-.9-1.6L-2 14v-3l2.1-.6c.2-.6.5-1.1.9-1.6L0 6.5l2-2 2.3 1c.5-.4 1-.7 1.6-.9L6.5 3Z" transform="translate(3,0)"/><circle cx="11" cy="12.5" r="3"/></svg>
+        </a>
       </div>
     </div>
     <nav class="global-nav" aria-label="Navegación Kairos">
-      {% for url,title in [('/', 'Dashboard'),('/modes','Modos Kairos'),('/mode/portafolio','Portafolio'),('/mode/balancer','Balancer'),('/mode/compras','Compras'),('/mode/ventas','Ventas'),('/mode/forecast','Forecast'),('/mode/tradingbot','TradingBot')] %}
-      <a class="global-nav-link {{ 'active' if request.path == url else '' }}" href="{{ url }}">{{ title }}</a>
+      <a class="global-nav-link {{ 'active' if request.path == '/' else '' }}" href="/">Dashboard</a>
+      {% for mode in nav_modes %}
+      <a class="global-nav-link {{ 'active' if request.path == '/mode/' ~ mode.slug else '' }}" href="/mode/{{ mode.slug }}">{{ mode.name }}</a>
       {% endfor %}
     </nav>
     {% block content %}{% endblock %}
   </div>
   <script defer src="{{ url_for('static', filename='table_sort.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='alert_bell.js') }}"></script>
 </body>
 </html>

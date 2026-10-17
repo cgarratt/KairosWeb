@@ -1,4 +1,4 @@
-"""Kairos Web 5.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
+"""KairosWeb v1.0.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
 import asyncio
 import json
 import os
@@ -7,7 +7,8 @@ import time
 import threading
 import uuid
 import logging
-import sqlite3
+import hashlib
+import hmac
 import httpx
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,8 +20,13 @@ from forecast_math import derive_reference_anchors
 from werkzeug.local import LocalProxy
 from google_sheets_master import get_state, SheetDataError, public_failure_code, cache_status as sheet_cache_status
 from hype_weekly import aggregate_weeks, HypeHistoryError
+from kairos_sheets_features import (
+    unread_alerts, mark_alert_read, settings_data, prepare_changes,
+    save_changes, SettingsError, _remote_data as _unused_remote_marker
+)
 
 BASE = Path(__file__).parent
+APP_VERSION = "1.0.0"  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # Bound to validated Google Sheets state, once per request.  No disk JSON source.
 SNAPSHOT=LocalProxy(lambda:g.kairos_state['snapshot'])
@@ -53,6 +59,9 @@ MODE_DEFS = [
     {'slug':'forecast','name':'Forecast','subtitle':'Cycle Low → O5','description':'Tabla de niveles Fibonacci C1/C2 y ondas/pivotes proyectados; todo es simulación.'},
     {'slug':'tradingbot','name':'TradingBot','subtitle':'Táctico 4H','description':'Vista táctica preliminar para la reserva de trading y activos de seguimiento.'},
 ]
+# Future mode enablement is centralized: disabled modes do not appear in any global nav.
+ENABLED_MODE_SLUGS = tuple(x['slug'] for x in MODE_DEFS)
+
 MODES_BY_SLUG = {m['slug']: m for m in MODE_DEFS}
 # Short TTL protects the MCP service from 10 simultaneous page loads, without
 # ever labeling cached observations as real-time without their original time.
@@ -67,7 +76,7 @@ MCP_TIMEOUT_SECONDS = 35
 
 @app.before_request
 def authenticate():
-    if request.path in ('/health', '/api/notifications/ingest'):
+    if request.path == '/health':
         return None
     password = os.getenv('KAIROS_WEB_PASSWORD', '')
     if not password:
@@ -81,7 +90,7 @@ def authenticate():
 def bind_published_sheet():
     # The health and diagnostics endpoints remain reachable during source outages.
     independent={'/health','/api/mcp-status','/api/mcp-config-check','/api/mcp-diagnostics',
-                 '/api/notifications','/api/notifications/ingest','/api/notifications/bridge-status',
+                 '/api/alerts/unread','/api/alerts/read',
                  '/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status'}
     if request.path in independent or request.path.startswith('/static/'):
         return None
@@ -91,10 +100,10 @@ def bind_published_sheet():
     except Exception as exc:
         incident=uuid.uuid4().hex[:10]
         app.logger.error('Kairos Sheets DATA_ERROR id=%s category=%s class=%s',incident,public_failure_code(exc),type(exc).__name__)
-        msg='Google Sheets Master no disponible o no cumple el contrato PUBLICADO v5.0. No se utilizan snapshots locales.'
+        msg='Google Sheets Master no disponible o no cumple el esquema PUBLICADO 5.0.0. No se utilizan snapshots locales.'
         if request.path.startswith('/api/'):
             return jsonify({'status':'DATA_ERROR','origin':'GOOGLE_SHEETS','reason':msg,'category':public_failure_code(exc),'error_id':incident}),503
-        return render_template('sheet_error.html',master='5.0.1',error_id=incident,message=msg),503
+        return render_template('sheet_error.html',master=APP_VERSION,error_id=incident,message=msg),503
 
 @app.after_request
 def headers(resp):
@@ -839,13 +848,13 @@ def balancer_report(d, observed):
       'buy_cash_after':cash-buy_total,'sell_cash_after':cash+sale_total,
       'limitations':'0 órdenes abiertas y 0 fills pendientes declarados por usuario; libro privado de exchange no verificado. Simulación NO es orden ni fill.'}
 
+@app.context_processor
+def common_nav():
+    return {'nav_modes':[m for m in MODE_DEFS if m['slug'] in ENABLED_MODE_SLUGS]}
+
 @app.route('/')
 def home():
-    return render_template('index.html', modes=MODE_DEFS, master='5.0.1')
-
-@app.route('/modes')
-def modes_page():
-    return render_template('modes.html', modes=MODE_DEFS, master='5.0.1')
+    return render_template('index.html', modes=MODE_DEFS, master=APP_VERSION)
 
 @app.route('/mode/portafolio')
 def integral_portfolio_page():
@@ -871,7 +880,7 @@ def integral_portfolio_page():
                           'total':live['total_value'],'source':'Binance MCP + Google Sheets PUBLICADO'}
     except Exception as exc:
         app.logger.info('Integral portfolio using historical ledger; live pricing unavailable: %s',type(exc).__name__)
-    return render_template('portfolio_integral.html', master='5.0.1', segments=segments,
+    return render_template('portfolio_integral.html', master=APP_VERSION, segments=segments,
                            base=base, alive=alive, lost=lost, gain_to_recover=gain_to_recover,
                            spot=spot_breakdown, spot_observed=spot_observed,
                            source_note=values['source_note'], total_recorded=sum(x['actual_usdt'] for x in segments),
@@ -882,73 +891,126 @@ def mode_page(slug):
     if slug == 'resumen':
         return redirect('/')
     mode = MODES_BY_SLUG.get(slug)
-    if not mode:
+    if not mode or slug not in ENABLED_MODE_SLUGS:
         abort(404)
     try:
         observed, dashboard = load_live_dashboard()
     except Exception as exc:
         diag = diagnostic_error(exc, f'mode:{slug}:market')
-        return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master='5.0.1'), 503
+        return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master=APP_VERSION), 503
     try:
         payload = build_mode_payload(slug, dashboard, observed)
-        return render_template('balancer.html' if slug=='balancer' else 'trade_sim.html' if slug in ('compras','ventas') else 'forecast.html' if slug=='forecast' else 'tradingbot.html' if slug=='tradingbot' else 'mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master='5.0.1')
+        return render_template('balancer.html' if slug=='balancer' else 'trade_sim.html' if slug in ('compras','ventas') else 'forecast.html' if slug=='forecast' else 'tradingbot.html' if slug=='tradingbot' else 'mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master=APP_VERSION)
     except Exception as exc:
         error_id = uuid.uuid4().hex[:10]
         app.logger.exception('Kairos MODE_RENDER slug=%s ID=%s',slug,error_id)
         diag = {'code':'MODE_RENDER','error_id':error_id, 'message':'Error interno al generar el reporte del modo (no es un error MCP).'}
-        return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master='5.0.1'), 500
+        return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master=APP_VERSION), 500
 
 
-# Alertas 1H + Quick Wins inbox. Never synthesizes notifications from price movement.
-# SQLite on Render Free is ephemeral unless a persistent disk/external DB is configured.
-_NOTIFICATION_DB = Path(os.getenv('KAIROS_NOTIFICATIONS_DB', str(BASE / 'data' / 'notifications.sqlite3')))
-_NOTIFICATION_LOCK = threading.Lock()
+# Bell inbox sourced exclusively from KairosGPT Google Sheets 1H ledger.
+# Read receipts are stored separately in 17_ALERTAS_LECTURAS; no SQLite/local fallback.
+@app.route('/api/alerts/unread')
+def alerts_unread():
+    try:
+        return jsonify(unread_alerts())
+    except Exception as exc:
+        app.logger.error('Alertas1H error id=%s class=%s',uuid.uuid4().hex[:10],type(exc).__name__)
+        return jsonify({'status':'DATA_ERROR','origin':'GOOGLE_SHEETS_ALERTAS_1H',
+                        'message':'No se pudo leer el histórico de Alertas 1H. No se muestran notificaciones de otra fuente.'}),503
 
-def _notification_conn():
-    _NOTIFICATION_DB.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(_NOTIFICATION_DB), timeout=10)
-    conn.execute("CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, kind TEXT NOT NULL, severity TEXT NOT NULL, title TEXT NOT NULL, detail TEXT NOT NULL, token TEXT, observed_at TEXT NOT NULL, created_at TEXT NOT NULL)")
-    return conn
 
-@app.route('/api/notifications', methods=['GET'])
-def notifications_list():
-    with _NOTIFICATION_LOCK:
-        with _notification_conn() as conn:
-            records=conn.execute('SELECT id,kind,severity,title,detail,token,observed_at,created_at FROM notifications ORDER BY created_at DESC LIMIT 100').fetchall()
-    return jsonify({'status':'OK','source':'ALERTAS_1H_INGEST','records':[dict(zip(('id','kind','severity','title','detail','token','observed_at','created_at'),r)) for r in records], 'persistence':'EPHEMERAL_UNLESS_PERSISTENT_DISK'})
+def _same_origin():
+    # Mandatory on browser write actions; protects HTTP Basic sessions from CSRF.
+    from urllib.parse import urlsplit
+    expected=urlsplit(request.host_url)
+    sent=request.headers.get('Origin') or request.headers.get('Referer') or ''
+    actual=urlsplit(sent)
+    return (actual.scheme=='https' or (expected.hostname in ('localhost','127.0.0.1') and actual.scheme=='http')) and actual.netloc==expected.netloc
 
-@app.route('/api/notifications/ingest', methods=['POST'])
-def notifications_ingest():
-    expected=os.getenv('KAIROS_ALERTS_INGEST_TOKEN','').strip()
-    supplied=request.headers.get('X-Kairos-Token','')
-    if not expected:
-        return jsonify({'status':'CONFIG_REQUIRED','message':'Configure KAIROS_ALERTS_INGEST_TOKEN'}),503
-    if not supplied or not secrets.compare_digest(supplied,expected):
-        return jsonify({'status':'UNAUTHORIZED'}),401
-    payload=request.get_json(silent=True)
-    if not isinstance(payload,dict): return jsonify({'status':'INVALID_PAYLOAD'}),400
-    items=payload.get('notifications')
-    if not isinstance(items,list) or len(items)>50: return jsonify({'status':'INVALID_PAYLOAD'}),400
-    now=datetime.now(timezone.utc).isoformat()
-    allowed_kinds={'ALERTA','QUICK_WIN'}
-    allowed_severity={'INFO','WATCH','WARNING','CRITICAL'}
-    prepared=[]
-    for x in items:
-        if not isinstance(x,dict): return jsonify({'status':'INVALID_ITEM'}),400
-        key=x.get('id'); kind=x.get('kind'); severity=x.get('severity','INFO');title=x.get('title');detail=x.get('detail','');observed=x.get('observed_at')
-        if not all(isinstance(v,str) for v in (key,kind,severity,title,detail,observed)) or kind not in allowed_kinds or severity not in allowed_severity or not key or len(key)>128 or not title or len(title)>180 or len(detail)>1200:
-            return jsonify({'status':'INVALID_ITEM'}),400
-        try: datetime.fromisoformat(observed.replace('Z','+00:00'))
-        except ValueError: return jsonify({'status':'INVALID_TIMESTAMP'}),400
-        token=x.get('token')
-        if token is not None and (not isinstance(token,str) or len(token)>20):return jsonify({'status':'INVALID_TOKEN'}),400
-        prepared.append((key,kind,severity,title,detail,token,observed,now))
-    with _NOTIFICATION_LOCK:
-        with _notification_conn() as conn:
-            before=conn.total_changes
-            conn.executemany('INSERT OR IGNORE INTO notifications (id,kind,severity,title,detail,token,observed_at,created_at) VALUES (?,?,?,?,?,?,?,?)',prepared)
-            inserted=conn.total_changes-before
-    return jsonify({'status':'OK','received':len(prepared),'inserted':inserted,'duplicates':len(prepared)-inserted}),202
+
+@app.route('/api/alerts/read',methods=['POST'])
+def alerts_mark_read():
+    if not _same_origin():return jsonify({'status':'FORBIDDEN_ORIGIN'}),403
+    body=request.get_json(silent=True) or {}
+    try:
+        result=mark_alert_read(body.get('id'))
+        return jsonify(result)
+    except SettingsError as exc:
+        return jsonify({'status':'INVALID','reason':str(exc)}),409
+    except Exception as exc:
+        app.logger.error('Mark alert read class=%s',type(exc).__name__)
+        return jsonify({'status':'DATA_ERROR','message':'No se pudo persistir la lectura en Google Sheets.'}),503
+
+
+@app.route('/settings')
+def settings_page():
+    return render_template('settings.html',master=APP_VERSION)
+
+
+@app.route('/api/settings/data')
+def get_settings_data():
+    try:return jsonify(settings_data())
+    except Exception as exc:
+        app.logger.error('Settings data class=%s',type(exc).__name__)
+        return jsonify({'status':'DATA_ERROR','message':'No se pudo cargar Configuración desde Google Sheets.'}),503
+
+
+def _admin_authorized():
+    expected=os.getenv('KAIROS_SETTINGS_ADMIN_KEY','')
+    supplied=request.headers.get('X-Kairos-Admin-Key','')
+    return bool(expected and supplied and secrets.compare_digest(expected,supplied))
+
+
+def _preview_signature(body, issued_at):
+    canonical={k:body.get(k) for k in ('expected_snapshot_id','section','entries','evidence','as_of_date')}
+    payload=f'{issued_at}:'.encode('utf-8')+json.dumps(canonical,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode('utf-8')
+    return hmac.new(os.getenv('KAIROS_SETTINGS_ADMIN_KEY','').encode('utf-8'),payload,hashlib.sha256).hexdigest()
+
+
+def _verify_preview_token(body):
+    token=body.get('preview_token','')
+    if not isinstance(token,str) or len(token)>130 or '.' not in token:return False
+    epoch,digest=token.split('.',1)
+    if not epoch.isdigit() or len(digest)!=64:return False
+    now=int(time.time());at=int(epoch)
+    return 0<=now-at<=900 and secrets.compare_digest(digest,_preview_signature(body,at))
+
+
+@app.route('/api/settings/preview',methods=['POST'])
+def settings_preview():
+    if not _same_origin():return jsonify({'status':'FORBIDDEN_ORIGIN'}),403
+    if not _admin_authorized():return jsonify({'status':'ADMIN_AUTH_REQUIRED'}),403
+    body=request.get_json(silent=True) or {}
+    try:
+        raw=_unused_remote_marker()
+        current=get_state(force=True)
+        if current['control']['snapshot_id']!=body.get('expected_snapshot_id'):
+            raise SettingsError('CONFLICTO: actualiza página y recarga snapshot')
+        patches,validated=prepare_changes(raw,body.get('section'),body.get('entries'),
+             evidence=body.get('evidence'),as_of_date=body.get('as_of_date'))
+        issued=int(time.time())
+        return jsonify({'status':'VALIDATED_DRAFT','preview_token':f'{issued}.{_preview_signature(body,issued)}','expected_snapshot_id':current['control']['snapshot_id'],
+                        'changed_fields':len(patches),'section':body.get('section'),
+                        'warning':'Todavía NO se ha modificado Google Sheets. Publicar es una acción distinta.'})
+    except SettingsError as exc:return jsonify({'status':'INVALID','reason':str(exc)}),400
+    except Exception as exc:
+        app.logger.error('Settings preview error class=%s',type(exc).__name__)
+        return jsonify({'status':'DATA_ERROR','reason':'Error de validación Google Sheets'}),503
+
+
+@app.route('/api/settings/publish',methods=['POST'])
+def settings_publish():
+    if not _same_origin():return jsonify({'status':'FORBIDDEN_ORIGIN'}),403
+    if not _admin_authorized():return jsonify({'status':'ADMIN_AUTH_REQUIRED'}),403
+    body=request.get_json(silent=True) or {}
+    if body.get('confirm')!='PUBLICAR':return jsonify({'status':'CONFIRMATION_REQUIRED'}),400
+    if not _verify_preview_token(body):return jsonify({'status':'PREVIEW_REQUIRED','reason':'Validación previa ausente, caducada o distinta del contenido a publicar'}),409
+    try:return jsonify(save_changes(body))
+    except SettingsError as exc:return jsonify({'status':'INVALID','reason':str(exc)}),409
+    except Exception as exc:
+        app.logger.error('Settings publish error id=%s class=%s',uuid.uuid4().hex[:10],type(exc).__name__)
+        return jsonify({'status':'DATA_ERROR','reason':'No se pudo publicar nueva versión del Master.'}),503
 
 
 # Technical candidates based only on fully closed Binance Spot 4H candles.
@@ -981,15 +1043,9 @@ def tradingbot_candidates():
         diag=diagnostic_error(exc,'tradingbot:ohlcv:'+symbol)
         return jsonify({'status':'DATA_ERROR','diagnostic':diag}),503
 
-@app.route('/api/notifications/bridge-status')
-def notifications_bridge_status():
-    # A ChatGPT automation does not automatically forward runs here.
-    return jsonify({'status':'AWAITING_EXTERNAL_SENDER','receiver_configured':bool(os.getenv('KAIROS_ALERTS_INGEST_TOKEN')),
-                    'message':'Connect an authorized external sender to the existing /api/notifications/ingest endpoint. ChatGPT tasks are not automatically synced.'})
-
 @app.route('/health')
 def health():
-    return jsonify({'status':'UP','service':'Kairos Web','version':'5.0.1','sheets_status':sheet_cache_status()})
+    return jsonify({'status':'UP','service':'KairosWeb','version':APP_VERSION,'sheets_status':sheet_cache_status()})
 
 @app.route('/api/portfolio')
 def portfolio():
@@ -1088,7 +1144,7 @@ def google_sheets_status():
 @app.route('/api/modes')
 def modes_api():
     return jsonify({'status':'OK','execution':'PRELIMINARY_PAGES', 'read_only':True,
-                    'modes':[dict(m, availability='PRELIMINARY_PAGE') for m in MODE_DEFS]})
+                    'modes':[dict(m, availability='PRELIMINARY_PAGE') for m in MODE_DEFS if m['slug'] in ENABLED_MODE_SLUGS]})
 
 if __name__=='__main__':
     app.run(host='0.0.0.0',port=int(os.environ.get('PORT','10000')))
