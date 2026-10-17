@@ -3,6 +3,8 @@
 {% block head %}
 <style>
 .sim-layout{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.sim-metric{border:1px solid #dce6f4;background:#f7fbff;padding:15px;border-radius:16px}.sim-metric b{font-size:23px;color:#164c94;display:block;margin:9px 0}.sim-metric small{color:#536984}.control-panel{padding:22px;border:1px solid #c7dbf6;border-radius:18px;background:#eef5ff}input[type=range]{width:100%;accent-color:#266ac6;cursor:pointer;height:25px}.sim-rows td{font-variant-numeric:tabular-nums}.sim-actions{display:inline-flex;padding:5px 10px;border-radius:20px;font-size:12px;font-weight:800;background:#e7f8f0;color:#16825d}.sim-actions.watch{background:#fff3d8;color:#8f6900}.sim-actions.sell{background:#ffedf0;color:#af334a}.sim-warn{padding:12px 16px;background:#fff8e9;border-radius:12px;color:#966200;border:1px solid #f0dda9;font-size:13px}.sim-bar{height:15px;border-radius:20px;overflow:hidden;background:#e4eaf3}.sim-bar>div{height:100%;background:linear-gradient(90deg,#1c61b9,#43abe5);transition:width .15s}.sim-panel-title{display:flex;justify-content:space-between;align-items:center;gap:12px}@media(max-width:800px){.sim-layout{grid-template-columns:repeat(2,1fr)}}@media(max-width:530px){.sim-layout{grid-template-columns:1fr}}
+
+.o2-table-scroll{width:100%;overflow-x:auto}.o2-table{min-width:1150px}.o2-table td,.o2-table th{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}.o2-table td:first-child,.o2-table th:first-child{text-align:left}.o2-table td.level-hit{background:rgba(23,163,115,.25)!important;color:#087451;font-weight:800}.o2-table td.level-near{background:rgba(240,169,55,.25)!important;color:#80520b;font-weight:800}.o2-table td.level-blocked{background:rgba(222,58,73,.22)!important;color:#b3213a;font-weight:800}[data-theme="dark"] .o2-table td.level-hit{color:#93fbd0;background:rgba(23,163,115,.3)!important}[data-theme="dark"] .o2-table td.level-near{color:#ffe5a2;background:rgba(240,169,55,.29)!important}[data-theme="dark"] .o2-table td.level-blocked{color:#ffb2bd;background:rgba(222,58,73,.34)!important}
 </style>{% endblock %}
 {% block content %}
 <div class="grid">
@@ -18,20 +20,26 @@
 <input id="allocation-slider" type="range" aria-label="{{ 'Porcentaje a desplegar' if mode.slug=='compras' else 'Porcentaje de liquidez objetivo' }}" min="{{ 0 if mode.slug=='compras' else payload.current.cash_pct }}" max="{{ payload.current.max_percent }}" step="any" value="{{ 0 if mode.slug=='compras' else ([payload.current.cash_pct,40]|max) }}">
 <div style="display:flex;justify-content:space-between;gap:12px" class="sub"><span>{{ '0% de P' if mode.slug=='compras' else ('%.2f%% USDT actual'|format(payload.current.cash_pct)) }}</span><span>{{ 'Máximo: USDT físico menos Reserva Trading' if mode.slug=='compras' else '70% USDT objetivo máximo' }}</span></div>
 </div>
-<p class="sim-warn" id="caution"></p></section>
+</section>
 {% if mode.slug=='compras' %}
-<section class="panel span-12"><div class="hero" style="align-items:flex-start"><div><h2>Resumen de compras</h2><p class="sub">La asignación continúa calculándose aquí. La tabla detallada O2C1–O2C4 de precios Fibonacci y ondas simuladas ahora está en Forecast.</p></div><a id="forecast-detail-link" class="btn primary" href="/mode/forecast">Ver niveles y ondas en Forecast ↗</a></div><div class="sim-layout" style="margin-top:18px"><div class="sim-metric"><small>O2C1 · Fib 38.2%</small><b id="buy-tranche-0">—</b></div><div class="sim-metric"><small>O2C2 · Fib 50%</small><b id="buy-tranche-1">—</b></div><div class="sim-metric"><small>O2C3 · Fib 61.8%</small><b id="buy-tranche-2">—</b></div><div class="sim-metric"><small>O2C4 · Fib 78.6%</small><b id="buy-tranche-3">—</b></div></div><p class="footer-note">Las cuatro asignaciones O2C1–O2C4 se configuran en Parámetros; detalles en Forecast.</p></section>
+<section class="panel span-12"><div class="hero" style="align-items:flex-start"><div><h2>Resumen de compras</h2><p class="sub">Distribución orientativa en los cuatro tramos Fibonacci.</p></div><a id="forecast-detail-link" class="btn primary" href="/mode/forecast">Ver niveles y ondas en Forecast ↗</a></div><div class="sim-layout" style="margin-top:18px"><div class="sim-metric"><small>O2C1 · Fib 38.2%</small><b id="buy-tranche-0">—</b></div><div class="sim-metric"><small>O2C2 · Fib 50%</small><b id="buy-tranche-1">—</b></div><div class="sim-metric"><small>O2C3 · Fib 61.8%</small><b id="buy-tranche-2">—</b></div><div class="sim-metric"><small>O2C4 · Fib 78.6%</small><b id="buy-tranche-3">—</b></div></div><p class="footer-note">Las cuatro asignaciones O2C1–O2C4 se leen del Master publicado.</p></section>
 {% endif %}
 
 <section class="panel span-6"><h2>Distribución del escenario</h2><p class="sub">Asignación USDT referencial por token.</p><div id="alloc-chart" class="bar-list"></div></section>
 <section class="panel span-6"><h2>Liquidez post-escenario</h2><p class="sub">Comparativa de USDT antes vs después. Sin alterar saldos reales.</p><div class="sim-metric" style="margin:15px 0"><small>Situación actual</small><b id="before-cash">—</b><div class="sim-bar"><div id="before-bar"></div></div></div><div class="sim-metric"><small>Después (hipotético)</small><b id="after-cash">—</b><div class="sim-bar"><div id="after-bar"></div></div></div></section>
+{% if mode.slug=='compras' %}
+<section class="panel span-12" id="o2-fibonacci-panel"><h2>Asignación USDT para referencias Fibonacci O2</h2>
+<div class="o2-table-scroll"><table class="o2-table"><thead><tr><th>Token</th><th>Spot</th><th>Precio 38.2%</th><th>USDT</th><th>Precio 50%</th><th>USDT</th><th>Precio 61.8%</th><th>USDT</th><th>Precio 78.6%</th><th>USDT</th><th>Total USDT</th></tr></thead><tbody id="fib-body"></tbody><tfoot id="fib-total"></tfoot></table></div>
+</section>
+{% endif %}
 {% if mode.slug=='ventas' %}
 <section class="panel span-12"><h2>Candidatos SELL</h2><p class="sub">Ordenados por exceso de peso; BTC excluido. Límites de Exchange declarados, sin descontar órdenes pendientes.</p>
 <div style="overflow-x:auto"><table><thead><tr><th>Token</th><th>% Actual</th><th>% Objetivo</th><th>% Post-venta</th><th>Exchange ud.</th><th>USDT estimado</th><th>Unidades SELL</th><th>Acción</th></tr></thead><tbody id="sim-body"></tbody><tfoot id="sim-foot" style="font-weight:800;background:#eaf3ff;border-top:2px solid #91b7e9"></tfoot></table></div></section>
 {% endif %}
-<section class="panel span-12"><div class="callout warn"><strong>Alcance de la simulación</strong>El slider no modifica posiciones ni coloca órdenes. Los precios de referencia Fibonacci están en Forecast; su aprobación operativa, los compromisos LIMIT, comisiones y ventas reservadas requieren reconciliación. Snapshot: {{ payload.snapshot_note }}</div></section>
+
 </div>
 <script src="{{ url_for('static', filename='purchase_plan.js') }}"></script>
+<script src="{{ url_for('static', filename='forecast_level_status.js') }}"></script>
 <script>
 const mode={{ payload.kind|tojson }};
 const o2Weights={{ payload.forecast_o2_allocation|default([0,60,40,0])|tojson }};
@@ -47,6 +55,27 @@ function distribute(total, items, key){const out=items.map(()=>0);let remaining=
 // Calcula una cartera objetivo sin vender: capital necesario para diluir el mayor sobrepeso.
 // Con B por debajo de ese capital, distribuye entre déficits y conserva 100% del presupuesto.
 // Con B suficiente, consigue exactamente los targets y asigna el excedente a prorrata.
+function fibPrice(v){const x=Number(v);if(!Number.isFinite(x)||x<=0)return 'N/D';return '$'+x.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:8});}
+function renderO2Fibonacci(allocated){
+ const levels=source.o2_levels||{}, shares=o2Weights.map(Number).map(x=>x/100);
+ const total=allocated.reduce((a,b)=>a+b,0);
+ el('fib-body').innerHTML=source.tokens.map((t,i)=>{
+   const refs=levels[t.token]||{},c1=Number(refs.c1),c2=Number(refs.c2);
+   const valid=Number.isFinite(c1)&&c1>0&&Number.isFinite(c2)&&c2>0;
+   const rise=valid?(c1-c2)/.118:NaN, top=valid?c1+.5*rise:NaN;
+   const prices=valid?[top-.382*rise,c1,c2,top-.786*rise]:[NaN,NaN,NaN,NaN];
+   const budget=allocated[i];
+   const pairs=prices.map((level,j)=>{
+      const amount=budget*shares[j];
+      const forbidden=budget<=.000001 && Number(t.weight)>Number(t.target)+1e-9;
+      const state=window.KairosForecastLevelStatus.classify({level,spot:t.price});
+      const css=forbidden?'level-blocked':amount<=.000001?'':state.status==='hit'?'level-hit':state.status==='near'?'level-near':'';
+      return `<td class="${css}">${fibPrice(level)}</td><td class="${css}">${dollar(amount)}</td>`;
+   }).join('');
+   return `<tr><td>${token(t.token)}</td><td>${fibPrice(t.price)}</td>${pairs}<td><b>${dollar(budget)}</b></td></tr>`;
+ }).join('');
+ el('fib-total').innerHTML=`<tr><td>TOTAL USDT</td><td>—</td>${shares.map(share=>`<td>—</td><td>${dollar(share*total)}</td>`).join('')}<td><b>${dollar(total)}</b></td></tr>`;
+}
 function paint(){let target=Number(el('allocation-slider').value);el('slider-value').textContent=target.toFixed(1)+'%';el('portfolio-metric').textContent=dollar(P);el('cash-metric').textContent=dollar(cash);el('cash-pct').textContent=(100*cash/P).toFixed(1)+'% de P';let allocated=[],after=cash;
 if(mode==='compras'){
   const desired=P*target/100;
@@ -57,7 +86,8 @@ if(mode==='compras'){
   const sum=allocated.reduce((a,b)=>a+b,0);after=cash-sum;
   const initial=plan.balance.reduce((a,b)=>a+b,0),proportional=plan.extra.reduce((a,b)=>a+b,0);
   el('third-metric').textContent=dollar(trading);el('allocation-metric').textContent=dollar(sum);
-  el('caution').textContent='Etapa 1 (balanceo): '+dollar(initial)+'. Etapa 2 (todos los tokens): '+dollar(proportional)+'. Capital necesario para balanceo completo sin ventas: '+dollar(plan.required)+'. '+(sum>safeCapacity+0.01?'Por encima de la meta estructural USDT (caja de referencia: '+dollar(safeCapacity)+'); simulación NO autorizada. ':'')+'No descuenta LIMIT ni comisiones. Los cuatro tramos O2C1–O2C4 y precios no certificados se detallan en Forecast.';
+  // Conciliación y restricciones conservadas en la lógica; no mostrar nota amarilla.
+  renderO2Fibonacci(allocated);
   o2Weights.forEach((weight,i)=>{el('buy-tranche-'+i).textContent=dollar(sum*Number(weight)/100);});
   el('forecast-detail-link').href='/mode/forecast?deploy='+encodeURIComponent(target.toFixed(4));
 }else{
@@ -92,7 +122,7 @@ if(mode==='compras'){
   allocated=source.tokens.map((x,i)=>stage1[i]+stage2[i]);
   const sum=allocated.reduce((a,b)=>a+b,0);after=cash+sum;
   el('third-metric').textContent=target.toFixed(1)+'%';el('allocation-metric').textContent=dollar(sum);
-  el('caution').textContent='Etapa 1 (sobreponderados): '+dollar(phase1Sum)+'. Etapa 2 (ventas proporcionales): '+dollar(stage2.reduce((s,v)=>s+v,0))+'. Objetivo USDT: '+dollar(desired)+'. '+(unmet>0.01?'Déficit por inventario Exchange: '+dollar(unmet)+'. ':'')+'40% es valor predeterminado, no tope de ventas. BTC NEVER SELL. No descuenta órdenes SELL pendientes.';
+  // Sin alteración del cálculo de ventas.
   const crypto=P-cash;const cryptoAfter=crypto-sum;
   el('sim-foot').innerHTML=`<tr><td colspan="5">TOTAL VENTAS USDT</td><td>${dollar(sum)}</td><td>—</td><td>SIMULACIÓN</td></tr>`;
   el('sim-body').innerHTML=source.tokens.map((x,i)=>{let a=allocated[i],action=a>0?'SELL · SIMULAR':'HOLD';let newValue=x.weight*crypto-a;let post=cryptoAfter>0?100*newValue/cryptoAfter:null;return `<tr><td>${token(x.token)}</td><td>${(100*x.weight).toFixed(1)}%</td><td>${(100*x.target).toFixed(1)}%</td><td><b>${post===null?'N/D':post.toFixed(1)+'%'}</b></td><td data-private="units">${quantity(x.exchange_units)}</td><td><b>${dollar(a)}</b></td><td data-private="units">${quantity(a/x.price)}</td><td><span class="sim-actions ${a?'sell':'watch'}">${action}</span></td></tr>`}).join('')||'<tr><td colspan="8">Sin activos con Exchange vendible.</td></tr>';

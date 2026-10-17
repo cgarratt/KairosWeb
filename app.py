@@ -30,7 +30,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = "1.9.0"  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = "2.0.0"  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -63,7 +63,7 @@ def policy_numeric(key, allowed):
 MODE_DEFS = [
     {'slug':'portafolio','name':'Portafolio','subtitle':'Capital integral y rentabilidad histórica','description':'Seguimiento estratégico del capital y la liquidez del portafolio.'},
     {'slug':'balancer','name':'Balancer','subtitle':'Rebalanceo y liquidez','description':'Propuestas de rebalanceo, control de piso de liquidez y protección de Core.'},
-    {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Simulación de compras en dos etapas; referencias Fibonacci y tabla O2C1–O2C4 en Forecast.'},
+    {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Simulación de compras en dos etapas con asignación Fibonacci O2C1–O2C4.'},
     {'slug':'ventas','name':'Ventas','subtitle':'Objetivo USDT','description':'Propuestas solo SELL para acercarse a la meta de liquidez y reducir sobrepeso.'},
     {'slug':'forecast','name':'Forecast','subtitle':'Cycle Low → O5','description':'Tabla de niveles O2C1–O2C4 y ondas/pivotes proyectados; todo es simulación.'},
     {'slug':'tradingbot','name':'TradingBot','subtitle':'Táctico 4H','description':'Vista táctica preliminar para la reserva de trading y activos de seguimiento.'},
@@ -503,7 +503,7 @@ def build_mode_payload(slug, d, observed):
 
     if slug in ('compras','forecast'):
         p=d['total_value']; cash=d['usdt_total']; trading=d['trading_reserve']
-        max_percent=(min(25.0,100*max(0.0,cash-trading)/p)) if p else 0.0
+        max_percent=(100*max(0.0,cash-trading)/p) if p else 0.0
         reference_cap=max(0.0,cash-trading)
         purchase_tokens=[{'token':r['token'],'tier':r['tier'],'price':r['price'],'weight':r['weight'],'target':r['target'],
             'current_usdt':r['value'],'units':r['units'],
@@ -518,9 +518,9 @@ def build_mode_payload(slug, d, observed):
         return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
             'kind':'compras', 'current':purchase_current, 'tokens':purchase_tokens,
             'o2_level_reference':O2_LEVELS['source'],
-            'forecast_o2_allocation':o2_weights,
+            'forecast_o2_allocation':o2_weights, 'o2_levels':O2_LEVELS['levels'],
             'structural_liquidity_target':approved_numeric('STRUCTURAL_USDT_TARGET'),
-            'notes':['La tabla O2C1–O2C4 y las referencias históricas se encuentran en Forecast.',
+            'notes':['Referencias O2C1–O2C4 en Compras; niveles históricos no certificados.',
              'Compras mantiene su slider y la simulación de balanceo + asignación proporcional.',
              'La liquidez seleccionada es hipotética; no modifica órdenes LIMIT ni custodia.']}
         buy_rows=[]

@@ -77,16 +77,6 @@
 
 
 
-<section class="panel span-12">
-<h2>Asignación USDT para referencias Fibonacci O2</h2><p class="sub">La asignación reutiliza exactamente las dos etapas del modo Compras: balanceo inicial y distribución proporcional. O2 y O4 usan un presupuesto máximo de 25% del patrimonio total P de cada onda; los cuatro tramos O2C1–O2C4 comparten el 100% de ese presupuesto. El presupuesto real gastado depende de caja libre y niveles alcanzados.</p>
-<div class="fc-controls fc-deploy-controls"><div class="fc-field fc-deploy-slider" style="min-width:230px;flex:2"><label for="forecast-deploy">Despliegue simulado · % de patrimonio total P</label><input class="fc-slider" id="forecast-deploy" type="range" min="0" max="25" value="0" step="any"><div class="fc-legend">0% — máximo 25% de P · reserva Quantfury protegida</div></div><div class="fc-deploy-values"><div><label>Porcentaje</label><b class="fc-step" id="deploy-label">—</b></div><div><label>USDT simulado</label><b class="fc-step" id="deploy-total">—</b></div></div></div>
-<p id="deploy-shortfall" class="fc-legend" role="status" aria-live="polite"></p>
-<div class="fc-warning">Los precios O2C2 (Fib 50%) y O2C3 (Fib 61.8%) proceden de la antigua tabla C1/C2; las demás referencias se reconstruyen matemáticamente. Todos son escenarios, no órdenes. Los precios de referencia son de una tabla O2 histórica, no cotizaciones en vivo ni órdenes activas. Si faltan niveles (PEPE o VIRTUAL), el presupuesto simulado se muestra pero <b>no constituye una orden colocable</b>. Las órdenes LIMIT y el inventario siguen sujetos a reconciliación.</div>
-<p class="fc-legend" id="fibo-level-legend" role="note"><strong>Verde:</strong> referencia alcanzada por el Spot observado. <strong>Ámbar:</strong> Spot hasta 1% por encima del nivel, aún no alcanzado. Sin color: pendiente o sin precio. <strong>Referencia estimada, no certifica toques históricos post-O1</strong> ni constituye una señal ejecutable.</p>
-<div class="fc-tables"><table><thead><tr><th scope="col">Token</th><th scope="col" title="O2C1 · Fib 38.2%">Precio 38.2%</th><th scope="col" title="O2C1 · USDT">USDT</th><th scope="col" title="O2C2 · Fib 50%">Precio 50%</th><th scope="col" title="O2C2 · USDT">USDT</th><th scope="col" title="O2C3 · Fib 61.8%">Precio 61.8%</th><th scope="col" title="O2C3 · USDT">USDT</th><th scope="col" title="O2C4 · Fib 78.6%">Precio 78.6%</th><th scope="col" title="O2C4 · USDT">USDT</th><th scope="col" title="Total compras O2 · USDT">Total USDT</th></tr></thead><tbody id="fib-body"></tbody><tfoot id="fib-total"></tfoot></table></div>
-<p class="footer-note">O2C1 Fib 38.2% y O2C4 Fib 78.6% se estiman algebraicamente a partir de los valores históricos C1 Fib 50% / C2 Fib 61.8%; los pivotes de origen no están certificados. Los importes del pie suman los presupuestos simulados y no modifican la liquidez física.</p>
-</section>
-
 <section class="panel span-12" id="cycle-strategy">
 <h2>Simulación integral O2 → O5 · Compras, ventas y acumulación BTC</h2>
 <p class="sub">Escenario hipotético no ejecutable: BTC NEVER SELL, HODL Tier 1 protegido; Core y Exchange restantes liquidables en Post-O5. Los porcentajes BTC/USDT de O3 y O5 se leen del Master PUBLICADO y no son editables en esta simulación. Los tramos Fibonacci continúan siendo hipotéticos, no órdenes.</p>
@@ -116,6 +106,7 @@
 <script src="{{ url_for('static', filename='forecast_fibo_plan.js') }}"></script>
 <script src="{{ url_for('static', filename='forecast_level_status.js') }}"></script>
 
+<input id="forecast-deploy" type="hidden" value="25">
 <script>
 const fc={{ payload|tojson }};
 const Fibo=window.KairosForecastFibo;
@@ -147,30 +138,6 @@ function verifyWeights(){let errors=[];
  $('weights-validation').textContent=errors.length?'NO VALIDADO · '+errors.join(' | '):'Todos los tramos suman 100%. Simulación local; no modifica el Master.';
  return errors.length===0;
 }
-function renderFib(){
- const pct=Number($('forecast-deploy').value);$('deploy-label').textContent=pct.toFixed(2)+'%';
- const cap=Fibo.budget(nums.P,fc.cash_total,fc.trading_reserve);const B=Math.min(cap.deployable,cap.maximum*Number($('o2-budget').value))*pct/25;
- const plan=purchasePlan(B,fc.tokens,nums.crypto_value),shares=stageWeights('o2');
- const amounts=fc.tokens.map((x,i)=>plan.balance[i]+plan.extra[i]);
- const total=amounts.reduce((a,b)=>a+b,0);
- $('deploy-total').textContent=money(total);
- const requested=nums.P*pct/100*Number($('o2-budget').value);
- const deficit=Math.max(0,requested-total);
- $('deploy-shortfall').textContent=deficit>0.005?`Déficit de caja para este escenario: ${money(deficit)}. El simulador no utiliza la reserva Quantfury.`:'Sin órdenes reales. USDT simulado sujeto a caja elegible y a los niveles alcanzados.';
- const pivots=new Map(fc.pivot_rows.map(p=>[p.token,p]));
- $('fib-body').innerHTML=fc.tokens.map((t,i)=>{
-  const p=pivots.get(t.token)||{},a=amounts[i],levels=[p.ref382,p.c1,p.c2,p.ref786];
-  const levelsHtml=levels.map((level,j)=>{
-    const state=LevelStatus.classify({level,spot:Number(t.price)});
-    const css=state.status==='hit'?'fc-level-hit':state.status==='near'?'fc-level-near':'';
-    const label=LevelStatus.tooltip(state,Number(t.price),level);
-    return `<td class="${css}" title="${label}" data-level-status="${state.status}" data-fibo="${j}">${price(level)}</td><td>${money(shares[j]*a)}</td>`;
-  }).join('');
-  return `<tr><td>${logo(t.token)}</td>${levelsHtml}<td><b>${money(a)}</b></td></tr>`;
-}).join('');
- $('fib-total').innerHTML=`<tr><td>TOTAL USDT</td>${shares.map((f)=>`<td>—</td><td>${money(f*total)}</td>`).join('')}<td>${money(total)}</td></tr>`;
-}
-
 function calcWaves(){
  const o2f=Number($('o2-choice').value),o3e=Number($('o3-choice').value),o4f=Number($('o4-choice').value),o5e=Number($('o5-choice').value);
  return fc.pivot_rows.map(p=>{
@@ -358,8 +325,8 @@ function runCycle(){
  $('cycle-assets-total').innerHTML=`<tr><td colspan="6">TOTAL CRIPTO</td><td>${money(last.crypto)}</td></tr><tr><td colspan="6">LIQUIDEZ USDT (incl. Trading)</td><td>${money(last.cash)}</td></tr><tr><td colspan="6">PATRIMONIO POST-O5</td><td>${money(last.total)}</td></tr>`;
  $('cycle-note').textContent=`Presupuestos teóricos O2 ${money(.25*P)} / O4 ${money(.25*pO4)} (ambos máximos). Desplegado efectivo O2 ${money(planUsed.o2)} / O4 ${money(planUsed.o4)}. Ingresos brutos simulados O3 ${money(planUsed.o3)} / O5 ${money(planUsed.o5)}. ${limitO3Reached?'O3 detenido al objetivo USDT publicado.':''} ${o3CannotMeetCash?'O3 no puede alcanzar la meta USDT si el 100% de proceeds se transforma en BTC.':''} Reparto oficial O3 ${(btcShareO3*100).toFixed(0)}% BTC / ${((1-btcShareO3)*100).toFixed(0)}% USDT; O5 ${(btcShareO5*100).toFixed(0)}% BTC / ${((1-btcShareO5)*100).toFixed(0)}% USDT. BTC adquirido hipotéticamente ${btcFromSales.toFixed(8)} BTC. El cierre Post-O5 de Core/Exchange restante es una hipótesis final separada; no existe fill. QF protegido, BTC NEVER SELL y HODL bloqueado. Precios y pivotes no certificados.`;
 }
-function renderAll(){if(!verifyWeights()){ $('fib-body').replaceChildren();$('cycle-summary').replaceChildren();$('cycle-assets').replaceChildren();$('wave-custody-snapshots').replaceChildren();$('cycle-note').textContent='Corrige los porcentajes antes de continuar; las tablas anteriores se han ocultado.';return;}try{renderFib();renderWaves();runCycle();lastForecastError=null;}catch(e){lastForecastError=e;$('weights-validation').textContent='NO VALIDADO · '+e.message;}}
-$('forecast-deploy').addEventListener('input',renderAll);
+function renderAll(){if(!verifyWeights()){$('cycle-summary').replaceChildren();$('cycle-assets').replaceChildren();$('wave-custody-snapshots').replaceChildren();$('cycle-note').textContent='Corrige los porcentajes antes de continuar; las tablas anteriores se han ocultado.';return;}try{renderWaves();runCycle();lastForecastError=null;}catch(e){lastForecastError=e;$('weights-validation').textContent='NO VALIDADO · '+e.message;}}
+
 ['o2-choice','o3-choice','o4-choice','o5-choice'].forEach(id=>$(id).addEventListener('change',renderAll));
 $('chart-token').addEventListener('change',()=>drawCurve(calcWaves()));
 ['o2-budget','o3-sell','o4-budget','o5-sell'].forEach(id=>$(id).addEventListener('change',renderAll));
