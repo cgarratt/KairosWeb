@@ -77,6 +77,9 @@
 <div class="fc-metrics"><div class="fc-kpi"><small>Patrimonio proyectado Post-O5</small><b id="o5-total">—</b></div><div class="fc-kpi"><small>BTC al cierre Post-O5</small><b id="o5-btc">—</b></div><div class="fc-kpi"><small>USDT total Post-O5</small><b id="o5-cash">—</b></div><div class="fc-kpi"><small>HODL bloqueado / Cripto</small><b id="o5-hodl">—</b></div></div>
 <h3 style="margin-top:18px">Evolución del portafolio por onda</h3>
 <div class="fc-tables"><table><thead><tr><th>Indicador</th><th>Inicio</th><th>O2</th><th>O3</th><th>O4</th><th>O5</th><th>Post-O5</th></tr></thead><tbody id="cycle-summary"></tbody></table></div>
+<h3 style="margin-top:22px">Custodia y valorización al cierre de cada onda</h3>
+<p class="sub">Fotografías simuladas después de compras, ventas y transferencias virtuales O2/O4. Sin movimientos reales.</p>
+<div id="wave-custody-snapshots"></div>
 <h3 style="margin-top:20px">Composición final Post-O5</h3>
 <div class="fc-tables"><table><thead><tr><th>Token</th><th>HODL (u.)</th><th>Core (u.)</th><th>Exchange (u.)</th><th>Total unidades</th><th>Precio O5</th><th>Valor USDT</th></tr></thead><tbody id="cycle-assets"></tbody><tfoot id="cycle-assets-total"></tfoot></table></div>
 <p class="footer-note" id="cycle-note"></p>
@@ -171,8 +174,9 @@ function runCycle(){
  const protectedHodl=new Map(assets.filter(a=>a.token==='BTC'||fc.tokens.find(t=>t.token===a.token)?.tier==='T1').map(a=>[a.token,a.hodl]));
  if(['BTC','ETH','SOL','LINK','HYPE'].some(symbol=>!protectedHodl.has(symbol)))throw new Error('Protección HODL T1 incompleta');
  const initialBtc=assets.find(a=>a.token==='BTC').hodl+assets.find(a=>a.token==='BTC').core+assets.find(a=>a.token==='BTC').ex;
- let cash=cash0,btcFromSales=0; const history=[];
+ let cash=cash0,btcFromSales=0; const history=[];const custodyShots=[];
  function valuation(step){let crypto=0,blocked=0; for(const a of assets){const price=a.prices?.[step]||a.spot;crypto+=(a.hodl+a.core+a.ex)*price;blocked+=a.hodl*price;}return {crypto,cash,total:crypto+cash,btc:assets.find(a=>a.token==='BTC').hodl+assets.find(a=>a.token==='BTC').core+assets.find(a=>a.token==='BTC').ex,blocked};}
+ function snapshotWave(name,step){return {name, cash, assets:assets.map(a=>({token:a.token,hodl:a.hodl,core:a.core,ex:a.ex,price:a.prices?.[step]||a.spot}))};}
  function rebalanceCustody(){for(const a of assets){
  const tier=fc.tokens.find(t=>t.token===a.token)?.tier;
  const total=a.hodl+a.core+a.ex;if(total<=0)continue;
@@ -184,12 +188,12 @@ function runCycle(){
  history.push(valuation(-1));
  // O2: 60% C1 and 40% C2, each tranche receives its own price.
  for(const a of assets){if(!a.prices)continue;const b=Math.min(a.o2alloc,Math.max(0,cash-qf));const p=fc.pivot_rows.find(x=>x.token===a.token);if(!(p?.c1>0&&p?.c2>0))continue;a.ex+=b*.6/p.c1+b*.4/p.c2;cash-=b;}
- rebalanceCustody();history.push(valuation(2));
+ rebalanceCustody();history.push(valuation(2));custodyShots.push(snapshotWave("O2",2));
  function doSales(wave,ratio){let proceeds=0;for(const a of assets){if(a.token==='BTC'||!a.prices)continue;let qty=a.ex*ratio;const price=a.prices[wave];if(!(price>0))continue;a.ex-=qty;proceeds+=qty*price;}const share=Number($('btc-share').value), btcPrice=assets.find(a=>a.token==='BTC').prices?.[wave];if(share>0&&btcPrice>0){const converted=proceeds*share;assets.find(a=>a.token==='BTC').ex+=converted/btcPrice;btcFromSales+=converted/btcPrice;cash+=proceeds-converted;}else{cash+=proceeds;}}
- doSales(3,Number($('o3-sell').value));history.push(valuation(3));
+ doSales(3,Number($('o3-sell').value));history.push(valuation(3));custodyShots.push(snapshotWave("O3",3));
  // O4 hypothetical buy allocation proportional to targets. BTC and other 11 eligible when wave price exists.
- const budget=Math.max(0,cash-qf)*Number($('o4-budget').value);let spent=0;const active=assets.filter(a=>a.prices&&a.prices[4]>0),weights=active.reduce((s,a)=>s+(fc.tokens.find(t=>t.token===a.token)?.target||0),0)||1;for(const a of active){const amount=budget*(fc.tokens.find(t=>t.token===a.token).target/weights);a.ex+=amount/a.prices[4];spent+=amount;}cash-=spent;rebalanceCustody();history.push(valuation(4));
- doSales(5,Number($('o5-sell').value));history.push(valuation(5));
+ const budget=Math.max(0,cash-qf)*Number($('o4-budget').value);let spent=0;const active=assets.filter(a=>a.prices&&a.prices[4]>0),weights=active.reduce((s,a)=>s+(fc.tokens.find(t=>t.token===a.token)?.target||0),0)||1;for(const a of active){const amount=budget*(fc.tokens.find(t=>t.token===a.token).target/weights);a.ex+=amount/a.prices[4];spent+=amount;}cash-=spent;rebalanceCustody();history.push(valuation(4));custodyShots.push(snapshotWave("O4",4));
+ doSales(5,Number($('o5-sell').value));history.push(valuation(5));custodyShots.push(snapshotWave("O5",5));
  const preLiquidationValue=history[history.length-1].total;
  // Liquidación post-O5: BTC NEVER SELL. Tier 1 conserva HODL; los demás se liquidan.
  let finalProceeds=0;
@@ -220,10 +224,12 @@ function runCycle(){
  }
  const assetsValue=assets.reduce((sum,a)=>sum+(a.hodl+a.core+a.ex)*(a.prices?.[5]||a.spot),0);
  if(Math.abs((assetsValue+cash)-preLiquidationValue)>0.02)throw new Error('Diferencia de conciliación Post-O5');
- history.push(valuation(5));
+ history.push(valuation(5));custodyShots.push(snapshotWave("Post-O5",5));
  const last=history[history.length-1];$('o5-total').textContent=money(last.total);$('o5-btc').textContent=last.btc.toFixed(8)+' BTC';$('o5-cash').textContent=money(last.cash);$('o5-hodl').textContent=(last.crypto>0?(last.blocked/last.crypto*100).toFixed(1)+'%':'N/D');
  const entries=[['Cripto',x=>x.crypto],['USDT (incl. Trading)',x=>x.cash],['Patrimonio',x=>x.total],['BTC (unidades)',x=>x.btc]];
  $('cycle-summary').innerHTML=entries.map(([name,get])=>`<tr><td><b>${name}</b></td>${history.map(h=>`<td>${name.includes('unidades')?get(h).toFixed(8):money(get(h))}</td>`).join('')}</tr>`).join('');
+ const csRoot=$('wave-custody-snapshots');
+ csRoot.innerHTML=custodyShots.map(shot=>{let crypto=0;const body=shot.assets.map(a=>{const qty=a.hodl+a.core+a.ex;const v=qty*a.price;crypto+=v;return `<tr><td>${logo(a.token)}</td><td>${a.hodl.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${a.core.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${a.ex.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${qty.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${price(a.price)}</td><td>${money(v)}</td></tr>`;}).join('');return `<details style="margin:12px 0;border:1px solid #dce7f6;border-radius:12px;padding:12px" ${shot.name==='Post-O5'?'open':''}><summary style="font-weight:800;cursor:pointer">${shot.name} · Cripto ${money(crypto)} · USDT ${money(shot.cash)} · Patrimonio ${money(crypto+shot.cash)}</summary><div class="fc-tables"><table><thead><tr><th>Token</th><th>HODL (u.)</th><th>Core (u.)</th><th>Exchange (u.)</th><th>Total unidades</th><th>Precio</th><th>Valor USDT</th></tr></thead><tbody>${body}</tbody><tfoot><tr><td colspan="6">TOTAL CRIPTO</td><td>${money(crypto)}</td></tr><tr><td colspan="6">LIQUIDEZ USDT</td><td>${money(shot.cash)}</td></tr><tr><td colspan="6">PATRIMONIO</td><td>${money(crypto+shot.cash)}</td></tr></tfoot></table></div></details>`}).join('');
  $('cycle-assets').innerHTML=assets.map(a=>{const p=a.prices?.[5]||a.spot,u=a.hodl+a.core+a.ex;return `<tr><td>${logo(a.token)}</td><td>${a.hodl.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${a.core.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${a.ex.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${u.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${price(p)}</td><td>${money(u*p)}</td></tr>`;}).join('');
  $('cycle-assets-total').innerHTML=`<tr><td colspan="6">TOTAL CRIPTO</td><td>${money(last.crypto)}</td></tr><tr><td colspan="6">LIQUIDEZ USDT (incl. Trading)</td><td>${money(last.cash)}</td></tr><tr><td colspan="6">PATRIMONIO POST-O5</td><td>${money(last.total)}</td></tr>`;
  $('cycle-note').textContent=`BTC acumulado desde O3, O5 y Post-O5: ${btcFromSales.toFixed(8)} BTC. HODL bloqueado valorizado: ${money(last.blocked)}; representa ${last.crypto>0?(100*last.blocked/last.crypto).toFixed(1):0}% de la manga cripto. Todos los BTC adquiridos permanecen en Exchange. Post-O5 conserva BTC/HODL T1, liquida restantes. Sin fills reales, fees, reconciliación de LIMIT ni certeza de pivotes.`;

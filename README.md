@@ -197,3 +197,9 @@ El payload del backend incluye `tier` de cada token. Antes no lo hacía, causand
 - Riesgo monetario QF limita exposición nominal en el simulador y margen de reserva.
 - Custodia Forecast O2/O4: T1 40/30/30, T2 0/30/70, T3 0/0/100, solo movimientos virtuales desde Exchange.
 - Pendiente: comparación certificada contra motor oficial TradingBot para cada token y políticas completas de SL/TP.
+
+## v4.3.2 — TradingBot y Forecast
+- Ranking LONG y SHORT sin línea informativa superior; semáforos 4H, RSI 1H, StochRSI 1H, HL/LH, SL/TP y QF no verificado.
+- TP basado en el pivote 4H confirmado 2/2 más distante o igual a 2R; R:R real dinámico.
+- Fotografías O2, O3, O4, O5 y Post-O5 con unidades por custodia y conciliación USDT.
+- WATCH obligatorio sin verificación Quantfury; los pivotes heurísticos 2/2 no representan certificación del Master completo.
