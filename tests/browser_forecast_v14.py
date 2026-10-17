@@ -20,7 +20,7 @@ payload={'o2_source':'FAKE_MCPS_ARCHIVE','generated_at':'2026-10-17T12:00:00Z','
  'cash_total':30000,'trading_reserve':5000,'tokens':assets,'pivot_rows':pivots,'custody':cs,
  'custody_policy':{'T1':[.4,.3,.3],'T2':[0,.3,.7],'T3':[0,0,1]},
  'forecast_fibo_allocations':{'o2':[0,60,40,0],'o3':[40,30,20,10],'o4':[0,60,40,0],'o5':[20,20,30,30]},
- 'official_o5_split':.3,'o3_liquidity_target':.4}
+ 'official_o3_split':.3,'official_o3_usdt_split':.7,'official_o5_split':.5,'official_o5_usdt_split':.5,'o3_liquidity_target':.4}
 class Req:
  path='/mode/forecast';args={};full_path='/mode/forecast'
 env=Environment(loader=FileSystemLoader(ROOT/'templates'),autoescape=True)
@@ -39,6 +39,9 @@ with sync_playwright() as playwright:
  page.on('pageerror',lambda e:errors.append(str(e)))
  page.set_content(html,wait_until='domcontentloaded')
  page.add_style_tag(path=str(ROOT/'static/theme.css'))
+ # Offline fixture omits the bundled privacy script; bootstrap privacy here.
+ page.add_script_tag(path=str(ROOT/'static/privacy.js'))
+ page.locator('#privacy-toggle').click()  # synthetic scenario only
  page.evaluate("document.documentElement.dataset.theme='dark'")
  page.wait_for_timeout(100)
  print('PAGE_ERRORS:',errors)

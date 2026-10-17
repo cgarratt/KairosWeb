@@ -233,3 +233,10 @@
 .parameter-group .settings-row:last-child{border-bottom:0}
 :root[data-theme="dark"] .parameter-jump-link{background:#213856;color:#eff6ff;border-color:#3b5271}
 :root[data-theme="dark"] .parameter-group{border-color:#344966}
+
+/* Privacy switch is display-only; inactive content cannot flash on initial paint. */
+html[data-privacy-boot="pending"] .shell{visibility:hidden}
+.privacy-toggle{display:inline-flex;align-items:center;gap:6px;width:auto;padding:0 12px;min-width:44px;cursor:pointer}
+.privacy-toggle svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.privacy-label{font-size:11px;font-weight:700}
+@media(max-width:680px){.privacy-label{display:none}}

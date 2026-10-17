@@ -6,7 +6,7 @@
   <title>{% block title %}KairosWeb{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='kairos-horizon.svg') }}">
   <meta name="theme-color" content="#103d88">
-  <script>try{document.documentElement.dataset.theme=localStorage.getItem("kairosweb-theme")==="dark"?"dark":"light";}catch(e){document.documentElement.dataset.theme="light";}</script>
+  <script>document.documentElement.dataset.balances="hidden";document.documentElement.dataset.privacyBoot="pending";try{document.documentElement.dataset.theme=localStorage.getItem("kairosweb-theme")==="dark"?"dark":"light";}catch(e){document.documentElement.dataset.theme="light";}</script>
   <style>
     :root{--bg:#f4f8fc;--panel:#ffffff;--line:#dbe6f2;--text:#102443;--muted:#607792;--blue:#103d88;--blue2:#3293df;--green:#1fa67a;--red:#c4465a;--amber:#d58d18;--soft:#eef4fb;--shadow:0 10px 24px rgba(14,28,61,.08)}
     *{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:linear-gradient(180deg,#f8fbff 0%,var(--bg) 100%);color:var(--text)}a{text-decoration:none;color:inherit}
@@ -92,6 +92,9 @@
         <div><h1>KairosWeb</h1><p>v{{ master }} · Google Sheets Master · Spot por MCP</p></div>
       </div>
       <div class="right-tools">
+        <button type="button" class="tool-icon privacy-toggle" id="privacy-toggle" aria-label="Mostrar saldos" aria-pressed="false" title="Mostrar saldos">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path d="M3 3 21 21"/></svg><span class="privacy-label">Mostrar</span>
+        </button>
         <div class="alerts-wrap">
           <button type="button" class="tool-icon" id="bell-open" aria-label="Alertas Kairos accionables sin leer" aria-expanded="false" aria-controls="alerts-popover" title="Alertas Kairos">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></svg>
@@ -123,5 +126,6 @@
   <script defer src="{{ url_for('static', filename='alert_bell.js') }}"></script>
   <script defer src="{{ url_for('static', filename='theme.js') }}"></script>
   <script defer src="{{ url_for('static', filename='tooltips.js') }}?v={{ master }}"></script>
+  <script defer src="{{ url_for('static', filename='privacy.js') }}?v={{ master }}"></script>
 </body>
 </html>

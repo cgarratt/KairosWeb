@@ -1,6 +1,7 @@
-"""KairosWeb v1.7.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
+"""KairosWeb v1.8.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
 import asyncio
 import json
+import math
 import os
 import secrets
 import time
@@ -29,7 +30,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = "1.7.0"  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = "1.8.0"  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -240,11 +241,12 @@ def fmt_money(v):
     return f"${v:,.0f}" if abs(v) >= 100 else f"${v:,.2f}"
 
 def fmt_price(v):
-    if v >= 1000:
-        return f"${v:,.2f}"
-    if v >= 1:
-        return f"${v:,.4f}".rstrip('0').rstrip('.')
-    return f"${v:,.6f}".rstrip('0').rstrip('.')
+    """Display token price with up to five decimals, retaining raw arithmetic precision."""
+    if v is None or not math.isfinite(float(v)) or v <= 0:
+        return 'N/D'
+    if 0 < v < 0.00001:
+        return '$<0.00001'
+    return f'${v:,.5f}'.rstrip('0').rstrip('.')
 
 def fmt_pct(v):
     return f"{v:.1f}%"
@@ -318,7 +320,9 @@ def core_dashboard(prices):
         custody = SNAPSHOT['custody_core_blocked__core_strategic__exchange'].get(key, [0,0,0])
         rows.append({'token':market_key,'tier':TIERS[token], 'target':TARGETS[token],
                      'units':units,'hodl_units':float(custody[0]),'core_units':float(custody[1]),
-                     'exchange_units':float(custody[2]),'price':price,'value':value})
+                     'exchange_units':float(custody[2]),'price':price,'value':value,
+                     'avg_cost':float(COST_BASIS[market_key]) if isinstance(COST_BASIS.get(market_key),(int,float)) and COST_BASIS.get(market_key)>0 else None,
+                     'pnl_pct':(price/float(COST_BASIS[market_key])-1)*100 if isinstance(COST_BASIS.get(market_key),(int,float)) and COST_BASIS.get(market_key)>0 else None})
     for row in rows:
         row['weight']=row['value']/portfolio_crypto if portfolio_crypto else 0
         row['drift_pp']=(row['weight']-row['target'])*100
@@ -678,12 +682,19 @@ def build_mode_payload(slug, d, observed):
                                'ref382':pivots['ref382'], 'ref782':pivots['ref782'], 'ref786':pivots['ref786'],
                                'cycle_low':pivots['cycle_low'], 'o1':pivots['o1'],
                                'anchor_state':pivots['status']})
+        # Both O3/O5 allocation pairs come from the currently PUBLICADO Sheet.
+        # If either is pending, malformed or no longer totals 100%, fail closed.
+        split_o3=(approved_numeric('O3_BTC_PROCEEDS_FRACTION'),approved_numeric('O3_USDT_PROCEEDS_FRACTION'))
+        split_o5=(approved_numeric('O5_BTC_PROCEEDS_FRACTION'),approved_numeric('O5_USDT_PROCEEDS_FRACTION'))
+        if any(x < 0 or x > 1 or not math.isfinite(x) for x in (*split_o3,*split_o5)) or any(abs(sum(pair)-1)>1e-8 for pair in (split_o3,split_o5)):
+            raise SheetDataError('12_PARAMETROS_KAIROS: reparto BTC/USDT O3/O5 debe sumar 100% en cada onda')
         return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
             'kind':'forecast', 'current':purchase_current,'tokens':purchase_tokens, 'custody':{('PUMP' if k=='PUMPFUN' else k):v for k,v in SNAPSHOT['custody_core_blocked__core_strategic__exchange'].items()}, 'cash_total':d['usdt_total'], 'trading_reserve':d['trading_reserve'],
             'pivot_rows':pivot_rows, 'o2_source':O2_LEVELS['source'],
             'custody_policy':g.kairos_state['custody_policy'],
             'c1_share':defaults_from_master(g.kairos_state['parameters'])['o2'][1]/100,
-            'official_o5_split':approved_numeric('O5_BTC_PROCEEDS_FRACTION'),
+            'official_o3_split':split_o3[0], 'official_o3_usdt_split':split_o3[1],
+            'official_o5_split':split_o5[0], 'official_o5_usdt_split':split_o5[1],
             'o3_liquidity_target':approved_numeric('STRUCTURAL_USDT_TARGET'),
             'forecast_fibo_allocations':__import__('forecast_fibo_policy').defaults_from_master(g.kairos_state['parameters']),
             'reference_type':'O2_REFERENCES_RECONSTRUCTED_UNCERTIFIED',

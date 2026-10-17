@@ -36,7 +36,7 @@
     targets:[['tier','Tier'],['target','Objetivo (%)']],
     tier_custody:[['hodl','HODL (%)'],['core','Core (%)'],['exchange','Exchange (%)']],
     liquidity:[['usdt','USDT físico']],parameters:[['value','Valor']],
-    pivots:[['cycle_low','Cycle Low'],['o1','O1'],['o2','O2'],['o3','O3'],['o4','O4'],['o5','O5'],['c1_reference','O2C2 · Fib 50% (referencia histórica)'],['c2_reference','O2C3 · Fib 61.8% (referencia histórica)']]};
+    pivots:[['cycle_low','Cycle Low'],['o1','O1'],['o2','O2'],['o3','O3'],['o4','O4'],['o5','O5']]};
   const nav=document.getElementById('settings-nav'), body=document.getElementById('settings-data');
   const status=document.getElementById('settings-msg'), save=document.getElementById('settings-save');
   const hint=document.getElementById('settings-admin-state');const more=document.getElementById('settings-pivots-tools');
@@ -48,6 +48,7 @@
   function cleanFloat(v){return String(Number(Number(v).toPrecision(12)));}
   const pc=(n)=>`${cleanFloat(n)}%`;
   const money=(n)=>'US$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const price5=(n)=>{const v=Number(n);return !Number.isFinite(v)?'N/D':v>0&&v<0.00001?'US$<0.00001':'US$'+v.toLocaleString('en-US',{maximumFractionDigits:5});};
   function rowKey(){return tab==='liquidity'?'venue':tab==='tier_custody'?'tier':tab==='parameters'?'key':'token';}
   function inputValue(field,entry){const value=entry[field];
     if(tab==='targets'&&field==='target' ||tab==='tier_custody')return cleanFloat(numerical(value)*100);
@@ -109,7 +110,7 @@
         const total=body.querySelector(`[data-computed="total-${i}"]`);
         const avg=body.querySelector(`[data-computed="avg-${i}"]`);
         if(total)total.textContent=Number(t).toLocaleString('en-US',{maximumFractionDigits:10});
-        if(avg)avg.textContent=t>0?money(v/t):'N/D';
+        if(avg)avg.textContent=t>0?price5(v/t):'N/D';
       });
     }
     renderTotals();
@@ -159,7 +160,7 @@
       }
       if(tab==='pivots'){
         const text=el('p','pivot-candidate-hint');text.dataset.pivotInfo=entry.token;
-        text.textContent='Actual: '+(entry.status||'SIN_DATO')+' · O2C2/O2C3 provenientes de C1/C2 históricos, no certificados';
+        text.textContent='Actual: '+(entry.status||'SIN_DATO')+' · solo pivotes O1–O5; referencias históricas omitidas en Configuración';
         item.append(text);
       }
       if(tab==='parameters')groupSlots[parameterGroup(entry).id].append(item);

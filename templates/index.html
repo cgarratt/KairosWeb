@@ -53,8 +53,8 @@
     </div>
     <div style="overflow:auto;margin-top:12px">
       <table>
-        <thead><tr><th>Token</th><th>Unidades</th><th>HODL</th><th>Core</th><th>Exchange</th><th>Precio</th><th>Valor USDT</th><th>Valor BTC</th><th>Peso</th><th>Target</th><th>Estado</th></tr></thead>
-        <tbody id="positions"><tr><td colspan="11" class="muted">Consultando…</td></tr></tbody><tfoot id="positions-total"></tfoot>
+        <thead><tr><th>Token</th><th>Estado</th><th>Unidades</th><th>Peso</th><th>Target</th><th>Precio Spot</th><th>Valor USDT</th><th>Valor BTC</th><th>Precio Medio</th><th>Rentabilidad</th></tr></thead>
+        <tbody id="positions"><tr><td colspan="10" class="muted">Consultando…</td></tr></tbody><tfoot id="positions-total"></tfoot>
       </table>
     </div>
   </section>
@@ -91,6 +91,7 @@ function tokenHtml(token){
 const money=(v,d=0)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:d,minimumFractionDigits:d}).format(v);
 const num=(v,d=1)=>new Intl.NumberFormat('en-US',{maximumFractionDigits:d,minimumFractionDigits:d}).format(v);
 const pct=v=>num(v,1)+'%';
+const price5=v=>{if(v==null||!Number.isFinite(Number(v)))return 'N/D';let n=Number(v);if(n>0&&n<0.00001)return 'US$<0.00001';return 'US$'+new Intl.NumberFormat('en-US',{maximumFractionDigits:5}).format(n)};
 function renderTiers(rows){
  const container=$('tier-bars'); container.replaceChildren();
  const sum=rows.reduce((a,r)=>a+r.value,0);
@@ -161,9 +162,9 @@ if(winners.length){setBars('profit-bars', winners.map(x=>({label:x.token,value:M
 else {$('profit-bars').textContent='No hay costos promedio declarados disponibles para calcular P&L.';}
 $('profit-note').textContent=`${profit.verified_count||0} de ${d.rows.length} tokens con costos declarados · Estimación sin conciliación independiente.`;
 const btcPrice=rows.find(r=>r.token==='BTC')?.price; if(!Number.isFinite(btcPrice)||btcPrice<=0)throw Error('Precio BTC inválido');
-$('positions').innerHTML=rows.map(r=>`<tr><td>${tokenHtml(r.token)}<div class="muted">${r.tier}</div></td><td>${num(r.units,r.units>100000?0:5)}</td><td>${num(r.hodl_units,r.units>100000?0:5)}</td><td>${num(r.core_units,r.units>100000?0:5)}</td><td>${num(r.exchange_units,r.units>100000?0:5)}</td><td>${r.price>=1?money(r.price,2):money(r.price,6)}</td><td>${money(r.value)}</td><td>${num(r.value / btcPrice,8)} BTC</td><td>${pct(r.weight*100)}</td><td>${pct(r.target*100)}</td><td><span class="pill ${r.status}">${r.status}</span></td></tr>`).join('');
-$('positions-total').innerHTML=`<tr style="font-weight:800;background:#edf4fc"><td colspan="6">Total patrimonio (incluye USDT)</td><td>${money(d.total_value)}</td><td>${num(d.total_value/btcPrice,8)} BTC</td><td>100% patrimonio</td><td colspan="2">Snapshot + MCP</td></tr>`;
-}catch(e){$('positions-total').innerHTML='';$('live-badge').className='badge danger';$('live-badge').textContent='● DATA ERROR';$('positions').innerHTML=`<tr><td colspan="11">Sin cotizaciones válidas: ${e.message}</td></tr>`;['bsi-bars','profit-bars','token-comparison'].forEach(id=>$(id).innerHTML='<div class="muted">Sin datos válidos</div>');}}
+$('positions').innerHTML=rows.map(r=>`<tr><td>${tokenHtml(r.token)}<div class="muted">${r.tier}</div></td><td><span class="pill ${r.status}">${r.status}</span></td><td data-private="units">${num(r.units,r.units>100000?2:5)}</td><td>${pct(r.weight*100)}</td><td>${pct(r.target*100)}</td><td data-public-price="true">${price5(r.price)}</td><td data-private="money">${money(r.value,2)}</td><td data-private="btc">${num(r.value / btcPrice,8)} BTC</td><td data-private="cost">${price5(r.avg_cost)}</td><td>${r.pnl_pct==null?'N/D':`<span class="${r.pnl_pct>=0?'valid-value':'invalid-value'}">${r.pnl_pct>=0?'+':''}${num(r.pnl_pct,2)}%</span>`}</td></tr>`).join('');
+$('positions-total').innerHTML=`<tr style="font-weight:800;background:#edf4fc"><td colspan="6">Total patrimonio (incluye USDT)</td><td data-private="money">${money(d.total_value,2)}</td><td data-private="btc">${num(d.total_value/btcPrice,8)} BTC</td><td colspan="2">Snapshot + MCP</td></tr>`;
+}catch(e){$('positions-total').innerHTML='';$('live-badge').className='badge danger';$('live-badge').textContent='● DATA ERROR';$('positions').innerHTML=`<tr><td colspan="10">Sin cotizaciones válidas: ${e.message}</td></tr>`;['bsi-bars','profit-bars','token-comparison'].forEach(id=>$(id).innerHTML='<div class="muted">Sin datos válidos</div>');}}
 refreshData();
 </script>
 {% endblock %}
