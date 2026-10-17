@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
 {% block title %}Kairos TradingBot · LONG / SHORT{% endblock %}
 {% block content %}
-<section class="panel"><h2>TradingBot · Ranking táctico 4H</h2><p class="sub">Hasta cuatro oportunidades por dirección, ordenadas por puntuación heurística. Todas son WATCH hasta que se validen los criterios Kairos; ninguna es una señal de ejecución confirmada.</p>
-<div class="tb-status" id="scan-status">Consultando OHLCV 4H de ocho tokens mediante Binance MCP…</div>
+<section class="panel"><h2>TradingBot · Ranking 4H + confirmación 1H</h2><p class="sub">Hasta cuatro oportunidades por dirección, ordenadas por validación estructural 1H. Todas son WATCH hasta que se validen los criterios Kairos; ninguna es una señal de ejecución confirmada.</p>
+<div class="tb-status" id="scan-status">Consultando OHLCV 4H/1H e indicadores 1H de ocho tokens mediante Binance MCP…</div>
 <h3 class="tb-long">↑ Candidatos LONG</h3><div class="tb-scroll"><table><thead><tr><th>#</th><th>Token</th><th>Entrada ideal</th><th>SL</th><th>TP</th><th>R:R</th><th>Validaciones antes de ejecutar</th><th>Estado</th></tr></thead><tbody id="longrows"><tr><td colspan="8">Cargando…</td></tr></tbody></table></div>
 <h3 class="tb-short">↓ Candidatos SHORT</h3><div class="tb-scroll"><table><thead><tr><th>#</th><th>Token</th><th>Entrada ideal</th><th>SL</th><th>TP</th><th>R:R</th><th>Validaciones antes de ejecutar</th><th>Estado</th></tr></thead><tbody id="shortrows"><tr><td colspan="8">Cargando…</td></tr></tbody></table></div>
-<p class="footer-note">Criterios: estructura 4H, media de 20 cierres, ruptura/momentum, nivel de invalidación, R:R y confirmación final. El filtro es exploratorio y no sustituye el motor TradingBot oficial. Si un candidato no cumple condiciones, aparece como WATCH, nunca como entrada aprobada.</p></section>
+<p class="footer-note">Criterios: contexto 4H; RSI14 frente a SMA14 de RSI, StochRSI K/D, HL/LH confirmado en 1H, SL estructural y R:R ≥ 1:2. Sin verificación de instrumentos/posiciones Quantfury no hay READY. El filtro es exploratorio y no sustituye el motor TradingBot oficial. Si un candidato no cumple condiciones, aparece como WATCH, nunca como entrada aprobada.</p></section>
 <section class="panel" style="margin-top:16px"><h2>Simulador de operación · Quantfury</h2><p class="sub">Precios y riesgo manuales. Poder de Trading y posiciones ajustables; el tamaño de referencia se calcula sin consultar cuentas privadas.</p>
 <div class="tb-fields"><label>Token<select id="tb-token">{% for x in ['BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO'] %}<option value="{{x}}" {% if x=='ETH' %}selected{% endif %}>{{x}}</option>{% endfor %}</select></label>
 <label>Dirección<select id="tb-side"><option>LONG</option><option>SHORT</option></select></label>
@@ -14,25 +14,52 @@
 <label>R:R objetivo (ej. 4 para 1:4)<input type="number" id="tb-rr" step="0.1" min="0.1" max="20" value="2"></label>
 <label>Poder de Trading QF (USDT)<input type="number" id="tb-power" step="100" min="0" value="40000"></label>
 <label>Posiciones simultáneas<input type="number" id="tb-slots" step="1" min="1" max="100" value="4"></label>
-<label>Apalancamiento (x)<input type="number" id="tb-leverage" step="0.5" min="1" max="100" value="5"></label></div>
+<label>Apalancamiento (x)<input type="number" id="tb-leverage" step="0.5" min="1" max="5" value="5"></label></div>
 <div class="tb-results"><div class="kpi"><div class="label">Stop Loss</div><div class="value" id="tb-sl">—</div></div><div class="kpi"><div class="label">Take Profit</div><div class="value" id="tb-tp">—</div></div><div class="kpi"><div class="label">Riesgo / beneficio</div><div class="value" id="tb-out-rr">—</div></div><div class="kpi"><div class="label">Tamaño de posición · exposición</div><div class="value" id="tb-size">—</div></div><div class="kpi"><div class="label">Margen teórico a x seleccionado</div><div class="value" id="tb-margin">—</div></div><div class="kpi"><div class="label">Pérdida / ganancia estimada</div><div class="value" id="tb-pnl">—</div></div></div>
-<p class="footer-note">QF: poder de trading de referencia US$40,000 y cuatro posiciones de US$10,000 de exposición cada una; apalancamiento 5x ajustable. El margen teórico es exposición / apalancamiento. La pérdida al SL se calcula sobre exposición, antes de spreads, comisiones, financiación y deslizamiento. No se ejecutan órdenes.</p></section>
+<p class="footer-note">QF: reserva real de referencia US$7,225, riesgo máximo US$180.63 por operación, margen máximo US$1,806.25; poder de trading US$40,000 y cuatro posiciones de US$10,000 de exposición cada una; apalancamiento 5x ajustable. El margen teórico es exposición / apalancamiento. La pérdida al SL se calcula sobre exposición, antes de spreads, comisiones, financiación y deslizamiento. No se ejecutan órdenes.</p></section>
 <style>.tb-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}.tb-fields label{font-size:12px;font-weight:700;color:#456}.tb-fields input,.tb-fields select{display:block;width:100%;margin-top:7px;border:1px solid #cfddec;border-radius:9px;padding:10px;background:white;color:#17365b}.tb-results{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0}.tb-scroll{overflow:auto;margin-bottom:20px}.tb-long{color:#128760;margin-top:20px}.tb-short{color:#b93555}.tb-status{color:#496380;font-size:13px;padding-top:10px}.tb-check{font-size:11px;line-height:1.6}.tb-chip{display:inline-block;border-radius:12px;background:#fff1d8;color:#875900;padding:5px 8px;font-size:11px;font-weight:700}@media(max-width:900px){.tb-fields{grid-template-columns:repeat(2,1fr)}.tb-results{grid-template-columns:repeat(2,1fr)}}@media(max-width:580px){.tb-fields,.tb-results{grid-template-columns:1fr}}</style>
 <script>
 const tb=id=>document.getElementById(id), fmt=n=>Number(n).toLocaleString('en-US',{maximumFractionDigits:8}),usd=n=>'$'+Number(n).toLocaleString('en-US',{maximumFractionDigits:2});
 function recalc(){let e=+tb('tb-entry').value,r=+tb('tb-risk').value/100,rr=+tb('tb-rr').value,p=+tb('tb-power').value,slots=+tb('tb-slots').value,lev=+tb('tb-leverage').value,side=tb('tb-side').value==='LONG'?1:-1;
 const fields=['tb-sl','tb-tp','tb-out-rr','tb-size','tb-margin','tb-pnl'];if(!(e>0&&r>0&&r<1&&rr>0&&rr<=20&&p>0&&slots>=1&&lev>=1)){fields.forEach(id=>tb(id).textContent='—');return;}
-let sl=e*(1-side*r),tp=e*(1+side*r*rr),exposure=p/slots;
-tb('tb-sl').textContent=usd(sl);tb('tb-tp').textContent=tp>0?usd(tp):'TP inválido';tb('tb-out-rr').textContent=tp>0?'1:'+fmt(rr):'N/D';tb('tb-size').textContent=usd(exposure)+' · '+fmt(exposure/e)+' u.';tb('tb-margin').textContent=usd(exposure/lev);tb('tb-pnl').textContent='−'+usd(exposure*r)+' / +'+usd(exposure*r*rr);}
+let sl=e*(1-side*r),tp=e*(1+side*r*rr);
+ const qfReserve=7225,lossCap=qfReserve*.025,marginCap=qfReserve*.25;
+ const exposure=Math.min(p/slots,lossCap/r,marginCap*lev);
+tb('tb-sl').textContent=usd(sl);tb('tb-tp').textContent=tp>0?usd(tp):'TP inválido';tb('tb-out-rr').textContent=tp>0?'1:'+fmt(rr):'N/D';tb('tb-size').textContent=usd(exposure)+' · '+fmt(exposure/e)+' u.';tb('tb-margin').textContent=usd(exposure/lev);tb('tb-pnl').textContent='−'+usd(exposure*r)+' / +'+usd(exposure*r*rr)+' (tope QF '+usd(lossCap)+')';}
 ['tb-token','tb-side','tb-entry','tb-risk','tb-rr','tb-power','tb-slots','tb-leverage'].forEach(id=>tb(id).addEventListener('input',recalc));recalc();
 const universe=['BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO'];
 function parseCandles(raw){let a=raw.candles||raw.records||raw.data||raw.ohlcv||[];return Array.isArray(a)?a.map(c=>Array.isArray(c)?{h:+c[2],l:+c[3],c:+c[4]}:{h:+(c.high??c.h),l:+(c.low??c.l),c:+(c.close??c.c)}).filter(x=>x.c>0&&x.h>=x.l):[];}
-function rankCandidate(sym, candles,side){if(candles.length<30)return null;let last=candles.at(-1),prior=candles.slice(-21,-1),ma=prior.reduce((x,c)=>x+c.c,0)/prior.length,high=Math.max(...prior.map(x=>x.h)),low=Math.min(...prior.map(x=>x.l)),momentum=(last.c-prior.at(-1).c)/prior.at(-1).c;let long=side==='LONG';let aligned=long?last.c>ma:last.c<ma,trend=long?momentum>0:momentum<0,sl=long?low:high,dist=Math.abs(last.c-sl),valid=long?sl<last.c:sl>last.c;if(!valid||dist<=0)return null;let tp=last.c+(long?1:-1)*dist*2;
-if(tp<=0)return null;let score=(aligned?40:0)+(trend?30:0)+Math.min(30,Math.abs(momentum)*1200);return {sym,entry:last.c,sl,tp,score,aligned,trend,side};}
-function rowHTML(c,i){let checks=[['20MA',c.aligned],['Momentum',c.trend],['Pivote confirmado',false],['Volumen/RSI',false],['Validar RR',true]];return `<tr><td>${i+1}</td><td><b>${c.sym}</b></td><td>${usd(c.entry)}</td><td>${usd(c.sl)}</td><td>${usd(c.tp)}</td><td>1:2</td><td class="tb-check">${checks.map(([t,v])=>`${v?'✓':'○'} ${t}`).join(' · ')}</td><td><span class="tb-chip">WATCH · ${fmt(c.score)} pts</span></td></tr>`;}
-async function loadRanking(){const results=await Promise.allSettled(universe.map(async sym=>{let r=await fetch('/api/tradingbot/candidates?token='+sym,{cache:'no-store'});if(!r.ok)throw Error(sym+' DATA ERROR');let d=await r.json();if(d.status!=='OK')throw Error(sym+' DATA ERROR');return {sym,candles:parseCandles(d.raw)};}));
-let ok=results.filter(x=>x.status==='fulfilled').map(x=>x.value);for(let side of ['LONG','SHORT']){let items=ok.map(x=>rankCandidate(x.sym,x.candles,side)).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,4);let tbody=tb(side==='LONG'?'longrows':'shortrows');tbody.innerHTML=items.map(rowHTML).join('')||'<tr><td colspan="8">Sin candidatos técnicos evaluables con datos válidos.</td></tr>';if(items.length<4)tbody.innerHTML+=`<tr><td colspan="8">${4-items.length} oportunidades restantes: N/D (no inventamos señales).</td></tr>`;}
-tb('scan-status').textContent=`${ok.length}/8 tokens evaluados con OHLCV cerrado · ranking exploratorio · ${8-ok.length} sin datos verificables`;
+// 2-left / 2-right closed-candle pivot confirmation, requiring two later candles.
+function pivots1h(candles){let highs=[],lows=[];for(let i=2;i<candles.length-2;i++){
+ const h=candles[i].h,l=candles[i].l,near=candles.slice(i-2,i+3);
+ if(near.every((c,j)=>j===2||h>c.h))highs.push({i,price:h});
+ if(near.every((c,j)=>j===2||l<c.l))lows.push({i,price:l});
+ }return {highs,lows};}
+function assessCandidate(sym,four,one,ind,side,policy){
+ if(four.length<40||one.length<50||!ind?.values)return null;
+ const close=four.at(-1).c,prior=four.slice(-21,-1),ma=prior.reduce((sum,x)=>sum+x.c,0)/prior.length;
+ const long=side==='LONG';const trend=long?close>ma:close<ma;
+ const v=ind.values,rsi=+v.rsi14,rsiMA=+v.rsi_ma14_sma,k=+v.stoch_rsi_k,d=+v.stoch_rsi_d;
+ if(![rsi,rsiMA,k,d].every(Number.isFinite))return null;
+ const rsiOK=long?rsi>rsiMA:rsi<rsiMA,stochOK=long?k>d:k<d;
+ const piv=pivots1h(one);let structure=false,sl=null,pivotLabel='';
+ if(long&&piv.lows.length>=2){const a=piv.lows.slice(-2);structure=a[1].price>a[0].price;sl=a[1].price;pivotLabel='HL';}
+ if(!long&&piv.highs.length>=2){const a=piv.highs.slice(-2);structure=a[1].price<a[0].price;sl=a[1].price;pivotLabel='LH';}
+ const entry=one.at(-1).c,valid=sl!=null&&(long?sl<entry:sl>entry),distance=Math.abs(entry-sl);
+ const tp=valid?(long?entry+distance*2:entry-distance*2):null;
+ const riskLimit=policy.reserve_usdt*policy.max_loss_fraction;
+ const maxExposure=valid&&distance>0?Math.min(40000/4,riskLimit/(distance/entry)):0;
+ const score= [trend,rsiOK,stochOK,structure,valid].filter(Boolean).length;
+ return {sym,side,entry,sl:valid?sl:null,tp:tp>0?tp:null,score,trend,rsiOK,stochOK,structure,pivotLabel,
+          riskLimit,maxExposure,signal:'WATCH · VALIDACIÓN QF PENDIENTE'};
+}
+function rowHTML(c,i){const checks=[['4H',c.trend],['RSI 1H',c.rsiOK],['StochRSI 1H',c.stochOK],['HL/LH 1H',c.structure],['SL/R:R',c.sl!=null&&c.tp!=null]];
+ return `<tr><td>${i+1}</td><td><b>${c.sym}</b></td><td>${usd(c.entry)}</td><td>${c.sl==null?'N/D':usd(c.sl)}</td><td>${c.tp==null?'N/D':usd(c.tp)}</td><td>${c.tp==null?'N/D':'1:2'}</td><td class="tb-check">${checks.map(([t,v])=>`${v?'✓':'○'} ${t}`).join(' · ')} · ○ QF</td><td><span class="tb-chip">WATCH · ${c.score}/5</span></td></tr>`;}
+async function loadRanking(){const results=await Promise.allSettled(universe.map(async sym=>{const r=await fetch('/api/tradingbot/candidates?token='+sym,{cache:'no-store'});if(!r.ok)throw Error(sym+' DATA ERROR');const d=await r.json();if(d.status!=='OK')throw Error(sym+' DATA ERROR');return {sym,four:parseCandles(d.four_h),one:parseCandles(d.one_h),ind:d.indicators_1h,policy:d.risk_policy};}));
+ const ok=results.filter(x=>x.status==='fulfilled').map(x=>x.value);
+ for(const side of ['LONG','SHORT']){const ranked=ok.map(x=>assessCandidate(x.sym,x.four,x.one,x.ind,side,x.policy)).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,4);
+ const el=tb(side==='LONG'?'longrows':'shortrows');el.innerHTML=ranked.map(rowHTML).join('')||'<tr><td colspan="8">N/D: datos insuficientes.</td></tr>';if(ranked.length<4)el.innerHTML+=`<tr><td colspan="8">${4-ranked.length} plazas sin candidato verificable.</td></tr>`;}
+ tb('scan-status').textContent=`${ok.length}/8 activos con OHLC 4H/1H e indicadores cerrados · Screening no certificado · ${8-ok.length} DATA ERROR · QF pendiente`;
 }
 loadRanking();
 </script>

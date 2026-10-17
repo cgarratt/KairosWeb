@@ -173,14 +173,22 @@ function runCycle(){
  const initialBtc=assets.find(a=>a.token==='BTC').hodl+assets.find(a=>a.token==='BTC').core+assets.find(a=>a.token==='BTC').ex;
  let cash=cash0,btcFromSales=0; const history=[];
  function valuation(step){let crypto=0,blocked=0; for(const a of assets){const price=a.prices?.[step]||a.spot;crypto+=(a.hodl+a.core+a.ex)*price;blocked+=a.hodl*price;}return {crypto,cash,total:crypto+cash,btc:assets.find(a=>a.token==='BTC').hodl+assets.find(a=>a.token==='BTC').core+assets.find(a=>a.token==='BTC').ex,blocked};}
+ function rebalanceCustody(){for(const a of assets){
+ const tier=fc.tokens.find(t=>t.token===a.token)?.tier;
+ const total=a.hodl+a.core+a.ex;if(total<=0)continue;
+ const hGoal=tier==='T1'?.40*total:0,cGoal=tier==='T1'?.30*total:tier==='T2'?.30*total:0;
+ // HODL always protected. Only transfer from Exchange; never relocate HODL/Core back.
+ const intoH=Math.min(a.ex,Math.max(0,hGoal-a.hodl));a.ex-=intoH;a.hodl+=intoH;
+ const intoC=Math.min(a.ex,Math.max(0,cGoal-a.core));a.ex-=intoC;a.core+=intoC;
+ }}
  history.push(valuation(-1));
  // O2: 60% C1 and 40% C2, each tranche receives its own price.
  for(const a of assets){if(!a.prices)continue;const b=Math.min(a.o2alloc,Math.max(0,cash-qf));const p=fc.pivot_rows.find(x=>x.token===a.token);if(!(p?.c1>0&&p?.c2>0))continue;a.ex+=b*.6/p.c1+b*.4/p.c2;cash-=b;}
- history.push(valuation(2));
+ rebalanceCustody();history.push(valuation(2));
  function doSales(wave,ratio){let proceeds=0;for(const a of assets){if(a.token==='BTC'||!a.prices)continue;let qty=a.ex*ratio;const price=a.prices[wave];if(!(price>0))continue;a.ex-=qty;proceeds+=qty*price;}const share=Number($('btc-share').value), btcPrice=assets.find(a=>a.token==='BTC').prices?.[wave];if(share>0&&btcPrice>0){const converted=proceeds*share;assets.find(a=>a.token==='BTC').ex+=converted/btcPrice;btcFromSales+=converted/btcPrice;cash+=proceeds-converted;}else{cash+=proceeds;}}
  doSales(3,Number($('o3-sell').value));history.push(valuation(3));
  // O4 hypothetical buy allocation proportional to targets. BTC and other 11 eligible when wave price exists.
- const budget=Math.max(0,cash-qf)*Number($('o4-budget').value);let spent=0;const active=assets.filter(a=>a.prices&&a.prices[4]>0),weights=active.reduce((s,a)=>s+(fc.tokens.find(t=>t.token===a.token)?.target||0),0)||1;for(const a of active){const amount=budget*(fc.tokens.find(t=>t.token===a.token).target/weights);a.ex+=amount/a.prices[4];spent+=amount;}cash-=spent;history.push(valuation(4));
+ const budget=Math.max(0,cash-qf)*Number($('o4-budget').value);let spent=0;const active=assets.filter(a=>a.prices&&a.prices[4]>0),weights=active.reduce((s,a)=>s+(fc.tokens.find(t=>t.token===a.token)?.target||0),0)||1;for(const a of active){const amount=budget*(fc.tokens.find(t=>t.token===a.token).target/weights);a.ex+=amount/a.prices[4];spent+=amount;}cash-=spent;rebalanceCustody();history.push(valuation(4));
  doSales(5,Number($('o5-sell').value));history.push(valuation(5));
  const preLiquidationValue=history[history.length-1].total;
  // Liquidación post-O5: BTC NEVER SELL. Tier 1 conserva HODL; los demás se liquidan.
@@ -205,7 +213,7 @@ function runCycle(){
    cash+=finalProceeds-converted;
  }else{cash+=finalProceeds;}
  // Invariantes de custodia y conservación del capital (sin comisiones).
- for(const [symbol,qty] of protectedHodl){const a=assets.find(x=>x.token===symbol);if(Math.abs(a.hodl-qty)>1e-8)throw new Error('HODL T1 modificado: '+symbol)}
+ for(const [symbol,qty] of protectedHodl){const a=assets.find(x=>x.token===symbol);if(a.hodl+1e-8<qty)throw new Error('HODL T1 modificado: '+symbol)}
  if(assets.find(a=>a.token==='BTC').hodl+assets.find(a=>a.token==='BTC').core+assets.find(a=>a.token==='BTC').ex < initialBtc-1e-8)throw new Error('BTC NEVER SELL incumplido');
  for(const a of assets){if(a.token==='BTC')continue;const tier=fc.tokens.find(t=>t.token===a.token)?.tier;
    if(Math.abs(a.core)>1e-8||Math.abs(a.ex)>1e-8||(tier!=='T1'&&Math.abs(a.hodl)>1e-8))throw new Error('Liquidación Post-O5 incompleta: '+a.token);

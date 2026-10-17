@@ -907,9 +907,19 @@ def tradingbot_candidates():
     symbol=request.args.get('token','ETH').upper()
     if symbol not in _TB_SET:return jsonify({'status':'INVALID_TOKEN'}),400
     try:
-        response=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',{'symbol':symbol+'USDT','interval':'4h','limit':100})
-        if response.get('status')!='OK':return jsonify({'status':'DATA_ERROR','reason':'OHLCV 4H no disponible'}),503
-        return jsonify({'status':'OK','source':'Binance MCP','interval':'4h','classification':'UNCONFIRMED_TECHNICAL_SCREEN','raw':response})
+        # Both timeframes consist of confirmed, closed candles only. No actionable
+        # recommendation without a separately reconciled QF account/instrument.
+        four=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',{'symbol':symbol+'USDT','interval':'4h','limit':180})
+        one=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',{'symbol':symbol+'USDT','interval':'1h','limit':250})
+        indicators=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_indicators',{'symbol':symbol+'USDT','interval':'1h','history':300})
+        if any(r.get('status')!='OK' for r in (four,one,indicators)):
+            return jsonify({'status':'DATA_ERROR','reason':'Datos 4H/1H no disponibles'}),503
+        return jsonify({'status':'OK','source':'Binance MCP','classification':'STRUCTURAL_SCREEN_NOT_QF_CERTIFIED',
+                        'four_h':four,'one_h':one,'indicators_1h':indicators,
+                        'risk_policy':{'reserve_usdt':float(SNAPSHOT['trading_real_fixed_USDT']),
+                            'max_margin_fraction':0.25,'max_loss_fraction':0.025,'aggregate_loss_fraction':0.10,
+                            'max_leverage':5,'min_rr':2,'max_positions':4},
+                        'qf_instrument_verified':False,'qf_open_positions_verified':False})
     except Exception as exc:
         diag=diagnostic_error(exc,'tradingbot:ohlcv:'+symbol)
         return jsonify({'status':'DATA_ERROR','diagnostic':diag}),503

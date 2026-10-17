@@ -189,3 +189,11 @@ Todas las tablas HTML de una sola fila de cabecera permiten alternar ascendente/
 
 ## v4.3.0 — Corrección HODL T1 Forecast
 El payload del backend incluye `tier` de cada token. Antes no lo hacía, causando la liquidación incorrecta del HODL en Post-O5. La simulación rechaza cualquier token sin Tier válido y comprueba que BTC/ETH/SOL/LINK/HYPE integren el registro de protección HODL.
+
+
+## v4.3.1 — TB y custodia simulada
+- Ranking 4H condicionado a RSI/MA RSI, StochRSI y HL/LH de velas 1H cerradas.
+- Sin aprobación READY mientras QF no tenga disponibilidad e inventario de posiciones verificados.
+- Riesgo monetario QF limita exposición nominal en el simulador y margen de reserva.
+- Custodia Forecast O2/O4: T1 40/30/30, T2 0/30/70, T3 0/0/100, solo movimientos virtuales desde Exchange.
+- Pendiente: comparación certificada contra motor oficial TradingBot para cada token y políticas completas de SL/TP.
