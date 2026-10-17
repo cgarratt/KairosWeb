@@ -18,7 +18,7 @@
   const status=document.getElementById('settings-msg'), save=document.getElementById('settings-save');
   const hint=document.getElementById('settings-admin-state');const more=document.getElementById('settings-pivots-tools');
   const totals=document.getElementById('settings-totals');
-  let state=null,tab='units',pivots={},archiveLoaded=false,refreshingPivots=false;
+  let state=null,tab='units',pivots={},archiveLoaded=false,refreshingPivots=false,autoO1Started=false;
   function el(t,c,value){const x=document.createElement(t);if(c)x.className=c;if(value!==undefined)x.textContent=String(value);return x;}
   function message(m){status.textContent=m;}
   function numerical(v){const x=Number(v);return Number.isFinite(x)?x:0;}
@@ -37,7 +37,7 @@
       input=el('select');for(const v of ['T1','T2','T3']){const option=el('option','',v);option.value=v;input.append(option);}input.value=entry[field];
     }else{
       input=el('input');input.type='text';input.inputMode='decimal';input.value=inputValue(field,entry);
-      if(field==='value'&&fmt.scale(entry)==='percent-list'){input.placeholder='20%, 20%, 30%, 30%';}
+      if(field==='value'&&fmt.scale(entry)==='percent-list'){input.placeholder='Ej.: 0%, 40%, 40%, 20%';}
       if(tab==='units'&&field==='investment_total'){input.inputMode='decimal';input.placeholder='0.00';}
     }
     input.dataset.index=String(index);input.dataset.field=field;input.setAttribute('aria-label',label+' '+(entry.token||entry.key||entry.tier||entry.venue||''));
@@ -236,7 +236,26 @@
       archiveLoaded=true;
       progress.textContent=`${usable}/12 activos con información histórica MCP archivada. Para actualizar precios extremos, pulsa «Actualizar candidatos desde MCP».`;
       message('Datos MCP históricos preliminares cargados. No se han modificado ni certificado los pivotes del Master.');
+      // Enrich missing O1 in the background, per token, without blocking Settings.
+      // Existing official fields and user edits always take priority.
+      if(tab==='pivots'&&!autoO1Started)enrichMissingO1();
     }catch(e){archiveLoaded=false;progress.textContent='No se pudo consultar el archivo de candidatos: '+e.message+'; puedes intentar actualización MCP.';}
+  }
+  async function enrichMissingO1(){
+    if(autoO1Started||!state||tab!=='pivots')return;
+    autoO1Started=true;
+    const candidates=(state.sections.pivots||[]).filter(x=>(x.o1===null||x.o1===undefined) && pivots[x.token] && pivots[x.token].cycle_low>0 && pivots[x.token].o1==null);
+    if(!candidates.length)return;
+    const progress=document.getElementById('settings-preliminary-progress');let next=0,done=0,ok=0;
+    progress.textContent+=` · Buscando automáticamente máximos O1 preliminares: 0/${candidates.length}`;
+    async function worker(){while(next<candidates.length){const rec=candidates[next++];try{
+      const response=await getPivotPayload('/api/settings/pivots/preliminary?token='+encodeURIComponent(rec.token));
+      const result=(response.records||[]).find(x=>x.token===rec.token);
+      if(result&&result.status!=='DATA_ERROR'&&result.o1>0){applyPivotCandidate(result);ok++;}
+    }catch(e){const info=body.querySelector(`[data-pivot-info="${rec.token}"]`);if(info)info.textContent+=' · O1 MCP pendiente: '+e.message;}
+    done++;progress.textContent=`Archivo MCP 12/12 · O1 preliminares recalculadas ${done}/${candidates.length} · ${ok} propuestas · no certificadas`;
+    }}
+    await Promise.all([worker(),worker()]);
   }
   async function refreshLivePivots(){
     if(refreshingPivots||!state)return;

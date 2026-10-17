@@ -1,4 +1,4 @@
-"""KairosWeb v1.3.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
+"""KairosWeb v1.4.0: Google Sheets published state + Binance/Hyperliquid MCP only."""
 import asyncio
 import json
 import os
@@ -27,7 +27,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = "1.3.0"  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = "1.4.0"  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -511,7 +511,7 @@ def build_mode_payload(slug, d, observed):
         return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
             'kind':'compras', 'current':purchase_current, 'tokens':purchase_tokens,
             'o2_level_reference':O2_LEVELS['source'],
-            'notes':['La tabla de precios C1/C2 y referencias 38.2%/78.2% se encuentra en Forecast.',
+            'notes':['La tabla de precios C1/C2 y referencias 38.2%/78.6% se encuentra en Forecast.',
              'Compras mantiene su slider y la simulación de balanceo + asignación proporcional.',
              'La liquidez seleccionada es hipotética; no modifica órdenes LIMIT ni custodia.']}
         buy_rows=[]
@@ -670,7 +670,7 @@ def build_mode_payload(slug, d, observed):
             pair=O2_LEVELS['levels'].get(r['token'],{})
             pivots=derive_reference_anchors(pair.get('c1'),pair.get('c2'))
             pivot_rows.append({'token':r['token'], 'c1':pair.get('c1'), 'c2':pair.get('c2'),
-                               'ref382':pivots['ref382'], 'ref782':pivots['ref782'],
+                               'ref382':pivots['ref382'], 'ref782':pivots['ref782'], 'ref786':pivots['ref786'],
                                'cycle_low':pivots['cycle_low'], 'o1':pivots['o1'],
                                'anchor_state':pivots['status']})
         return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
@@ -679,8 +679,10 @@ def build_mode_payload(slug, d, observed):
             'custody_policy':g.kairos_state['custody_policy'],
             'c1_share':approved_numeric('C1_BAG_FRACTION_P')/(approved_numeric('C1_BAG_FRACTION_P')+approved_numeric('C2_BAG_FRACTION_P')),
             'official_o5_split':approved_numeric('O5_BTC_PROCEEDS_FRACTION'),
+            'o3_liquidity_target':approved_numeric('STRUCTURAL_USDT_TARGET'),
+            'forecast_fibo_allocations':__import__('forecast_fibo_policy').defaults_from_master(g.kairos_state['parameters']),
             'reference_type':'O2_REFERENCES_RECONSTRUCTED_UNCERTIFIED',
-            'notes':['38.2% y 78.2% son referencias SIN presupuesto: USDT $0.',
+            'notes':['Retrocesos simulados: 38.2%, 50%, 61.8% y 78.6%; el presupuesto por onda está limitado a 25% de P.',
                'C1 (50%) y C2 (61.8%) utilizan una tabla O2 histórica, no pivotes recalculados en vivo.',
                'Cycle Low y O1 se reconstruyen matemáticamente de C1/C2, NO están confirmados.',
                'O2/O3/O4/O5 son escenarios hipotéticos con parámetros ajustables; no son señales Elliott ni objetivos aprobados.',

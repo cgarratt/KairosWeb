@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict');
+const f=require('../static/forecast_fibo_plan.js');
+assert.equal(f.BUY_LEVELS[3],.786);
+assert.deepEqual(f.shares([0,40,40,20]),[0,.4,.4,.2]);
+assert.throws(()=>f.shares([20,30,20,20]),/100%/);
+const budget=f.budget(100000,18000,3000);
+assert.deepEqual(budget,{maximum:25000,deployable:15000,shortfall:10000});
+const wave={values:[50,100,69.1,150,110,230]};
+const buys=f.scenarioBuyPrices(wave,'o2');
+assert.ok(Math.abs(buys[3]-(100-.786*50))<1e-9);
+const prices=f.scenarioSellPrices(wave,'o3');
+assert.ok(Math.abs(prices[0]-(69.1+1.618*50))<1e-9);
+const o4=f.scenarioBuyPrices(wave,'o4');
+assert.ok(Math.abs(o4[2]-(150-.618*(150-69.1)))<1e-9);
+console.log('PASS: 25% de P, 4 niveles 100%, Fib 78.6%, compras y ventas por tramo');

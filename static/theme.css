@@ -216,3 +216,9 @@
 .kairos-tap-tooltip{position:fixed;z-index:9999;max-width:260px;pointer-events:none;padding:9px 12px;background:#132c4c;color:#fff;border:1px solid #7ea4d1;border-radius:10px;box-shadow:0 6px 22px #0005;font-size:13px;line-height:1.4}
 .kairos-tap-tooltip[hidden]{display:none}
 #settings-mcp-panel[hidden],.settings-form[hidden],.settings-buttons[hidden]{display:none!important}
+
+/* KairosWeb v1.4.0 — 4-tranche Forecast inputs; dark contrast. */
+:root[data-theme="dark"] .fc-stage-config{background:#192b43;border-color:#415876;color:#eef4ff}
+:root[data-theme="dark"] .fc-stage-weights{border-color:#415876}
+:root[data-theme="dark"] .fc-stage-levels input{background:#102039;border-color:#4b6688;color:#f2f7ff}
+.fc-stage-levels input:focus-visible{outline:2px solid #64b0fa;outline-offset:2px}

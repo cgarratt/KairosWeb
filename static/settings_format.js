@@ -9,7 +9,12 @@
   const labels={DRIFT_BAND_PP:'Tolerancia de desvío del Balancer',STRUCTURAL_USDT_TARGET:'Objetivo estructural de liquidez',C1_BAG_FRACTION_P:'Presupuesto C1',C2_BAG_FRACTION_P:'Presupuesto C2',
     O3_BTC_PROCEEDS_FRACTION:'Ventas O3: proporción destinada a BTC',O3_USDT_PROCEEDS_FRACTION:'Ventas O3: proporción mantenida en USDT',
     O5_BTC_PROCEEDS_FRACTION:'Ventas O5: proporción propuesta para BTC',O5_USDT_PROCEEDS_FRACTION:'Ventas O5: proporción mantenida en USDT',
-    O5_STAGED_TRANCHES:'Tramos de venta de O5',ORDINARY_DEFAULT_USDT_TARGET:'Meta USDT en ventas ordinarias',
+    O5_STAGED_TRANCHES:'Tramos de venta históricos de O5',
+    FORECAST_O2_FIB_ALLOCATION:'Forecast O2: reparto de compras Fib 38.2 / 50 / 61.8 / 78.6',
+    FORECAST_O3_FIB_ALLOCATION:'Forecast O3: reparto de ventas Fib 1.618 / 2.618 / 3.618 / 4.618',
+    FORECAST_O4_FIB_ALLOCATION:'Forecast O4: reparto de recompras Fib 38.2 / 50 / 61.8 / 78.6',
+    FORECAST_O5_FIB_ALLOCATION:'Forecast O5: reparto de ventas Fib 1.618 / 2.618 / 3.618 / 4.618',
+    ORDINARY_DEFAULT_USDT_TARGET:'Meta USDT en ventas ordinarias',
     RISK_REWARD_MIN:'Relación recompensa/riesgo mínima',QF_MARGIN_CAP_PER_POSITION:'Margen máximo por posición QF',
     QF_ACCOUNT_RISK_PER_TRADE:'Riesgo máximo por operación QF',QF_ACCOUNT_RISK_TOTAL:'Riesgo agregado máximo QF',
     MAX_LEVERAGE:'Apalancamiento máximo',MAX_OPEN_POSITIONS:'Número máximo de posiciones QF',
@@ -18,7 +23,7 @@
     if(k==='DRIFT_BAND_PP')return 'pp';
     if(percentDirectKeys.has(k))return 'percent-direct';
     if(fractionKeys.has(k)||String(entry.unit||'').includes('fraction'))return 'fraction';
-    if(k==='O5_STAGED_TRANCHES')return 'percent-list';
+    if(k==='O5_STAGED_TRANCHES'||/^FORECAST_O[2345]_FIB_ALLOCATION$/.test(k))return 'percent-list';
     return 'raw';
   }
   function toDisplay(value,entry){if(value===null||value===undefined)return '';
@@ -28,11 +33,12 @@
     return String(value);
   }
   function fromDisplay(value,entry){const kind=scale(entry);const v=String(value).trim().replace(/%/g,'').replace(',','.');
+    const k=entry.key||'';
     if(kind==='percent-list'){
       const xs=String(value).split(/[,;·]/).map(x=>x.replace(/%/g,'').trim());
       if(xs.length!==4||xs.some(x=>!/^\d+(?:\.\d+)?$/.test(x)))throw Error('Cuatro porcentajes obligatorios');
       if(Math.abs(xs.reduce((a,x)=>a+Number(x),0)-100)>0.000001)throw Error('Los cuatro tramos deben sumar 100%');
-      if(xs.some(x=>!Number.isInteger(Number(x))))throw Error('Tramos O5 deben ser porcentajes enteros');
+      if(k==='O5_STAGED_TRANCHES'&&xs.some(x=>!Number.isInteger(Number(x))))throw Error('Tramos O5 históricos deben ser porcentajes enteros');
       return xs.join(',');
     }
     if(!v||!/^\d+(?:\.\d+)?$/.test(v))throw Error('Número no válido');

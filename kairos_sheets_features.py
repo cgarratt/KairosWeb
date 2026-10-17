@@ -14,6 +14,7 @@ import os
 import threading
 from urllib.parse import quote
 
+from forecast_fibo_policy import STAGE_KEYS, DEFAULTS, stringify_weights, parse_weights, ForecastAllocationError
 from google_sheets_master import SHEET_ID_DEFAULT, SHEETS, SheetDataError, parse_master, _remote_data
 
 SPREADSHEET_HOST = "https://sheets.googleapis.com/v4/spreadsheets"
@@ -29,6 +30,8 @@ EDITABLE_PARAM_KEYS = frozenset({
     'O3_BTC_PROCEEDS_FRACTION','O3_USDT_PROCEEDS_FRACTION',
     'O5_BTC_PROCEEDS_FRACTION','O5_USDT_PROCEEDS_FRACTION',
     'O5_STAGED_TRANCHES','ORDINARY_DEFAULT_USDT_TARGET',
+    'FORECAST_O2_FIB_ALLOCATION','FORECAST_O3_FIB_ALLOCATION',
+    'FORECAST_O4_FIB_ALLOCATION','FORECAST_O5_FIB_ALLOCATION',
     'RISK_REWARD_MIN','QF_MARGIN_CAP_PER_POSITION',
     'QF_ACCOUNT_RISK_PER_TRADE','QF_ACCOUNT_RISK_TOTAL',
     'MAX_LEVERAGE','MAX_OPEN_POSITIONS',
@@ -366,12 +369,31 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
         for x in entries:
             key=x.get('key')
             if key not in EDITABLE_PARAM_KEYS:raise SettingsError('Parámetro protegido o no implementado: '+str(key))
-            row=_find_row(b,'parameters',key,column=1)
+            stage_key=key in STAGE_KEYS.values()
+            try:row=_find_row(b,'parameters',key,column=1)
+            except SettingsError:
+                if not stage_key:raise
+                # New forecast-only policy keys: provision when admin first publishes.
+                # No unsafe implicit write at application startup.
+                row=len(b[SHEETS['parameters']])
+                if row>=175:raise SettingsError('Sin espacio libre para parámetro Forecast')
+                stage=next(k for k,v in STAGE_KEYS.items() if v==key)
+                metadata=['FORECAST',key,','.join(str(t) for t in DEFAULTS[stage]),'string',
+                  '% de presupuesto de onda' if stage in ('o2','o4') else '% de unidades elegibles',
+                  'APROBADO_SIMULACION','SIMULACION','KairosWeb Settings · aprobación del usuario',
+                  'Cuatro pesos en orden Fibonacci; 100% del presupuesto/pool congelado. No genera órdenes.','ALTA']
+                for col,v in enumerate(metadata):
+                    if col in (2,7):_set(b,'parameters',row,col,v)  # value/source written below once
+                    else:change('parameters',row,col,v)
             old=_get(b,'parameters',row,2);ptype=_get(b,'parameters',row,3)
-            if _get(b,'parameters',row,5) not in ('APROBADO','APROBADO_CONDICIONAL'):
+            approved=('APROBADO','APROBADO_CONDICIONAL','APROBADO_SIMULACION') if stage_key else ('APROBADO','APROBADO_CONDICIONAL')
+            if _get(b,'parameters',row,5) not in approved:
                 raise SettingsError('Parámetro no aprobado')
             value=x.get('value')
-            if ptype in ('number','integer'):
+            if stage_key:
+                try:value=stringify_weights(value)
+                except ForecastAllocationError as e:raise SettingsError(str(e)) from e
+            elif ptype in ('number','integer'):
                 value=_numeric(value,key)
                 if ptype=='integer':
                     if not value.is_integer():raise SettingsError(key+': entero requerido')
@@ -427,6 +449,19 @@ def settings_data():
     liquidity=[{'venue':r[0],'usdt':r[1],'classification':r[2]} for r in rows('liquidity')[1:] if len(r)>2 and r[2] in ('OPERATIVO','TRADING_QF')]
     custody=[{'tier':r[0],'hodl':r[1],'core':r[2],'exchange':r[3]} for r in rows('custody')[1:] if r and r[0] in ('T1','T2','T3')]
     params=[{'key':r[1],'module':r[0],'value':r[2],'unit':r[4], 'type':r[3], 'status':r[5], 'module_name':r[0], 'description':r[8] if len(r)>8 else '', 'source':r[7] if len(r)>7 else ''} for r in rows('parameters')[1:] if len(r)>5 and r[1] in EDITABLE_PARAM_KEYS]
+    # Virtual defaults for newly introduced forecast knobs. Their first authorized
+    # modification provisions one real 12_PARAMETROS_KAIROS row with audit.
+    from forecast_fibo_policy import defaults_from_master
+    existing={r['key'] for r in params}
+    defaults=defaults_from_master(state['parameters'])
+    for stage,key in STAGE_KEYS.items():
+        if key not in existing:
+            params.append({'key':key,'module':'FORECAST',
+              'value':','.join(f'{v:g}' for v in defaults[stage]),
+              'unit':'% of eligible pool' if stage in ('o3','o5') else '% of 25% P budget',
+              'type':'string','status':'APROBADO_SIMULACION','module_name':'FORECAST',
+              'description':'Pesos Fibonacci para '+stage.upper()+': 4 tramos suman 100%; solo simulación, sin órdenes.',
+              'source':'Configuración inicial KairosWeb v1.4.0; se registra en Sheet al guardar'})
     pivots=[{'token':r[0],'cycle_low':r[1] if len(r)>1 else None,
              'o1':r[3] if len(r)>3 else None,'o2':r[5] if len(r)>5 else None,
              'o3':r[7] if len(r)>7 else None,'o4':r[8] if len(r)>8 else None,'o5':r[9] if len(r)>9 else None,
