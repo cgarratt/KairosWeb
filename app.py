@@ -29,7 +29,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.10'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.11'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -101,7 +101,7 @@ def bind_published_sheet():
     independent={'/health','/api/mcp-status','/api/mcp-config-check','/api/mcp-diagnostics',
                  '/api/alerts/unread','/api/alerts/read','/api/alerts/read-all',
                  '/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status', '/api/mcp-refresh'}
-    if request.path in independent or request.path in ('/admin/login','/api/admin/session') or (request.path=='/settings' and request.args.get('tab')=='mcp') or request.path.startswith('/static/'):
+    if request.path in independent or request.path in ('/admin/login','/api/admin/session') or request.path=='/settings' or request.path.startswith('/static/'):
         return None
     try:
         g.kairos_state=get_state()
@@ -1062,13 +1062,30 @@ def alerts_mark_read():
         return jsonify({'status':'DATA_ERROR','message':'No se pudo persistir la lectura en Google Sheets.'}),503
 
 
+_SETTINGS_TABS = frozenset(('units', 'targets', 'tier_custody', 'liquidity',
+                           'pivots', 'parameters', 'mcp'))
+
+
+def _settings_destination(tab):
+    # Preserve only one recognized Configuration tab; no arbitrary redirect URL.
+    return url_for('settings_page', **({'tab': tab} if tab in _SETTINGS_TABS else {}))
+
+
 @app.route('/settings')
 def settings_page():
+    # One administrator login gates the entire Configuration module (all tabs).
+    if not _admin_authorized():
+        tab = request.args.get('tab', '')
+        return redirect(url_for('admin_login', **({'tab': tab} if tab in _SETTINGS_TABS else {})))
     return render_template('settings.html',master=APP_VERSION)
+
 
 
 @app.route('/api/settings/data')
 def get_settings_data():
+    if not _admin_authorized():
+        return jsonify({'status':'ADMIN_AUTH_REQUIRED',
+                        'reason':'Accede a Configuración con la sesión administrativa.'}),403
     try:
         data=settings_data()
         data['is_admin']=_admin_authorized()
@@ -1092,6 +1109,12 @@ def _csrf_ok():
 
 @app.route('/admin/login', methods=['GET','POST'])
 def admin_login():
+    # Keep the selected Configuration section across the one-time login.
+    selected_tab = request.args.get('tab', '')
+    if selected_tab not in _SETTINGS_TABS:
+        selected_tab = ''
+    if request.method == 'GET' and _admin_authorized():
+        return redirect(_settings_destination(selected_tab))
     if not app.secret_key or not os.getenv('KAIROS_SETTINGS_ADMIN_KEY'):
         return render_template('admin_login.html',not_configured=True,error='Falta KAIROS_SESSION_SECRET o KAIROS_SETTINGS_ADMIN_KEY en Render.'),503
     if request.method == 'POST':
@@ -1102,11 +1125,11 @@ def admin_login():
         # Rejected submissions must never grant an administrative session.
         if not token_ok:
             return render_template('admin_login.html',error='Sesión de acceso caducada o no disponible. Recarga esta página e inténtalo nuevamente.',
-                                   not_configured=False,login_csrf=session.get('login_csrf', '')),403
+                                   not_configured=False,login_csrf=session.get('login_csrf', ''),settings_tab=selected_tab),403
         if not _same_origin(csrf_protected_login=True):
             app.logger.warning('Admin login rejected: untrusted origin metadata (no URLs/credentials logged)')
             return render_template('admin_login.html',error='Origen no autorizado. Abre el acceso desde la misma web.',
-                                   not_configured=False,login_csrf=session.get('login_csrf','')),403
+                                   not_configured=False,login_csrf=session.get('login_csrf',''),settings_tab=selected_tab),403
         # One-use login CSRF: rotate even after a wrong password.
         session.pop('login_csrf',None)
         supplied=request.form.get('admin_key','')
@@ -1115,14 +1138,14 @@ def admin_login():
             session.clear();session.permanent=True
             session['kairos_admin']=True
             session['csrf_token']=secrets.token_urlsafe(32)
-            return redirect(url_for('settings_page'))
+            return redirect(_settings_destination(selected_tab))
         new_csrf=secrets.token_urlsafe(32)
         session['login_csrf']=new_csrf
         return render_template('admin_login.html',error='Clave administrativa incorrecta.',
-                               not_configured=False,login_csrf=new_csrf),403
+                               not_configured=False,login_csrf=new_csrf,settings_tab=selected_tab),403
     login_csrf=secrets.token_urlsafe(32)
     session['login_csrf']=login_csrf
-    return render_template('admin_login.html',error=None,not_configured=False,login_csrf=login_csrf)
+    return render_template('admin_login.html',error=None,not_configured=False,login_csrf=login_csrf,settings_tab=selected_tab)
 
 
 @app.route('/admin/logout',methods=['POST'])
@@ -1423,6 +1446,9 @@ def _deployed_asset_status():
         'orders_filters': ('static/orders_inbox.js', ('function visible(', 'orders-category', 'data-orders-category')), 
         'pivot_mcp_status_protection': ('static/settings_master.js', ("current.cl_status!=='PROPUESTO'", "statusInput?.value!=='PROPUESTO'", "if(rec[field]!=='PROPUESTO')continue")),
         'virtual_flash_exclusion': ('structural_outliers.py', ('VIRTUAL_FLASH_WEEK_START', 'virtual_flash_cl')), 
+        'config_admin_entry': ('app.py', ("@app.route('/settings')", "return redirect(url_for('admin_login'", "@app.route('/api/settings/data')")),
+        'config_admin_login': ('templates/admin_login.html', ('login_csrf', 'settings_tab', 'Acceso administrativo')),
+        'mobile_no_tooltips': ('static/tooltips.js', ("(hover: none) and (pointer: coarse)", "node.removeAttribute('title')", "node.setAttribute('title',previousTitles.get(node))")),
     }
     files = {}
     for key, (filename, markers) in critical.items():

@@ -5,11 +5,11 @@
   <h2>Acceso administrativo</h2>
   <p class="sub">Autorización adicional para modificar Google Sheets. Sesión privada de 30 minutos; la clave no se incluye en formularios de Configuración.</p>
   {% if error %}<p class="callout danger">{{ error }}</p>{% endif %}
-  {% if not not_configured %}<form action="{{ url_for('admin_login') }}" method="post" class="admin-login-form">
+  {% if not not_configured %}<form action="{{ url_for('admin_login', tab=settings_tab) }}" method="post" class="admin-login-form">
     <input type="hidden" name="login_csrf" value="{{ login_csrf }}">
     <label>Clave de administración<input required type="password" name="admin_key" autocomplete="current-password"></label>
     <button class="btn primary" type="submit">Iniciar sesión</button>
   </form>{% endif %}
-  <p><a class="btn" href="{{ url_for('settings_page') }}">Volver a Configuración</a></p>
+  <p><a class="btn" href="/">Volver al Dashboard</a></p>
 </section>
 {% endblock %}

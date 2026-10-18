@@ -146,6 +146,31 @@
     }
     renderTotals();
   }
+  // Technical MCP evidence is only a draft until explicitly published to 07_PIVOTES.
+  // Distinguish persistent Master state from visual draft state; never auto-write.
+  function updatePivotPublicationHint(){
+    const marker=document.getElementById('settings-pivots-publication-state');
+    const go=document.getElementById('settings-go-publish');
+    if(!marker||!go)return;
+    if(tab!=='pivots'||!state?.sections?.pivots){marker.textContent='';go.hidden=true;return;}
+    let publishedValidated=0,publishedConfirmed=0,draftValidated=0,draftChanged=0;
+    for(const rec of state.sections.pivots){
+      for(const field of ['cl',...WAVE_NAMES]){
+        const key=field==='cl'?'cl_status':field+'_status';
+        const original=rec[key]||'PROPUESTO';
+        if(original==='VALIDADO')publishedValidated++;
+        if(original==='CONFIRMADO')publishedConfirmed++;
+        const input=document.querySelector(`[data-pivot-token="${rec.token}"][data-pivot-field="${key}"]`);
+        const current=input?.value||original;
+        if(current==='VALIDADO'&&original!=='VALIDADO')draftValidated++;
+        if(current!==original)draftChanged++;
+      }
+    }
+    marker.textContent=`Master PUBLICADO: ${publishedValidated} pivotes VALIDADOS, ${publishedConfirmed} CONFIRMADOS. `+
+      (draftChanged?`BORRADOR SIN PUBLICAR: ${draftValidated} nuevos VALIDADOS, ${draftChanged} cambios de estado. Para conservarlos al recargar, completa «Validar → Publicar pivotes» (dos confirmaciones).`:
+      'Los resultados de MCP no se guardan hasta que autorices «Validar → Publicar pivotes».');
+    go.hidden=!(draftChanged&&state.is_admin);
+  }
   const WAVE_NAMES=['o1','o2','o3','o4','o5'];
   function pivotControl(type,value,token,field,locked=false){
     const node=el('input','pivot-matrix-input');node.type=type;
@@ -172,7 +197,7 @@
       }
       clSelect.value=rec.cl_status||'PROPUESTO';clSelect.disabled=clLocked;
       clSelect.setAttribute('aria-label',rec.token+' CL estado');
-      clSelect.addEventListener('change',()=>{clSelect.dataset.userEdited='true';});
+      clSelect.addEventListener('change',()=>{clSelect.dataset.userEdited='true';updatePivotPublicationHint();});
       cl.append(clSelect);
       if(clLocked)cl.append(el('span','pivot-immutable','🔒 CL bloqueado'));
       row.append(cl);
@@ -185,7 +210,7 @@
         for(const val of ['PROPUESTO','VALIDADO','CONFIRMADO']){const option=el('option','',val);option.value=val;statusSelect.append(option);}
         statusSelect.value=rec[w+'_status']||'PROPUESTO';statusSelect.disabled=locked;
         statusSelect.setAttribute('aria-label',rec.token+' '+w+' estado');
-        statusSelect.addEventListener('change',()=>{statusSelect.dataset.userEdited='true';});
+        statusSelect.addEventListener('change',()=>{statusSelect.dataset.userEdited='true';updatePivotPublicationHint();});
         cell.append(statusSelect);
         if(locked)cell.append(el('span','pivot-immutable','🔒 Confirmado y bloqueado'));
         row.append(cell);
@@ -194,6 +219,7 @@
     });
     table.append(tbody);wrap.append(table);mount.append(wrap);
     mount.append(el('p','settings-hint','El MCP nunca reemplaza ni degrada un VALIDADO o CONFIRMADO. Puedes editar manualmente un VALIDADO con nueva evidencia 1W y publicación; CONFIRMADO permanece protegido y requiere revisión formal.'));
+    updatePivotPublicationHint();
   }
   function collectPivotMatrix(){
     const out=[];
@@ -249,6 +275,7 @@
     if(tab==='mcp'){body.textContent='';return;}
     if(!state){body.textContent='Google Sheets no disponible.';return;}
     if(tab==='pivots'){drawPivotTable();return;}
+    updatePivotPublicationHint();
     const rows=state.sections[tab]||[];
     const groupSlots={};
     if(tab==='parameters'){
@@ -330,13 +357,22 @@
   }
   async function load(){body.textContent='Leyendo Google Sheets…';
     try{const res=await fetch('/api/settings/data',{cache:'no-store',credentials:'same-origin'}),data=await res.json();
+      if(res.status===403&&data.status==='ADMIN_AUTH_REQUIRED'){
+        window.location.replace('/admin/login?tab='+encodeURIComponent(tab));
+        return;
+      }
       if(!res.ok||data.status!=='OK')throw Error(data.message||'Master no disponible');
       state=data;draw();
       hint.replaceChildren();
-      if(!data.is_admin){const a=el('a','settings-admin-link','Iniciar sesión de administrador para editar');a.href='/admin/login';hint.append(a);}else{
+      if(!data.is_admin){
+        // Session expired while Configuration was open: one login gate,
+        // never create per-tab administrative links.
+        window.location.replace('/admin/login?tab='+encodeURIComponent(tab));
+        return;
+      }else{
         hint.append(el('span','valid-value','Sesión administrativa activa · cambios auditados'));
         const out=el('button','tiny-control','Cerrar sesión');out.type='button';out.addEventListener('click',async()=>{
-          try{await api('/admin/logout',{},state.csrf_token);window.location.reload();}catch(e){message('Error: '+e.message);}});hint.append(out);
+          try{await api('/admin/logout',{},state.csrf_token);window.location.assign('/admin/login');}catch(e){message('Error: '+e.message);}});hint.append(out);
       }
       save.disabled=!data.is_admin||!data.write_configured;
       message(!data.write_configured?'Sin permisos de escritura configurados. Solo consulta.':data.is_admin?'Listo. Modifica los valores y pulsa Guardar cambios.':'Consulta activa; inicia sesión administrativa para guardar.');
@@ -499,13 +535,13 @@
         if(result.validated&&result.review_proof){
           const proof={price,date:day,proof:result.review_proof};
           if(isCl)clReviewProofs[token]=proof;else waveReviewProofs[token+'|'+wave]=proof;
-          select.value='VALIDADO';select.dataset.userEdited='true';
+          select.value='VALIDADO';select.dataset.userEdited='true';updatePivotPublicationHint();
         }else{
           if(isCl)delete clReviewProofs[token];else delete waveReviewProofs[token+'|'+wave];
           // A completed, negative 1W assessment retains PROPUESTO in the
           // draft. Only pivots that were PROPUESTO enter this path.
           // Network errors fall into catch() and preserve prior status instead.
-          select.value='PROPUESTO';select.dataset.userEdited='true';
+          select.value='PROPUESTO';select.dataset.userEdited='true';updatePivotPublicationHint();
         }
       }catch(e){
         const info=document.getElementById('settings-preliminary-progress');
@@ -559,6 +595,10 @@
         : `MCP: ${ok} tokens consultados, ${failed} pendientes. Solo candidatos PROPUESTO: para realizar la validación 1W y obtener estado VALIDADO, inicia sesión de administrador y vuelve a pulsar «Actualizar candidatos desde MCP». No se ha publicado nada.`);
     }finally{refreshingPivots=false;button.disabled=false;}
   }
+  document.getElementById('settings-go-publish').addEventListener('click',()=>{
+    document.getElementById('settings-evidence').focus();
+    document.getElementById('settings-save').scrollIntoView({behavior:'smooth',block:'center'});
+  });
   document.getElementById('settings-preliminary').addEventListener('click',refreshLivePivots);
   load();
 })();
