@@ -18,7 +18,7 @@ from admin_origin import same_origin_allowed
 
 from flask import Flask, Response, jsonify, render_template, request, abort, redirect, g, session, url_for
 from fastmcp import Client
-from forecast_math import derive_reference_anchors
+from wave_macro_context import resolve as resolve_weekly_wave_context, resolve_long_term_buy
 from forecast_fibo_policy import defaults_from_master
 from werkzeug.local import LocalProxy
 from google_sheets_master import get_state, SheetDataError, public_failure_code, cache_status as sheet_cache_status
@@ -29,7 +29,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.5'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.7'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -62,7 +62,7 @@ def policy_numeric(key, allowed):
 MODE_DEFS = [
     {'slug':'portafolio','name':'Portafolio','subtitle':'Capital integral y rentabilidad histórica','description':'Seguimiento estratégico del capital y la liquidez del portafolio.'},
     {'slug':'balancer','name':'Balancer','subtitle':'Rebalanceo y liquidez','description':'Propuestas de rebalanceo, control de piso de liquidez y protección de Core.'},
-    {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Simulación de compras en dos etapas con asignación Fibonacci O2C1–O2C4.'},
+    {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Retrocesos de impulsos alcistas semanales con dos pivotes válidos; sin pivotes, compras bloqueadas.'},
     {'slug':'ventas','name':'Ventas','subtitle':'Objetivo USDT','description':'Propuestas solo SELL para acercarse a la meta de liquidez y reducir sobrepeso.'},
     {'slug':'forecast','name':'Forecast','subtitle':'Cycle Low → O5','description':'Tabla de niveles O2C1–O2C4 y ondas/pivotes proyectados; todo es simulación.'},
     {'slug':'tradingbot','name':'TradingBot','subtitle':'Táctico 4H','description':'Vista táctica preliminar para la reserva de trading y activos de seguimiento.'},
@@ -413,7 +413,8 @@ def build_mode_payload(slug, d, observed):
     top_pos = rows[0]
     top3_conc = sum(r['weight'] for r in rows[:3])
     usdt_gap = d['liquidity_floor_usdt'] - d['usdt_total']
-    o2_weights=defaults_from_master(g.kairos_state['parameters'])['o2']
+    fibo_allocations=defaults_from_master(g.kairos_state['parameters'])
+    o2_weights=fibo_allocations['o2']
     c1_budget = d['total_value'] * 0.25 * (o2_weights[1]/100)  # historical Fib 50% = O2C2
     c2_budget = d['total_value'] * 0.25 * (o2_weights[2]/100)  # historical Fib 61.8% = O2C3
     deficits = [abs(r['drift_pp']) for r in under]
@@ -507,40 +508,61 @@ def build_mode_payload(slug, d, observed):
         purchase_tokens=[{'token':r['token'],'tier':r['tier'],'price':r['price'],'weight':r['weight'],'target':r['target'],
             'current_usdt':r['value'],'units':r['units'],
             'gap_usdt':max(0.0,(r['target']-r['weight'])*d['crypto_value']),
-            'c1_price':O2_LEVELS['levels'].get(r['token'],{}).get('c1'),
-            'c2_price':O2_LEVELS['levels'].get(r['token'],{}).get('c2')}
+            'c1_price':None,
+            'c2_price':None}
             for r in d['rows']]
         purchase_current={'P':p,'cash':cash,'trading':trading,'cash_pct':d['usdt_pct']*100,
              'floor':approved_numeric('STRUCTURAL_USDT_TARGET')*p,'max_percent':max_percent,'reference_cap':reference_cap,
              'crypto_value':d['crypto_value']}
-    if slug == 'compras':
-        from o2_history import estimate_post_o1
+    if slug in ('compras','forecast'):
+        # Shared CL -> weekly O1 -> O2 Fibonacci source for every scenario.
+        # The historical C1/C2 archive is NEVER inverted to synthesize O1.
         from concurrent.futures import ThreadPoolExecutor
-        # Historical context is informative only; never substitutes a certified O1.
-        # A missing or invalid history yields unknown colors, not an invented hit.
-        def historical_row(row):
-            if not (row.get('c1_price') and row.get('c2_price')):
-                return row['token'], {'status':'NO_REFERENCE','certified':False}
-            symbol=row['token']+'USDT'
+        from pivot_preload import archive_candidates, ARCHIVE_A1
+        from kairos_sheets_features import read_ranges
+        try:
+            archive=archive_candidates(read_ranges({'archive':ARCHIVE_A1})['archive'],g.kairos_state['parameters'])
+            archive_by_token={a['token']:a for a in archive}
+        except Exception:
+            archive_by_token={}
+        pub=g.kairos_state['wave_pivots']
+        def weekly_reference(row):
+            token=row['token']; source_token='PUMPFUN' if token=='PUMP' else token
             try:
-                data=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
-                                        {'symbol':symbol,'interval':'1d','limit':365})
-                if data.get('status')!='OK' or not data.get('closed_only'):
-                    raise ValueError('MCP history invalid')
-                return row['token'], estimate_post_o1(row['c1_price'],row['c2_price'],data.get('records'))
+                if source_token=='HYPE':
+                    data=call_mcp_resilient('HYPERLIQUID_MCP_URL','get_hype_spot_ohlcv',
+                        {'interval':'1d','start_date':'2024-11-29','limit':750})
+                else:
+                    data=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
+                        {'symbol':token+'USDT','interval':'1d','limit':550})
+                    if data.get('status')!='OK':
+                        data=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
+                            {'symbol':token+'USDT','interval':'1d','limit':365})
+                return token,(resolve_long_term_buy(source_token,pub.get(token,{}),data) if slug=='compras'
+                    else resolve_weekly_wave_context(source_token,pub.get(token,{}),
+                    archive_by_token.get(source_token,{}),data))
             except Exception:
-                return row['token'], {'status':'DATA_ERROR','certified':False}
+                return token,{'status':'MCP_DATA_ERROR','eligible':False,'levels':None,
+                    'history':{'status':'DATA_ERROR'},'anchors':None, 'reason':'MCP_REQUERIDO_NO_DISPONIBLE'}
         with ThreadPoolExecutor(max_workers=6) as pool:
-            o2_histories=dict(pool.map(historical_row,purchase_tokens))
-        return {'o2_histories':o2_histories,'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
+            weekly_context=dict(pool.map(weekly_reference,purchase_tokens))
+        weekly_levels={token:(ctx.get('levels') or {}) for token,ctx in weekly_context.items()}
+        weekly_histories={token:ctx.get('history',{'status':'N/D'}) for token,ctx in weekly_context.items()}
+    if slug == 'compras':
+        return {'o2_histories':weekly_histories,'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
             'kind':'compras', 'current':purchase_current, 'tokens':purchase_tokens,
-            'o2_level_reference':O2_LEVELS['source'],
-            'forecast_o2_allocation':o2_weights, 'o2_levels':O2_LEVELS['levels'],
+            'o2_level_reference':'MCP_WEEKLY_LAST_TWO_5L5R_BOS_NO_ORDERS',
+            'forecast_o2_allocation':o2_weights, 'o2_levels':weekly_levels,
+            'buy_eligibility':{t:bool(c.get('eligible',False)) for t,c in weekly_context.items()},
+            'buy_stage_weights':{t:(fibo_allocations['o4'] if c.get('mode')=='O4' else o2_weights)
+                                  for t,c in weekly_context.items()},
+            'weekly_context':weekly_context,
             'drift_band_pp':approved_numeric('DRIFT_BAND_PP'),
             'structural_liquidity_target':approved_numeric('STRUCTURAL_USDT_TARGET'),
-            'notes':['Referencias O2C1–O2C4 en Compras; niveles históricos no certificados.',
-             'Compras mantiene su slider y la simulación de balanceo + asignación proporcional.',
-             'La liquidez seleccionada es hipotética; no modifica órdenes LIMIT ni custodia.']}
+            'notes':['Compras: solo retrocesos de los dos últimos pivotes semanales alcistas técnicamente válidos (5L/5R + BOS).',
+             'O2 aplica sus pesos; O4 sus pesos; retroceso alcista genérico utiliza pesos O2 publicados.',
+             'Tokens sin pareja semanal válida reciben USDT 0; su proporción no se redistribuye: permanece en USDT.',
+             'Ventas ordinarias y Forecast hipotético no heredan este bloqueo. Simulación no genera órdenes.']}
         buy_rows=[]
         for r in under:
             share = abs(r['drift_pp'])/deficits_sum
@@ -694,12 +716,15 @@ def build_mode_payload(slug, d, observed):
     if slug == 'forecast':
         pivot_rows=[]
         for r in purchase_tokens:
-            pair=O2_LEVELS['levels'].get(r['token'],{})
-            pivots=derive_reference_anchors(pair.get('c1'),pair.get('c2'))
-            pivot_rows.append({'token':r['token'], 'c1':pair.get('c1'), 'c2':pair.get('c2'),
-                               'ref382':pivots['ref382'], 'ref782':pivots['ref782'], 'ref786':pivots['ref786'],
-                               'cycle_low':pivots['cycle_low'], 'o1':pivots['o1'],
-                               'anchor_state':pivots['status']})
+            ctx=weekly_context[r['token']]
+            anchors=ctx.get('anchors') or {}
+            pair=ctx.get('levels') or {}
+            w=g.kairos_state['wave_pivots'].get(r['token'],{})
+            pivot_rows.append({'token':r['token'],'c1':pair.get('c1'),'c2':pair.get('c2'),
+                'ref382':pair.get('ref382'),'ref786':pair.get('ref786'),
+                'cycle_low':anchors.get('CL'),'o1':anchors.get('O1'),
+                'o1_date':anchors.get('O1_date'),'waves':w.get('waves',{}),
+                'anchor_state':ctx.get('status')})
         # Both O3/O5 allocation pairs come from the currently PUBLICADO Sheet.
         # If either is pending, malformed or no longer totals 100%, fail closed.
         split_o3=(approved_numeric('O3_BTC_PROCEEDS_FRACTION'),approved_numeric('O3_USDT_PROCEEDS_FRACTION'))
@@ -708,17 +733,17 @@ def build_mode_payload(slug, d, observed):
             raise SheetDataError('12_PARAMETROS_KAIROS: reparto BTC/USDT O3/O5 debe sumar 100% en cada onda')
         return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
             'kind':'forecast', 'current':purchase_current,'tokens':purchase_tokens, 'custody':{('PUMP' if k=='PUMPFUN' else k):v for k,v in SNAPSHOT['custody_core_blocked__core_strategic__exchange'].items()}, 'cash_total':d['usdt_total'], 'trading_reserve':d['trading_reserve'],
-            'pivot_rows':pivot_rows, 'o2_source':O2_LEVELS['source'],
+            'pivot_rows':pivot_rows, 'o2_source':'WEEKLY_STRUCTURAL_CANDIDATE',
             'custody_policy':g.kairos_state['custody_policy'],
             'c1_share':defaults_from_master(g.kairos_state['parameters'])['o2'][1]/100,
             'official_o3_split':split_o3[0], 'official_o3_usdt_split':split_o3[1],
             'official_o5_split':split_o5[0], 'official_o5_usdt_split':split_o5[1],
             'o3_liquidity_target':approved_numeric('STRUCTURAL_USDT_TARGET'),
             'forecast_fibo_allocations':__import__('forecast_fibo_policy').defaults_from_master(g.kairos_state['parameters']),
-            'reference_type':'O2_REFERENCES_RECONSTRUCTED_UNCERTIFIED',
-            'notes':['Retrocesos simulados: 38.2%, 50%, 61.8% y 78.6%; el presupuesto por onda está limitado a 25% de P.',
+            'reference_type':'O2_ANCHORED_TO_WEEKLY_CL_O1',
+            'notes':['Retrocesos simulados 38.2%, 50%, 61.8% y 78.6%; máximo USDT físico menos ReservaTrading QF, sin tope de 25% P.',
                'Las columnas históricas C1 Fib 50% y C2 Fib 61.8% se presentan como O2C2 y O2C3; no son órdenes activas.',
-               'Cycle Low y O1 se reconstruyen matemáticamente de niveles Fib 50% / 61.8% históricos, NO están confirmados.',
+               'CL/O1 provienen de referencias publicadas o candidatos semanales UTC; no se infieren inversamente desde Fibonacci.',
                'O2/O3/O4/O5 son escenarios hipotéticos con parámetros ajustables; no son señales Elliott ni objetivos aprobados.',
                'La simulación de Forecast NO calcula BTC acumulado oficial ni probabilidades. Sin órdenes ni fills.']}
 
@@ -943,6 +968,13 @@ def mode_page(slug):
         return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master=APP_VERSION), 503
     try:
         payload = build_mode_payload(slug, dashboard, observed)
+        # All four simulation modes receive the same read-only wave reference.
+        # A slider can modify a scenario, never the Master-confirmed wave price.
+        payload['wave_pivots']=g.kairos_state['wave_pivots']
+        from wave_macro_context import published_wave_levels
+        payload['wave_levels']=published_wave_levels(payload['wave_pivots'])
+        payload['confirmed_pivot_count']=sum(1 for rec in payload['wave_pivots'].values()
+               for wave in rec['waves'].values() if wave['status']=='CONFIRMADO')
         return render_template('balancer.html' if slug=='balancer' else 'trade_sim.html' if slug in ('compras','ventas') else 'forecast.html' if slug=='forecast' else 'tradingbot.html' if slug=='tradingbot' else 'mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master=APP_VERSION)
     except Exception as exc:
         error_id = uuid.uuid4().hex[:10]
@@ -1080,6 +1112,13 @@ def settings_save():
     if not _admin_authorized() or not _csrf_ok():return jsonify({'status':'ADMIN_AUTH_REQUIRED','reason':'Inicia sesión administrativa para guardar cambios.'}),403
     if not os.getenv('KAIROS_GOOGLE_WRITER_JSON'):return jsonify({'status':'WRITE_DISABLED','reason':'Sin identidad Google editora en Render.'}),503
     body=request.get_json(silent=True) or {}
+    # A manual CONFIRMADO pivot must be previewed and explicitly published.
+    # Legacy direct-save remains available only for candidates and other settings.
+    if body.get('section')=='pivots' and any(
+        entry.get(w+'_status') in (('VALIDADO_TECNICAMENTE','CONFIRMADO') if w=='cl' else ('CONFIRMADO',))
+        for entry in (body.get('entries') if isinstance(body.get('entries'),list) else [])
+        if isinstance(entry,dict) for w in ('o1','o2','o3','o4','o5','cl')):
+        return jsonify({'status':'PREVIEW_REQUIRED','reason':'Usa Validar y Publicar para confirmar pivotes por onda.'}),409
     try:
         # Shared transaction includes complete validation, audit log, new revision and fresh read.
         return jsonify(save_changes(body))
@@ -1138,6 +1177,58 @@ def settings_publish():
     except Exception as exc:
         app.logger.error('Settings publish error id=%s class=%s',uuid.uuid4().hex[:10],type(exc).__name__)
         return jsonify({'status':'DATA_ERROR','reason':'No se pudo publicar nueva versión del Master.'}),503
+
+
+@app.route('/api/settings/pivots/cl-review')
+def cl_technical_review_endpoint():
+    """Independent evidence gate: 1W 5L/5R + BOS; NEVER confirms a CL.
+
+    Issued proof authorizes just a short-lived technical-status update via
+    Settings preview/publish. Only the user can later publish CONFIRMADO.
+    """
+    if not _admin_authorized():return jsonify({'status':'ADMIN_AUTH_REQUIRED'}),403
+    from pivot_preload import TOKENS
+    from wave_structure import full_utc_weeks
+    from cl_validation import review_cl, sign_review
+    from wave_pivots import date_iso
+    token=request.args.get('token','').upper().strip()
+    if token not in TOKENS:return jsonify({'status':'INVALID_TOKEN'}),400
+    try:
+        low=float(request.args.get('cl_price',''))
+        when=date_iso(request.args.get('cl_date'))
+        if not when or not math.isfinite(low) or low<=0:return jsonify({'status':'INVALID_ANCHOR'}),400
+    except (ValueError,TypeError):return jsonify({'status':'INVALID_ANCHOR'}),400
+    try:
+        if token=='HYPE':
+            market=call_mcp_resilient('HYPERLIQUID_MCP_URL','get_hype_spot_ohlcv',
+                                      {'interval':'1d','start_date':'2024-11-29','limit':750})
+            if market.get('pair')!='HYPE/USDC':raise RuntimeError('HYPE macro pair mismatch')
+        else:
+            name='PUMP' if token=='PUMPFUN' else token
+            # Retrieve enough days BEFORE CL for five full-left weeks, plus
+            # all the weeks after it. Fixed 365 days silently excludes archived
+            # CLs from October 2025 when queried after October 2026.
+            age=(datetime.now(timezone.utc).date()-datetime.fromisoformat(when).date()).days
+            required=max(120,age+7*(int(approved_numeric('WEEKLY_PIVOT_LEFT'))+2))
+            if required>999:raise RuntimeError('CL exceeds bounded MCP history; paginate explicitly')
+            market=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
+                                      {'symbol':name+'USDT','interval':'1d','limit':required})
+            if market.get('symbol')!=name+'USDT':raise RuntimeError('Binance symbol mismatch')
+        if market.get('status')!='OK' or not market.get('closed_only') or not market.get('records'):
+            raise RuntimeError('Closed daily MCP history unavailable')
+        weeks=full_utc_weeks(market['records'])
+        result=review_cl(weeks,low,when,left=int(approved_numeric('WEEKLY_PIVOT_LEFT')),
+                         right=int(approved_numeric('WEEKLY_PIVOT_RIGHT')))
+        snapshot=g.kairos_state['control']['snapshot_id']
+        result.update(token=token,cl_price=low,cl_date=when,source='HYPERLIQUID_SPOT_HYPE_USDC' if token=='HYPE' else 'BINANCE_SPOT_USDT',
+                      closed_weeks=len(weeks),scope='TECHNICAL_REVIEW_ONLY',certified=False,
+                      snapshot_id=snapshot)
+        if result['validated']:
+            result['review_proof']=sign_review(token,low,when,snapshot)
+        return jsonify(result)
+    except Exception as exc:
+        app.logger.warning('CL technical review failed token=%s class=%s',token,type(exc).__name__)
+        return jsonify({'status':'DATA_ERROR','token':token,'reason':'No fue posible validar 1W 5L/5R+BOS con MCP cerrado; CL sigue candidato.'}),503
 
 
 @app.route('/api/settings/pivots/preliminary')
@@ -1259,7 +1350,13 @@ def _deployed_asset_status():
     critical = {
         'compras_template': ('templates/trade_sim.html', ('o2-drift-dot', 'renderO2Fibonacci', 'allocation-slider', 'data-o2-ui-version')),
         'o2_simulator': ('static/o2_sequential.js', ('classifyDrift', 'snapshots')),
-        'alerts_bell': ('static/alert_bell.js', ('alert-timeframe', '/api/alerts/read')),
+        'alerts_bell': ('static/alert_bell.js', ('alert-timeframe', '/api/alerts/read', 'event-bull', 'event-bear')),
+        'integral_donut': ('templates/portfolio_integral.html', ('data-capital-chart="donut"', 'integral-donut-sector')),
+        'pivots_cl_editor': ('static/settings_master.js', ('data-cl-review-token', 'cl_status')),
+        'cl_review_gate': ('cl_validation.py', ('def review_cl(', 'BOS', 'sign_review')),
+        'weekly_fibonacci': ('wave_structure.py', ('def full_utc_weeks(', 'def fib_grid(')),
+        'buy_weekly_gate': ('buy_weekly_policy.py', ('def select_buy_impulse(', 'BOS_ALCISTA_SEMANAL_PENDIENTE')),
+        'buy_weekly_ui': ('templates/trade_sim.html', ('buy_eligibility', 'requireEligibility')),
     }
     files = {}
     for key, (filename, markers) in critical.items():

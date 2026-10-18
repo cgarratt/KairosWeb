@@ -82,7 +82,8 @@ class SettingsTests(unittest.TestCase):
             prepare_changes(demo_master(),'parameters',[{'key':'O5_BTC_PROCEEDS_FRACTION','value':.5}],evidence='Prueba diferencia')
     def test_pivots_never_certified_by_admin_save(self):
         _,state=prepare_changes(demo_master(),'pivots',[{'token':'BTC','o1':110}],evidence='Pivote observado pendiente')
-        assert state['o2_levels']['levels']['BTC']['state']=='SIN_DATO'
+        assert state['wave_pivots']['BTC']['waves']['o1']['status']=='ESTIMADO'
+        assert state['o2_levels']['levels']['BTC']['state']=='REFERENCIA_HISTORICA'
     def test_forbidden_key_rejected(self):
         with self.assertRaisesRegex(SettingsError,'protegido'):
             prepare_changes(demo_master(),'parameters',[{'key':'BTC_NEVER_SELL','value':False}],evidence='Prueba de seguridad')

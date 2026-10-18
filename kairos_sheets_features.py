@@ -18,11 +18,13 @@ from urllib.parse import quote
 from forecast_fibo_policy import (STAGE_KEYS, DEFAULTS, stringify_weights, parse_weights, ForecastAllocationError,
     TRANCHE_KEYS, TRANCHES, ALL_TRANCHE_KEYS, STAGE_FOR_KEY, validate_weights, defaults_from_master)
 from google_sheets_master import SHEET_ID_DEFAULT, SHEETS, SheetDataError, parse_master, _remote_data
+from wave_pivots import WAVES, PRICE_COLS, DATE_COLS, STATE_COLS, HEADERS, wave_row, date_iso, WavePivotError, CL_STATUS_COL, CL_STATES
+from cl_validation import verify_review
 
 SPREADSHEET_HOST = "https://sheets.googleapis.com/v4/spreadsheets"
 INBOX_SHEETS = {
     'runs': "'15_ALERTAS_RUNS'!A1:T1500",
-    'events': "'16_ALERTAS_EVENTOS'!A1:U2000",
+    'events': "'16_ALERTAS_EVENTOS'!A1:V2000",
     'receipts': "'17_ALERTAS_LECTURAS'!A1:E2000",
 }
 WRITE_LOCK = threading.Lock()
@@ -182,6 +184,44 @@ def _alert_notice_category(event, frame, *, bsi_enabled=False):
     return None,False
 
 
+# The existing event ledger A:U has no dedicated generating-mode field.
+# Column V (modo_origen), when populated by a future publisher, is preferred.
+# Otherwise infer only unambiguous event/rule prefixes. A 4H structural
+# break alone is NOT proof that TradingBot generated the notification.
+_ALERT_MODE_NAMES = {
+    'BALANCER': 'Balancer', 'TRADINGBOT': 'TradingBot',
+    'COMPRAS': 'Compras', 'VENTAS': 'Ventas', 'BSI': 'BSI',
+    'FORECAST': 'Forecast', 'CICLOS': 'Ciclos',
+    'ALERTAS': 'Alertas',
+}
+
+
+def _alert_origin_mode(event):
+    """Return (visible label, traced-to-explicit/source-specific rule)."""
+    for field in ('modo_origen', 'modulo_origen', 'modo', 'modulo'):
+        mode = str(event.get(field) or '').upper().replace('-', '').replace('_','').strip()
+        if mode in _ALERT_MODE_NAMES:
+            return _ALERT_MODE_NAMES[mode], True
+    kind = str(event.get('tipo_alerta') or '').upper().strip()
+    rule = str(event.get('regla_clave') or '').upper().strip()
+    if kind.startswith('BALANCER_') or rule.startswith('BALANCER_'):
+        return 'Balancer', True
+    if kind.startswith('TRADINGBOT_') or rule.startswith(('TRADINGBOT_', 'TB_')):
+        return 'TradingBot', True
+    if kind.startswith('BSI_') or rule.startswith('BSI_'):
+        return 'BSI', True
+    if re.search(r'(?<![A-Z0-9])O[24]C[1-4](?![A-Z0-9])',rule):
+        return 'Compras', True
+    if re.search(r'(?<![A-Z0-9])O[35]V[1-4](?![A-Z0-9])',rule):
+        return 'Ventas', True
+    # Source type itself identifies the generating mode only in unambiguous cases.
+    if kind in ('COMPRA', 'BUY_READY') or kind.startswith('COMPRA_LIMIT_'):
+        return 'Compras', True
+    if kind in ('VENTA', 'SELL_READY') or kind.startswith('VENTA_LIMIT_'):
+        return 'Ventas', True
+    return 'Alertas', False
+
+
 def alert_inbox(blocks, limit=150, *, bsi_enabled=False, timeframe=None):
     """Unified 1H/4H/1D unread inbox, with informative events clearly nonexecutible.
 
@@ -208,6 +248,7 @@ def alert_inbox(blocks, limit=150, *, bsi_enabled=False, timeframe=None):
         except (KeyError,ValueError,TypeError):continue
         if dt.tzinfo is None:continue
         kind=str(x.get('tipo_alerta') or '').upper().strip()
+        origin_mode,mode_identified=_alert_origin_mode(x)
         token=str(x.get('token') or '').strip() or ('PORTAFOLIO' if frame=='1D' else 'MERCADO')
         action=str(x.get('accion_sugerida') or '').strip()
         signal=str(x.get('clave_senal') or '').strip()
@@ -225,7 +266,8 @@ def alert_inbox(blocks, limit=150, *, bsi_enabled=False, timeframe=None):
         gathered.append((key, {'id':eid,'token':token,'created_utc':dt.astimezone(timezone.utc).isoformat().replace('+00:00','Z'),
                        'action':action,'state':str(x.get('estado_evento') or ''),
                        'certification':str(x.get('certificacion') or ''),'category':category,
-                       'kind':kind,'timeframe':frame,
+                       'kind':kind,'timeframe':frame,'mode':origin_mode,
+                       'mode_identified':mode_identified,
                        'spot_usdt':x.get('spot_usdt'),'level_usdt':x.get('nivel_usdt'),
                        'usdt_prepare':x.get('usdt_preparar'), 'run_id':str(x.get('corrida_id') or ''),
                        'source':'KAIROSGPT_GOOGLE_SHEETS','is_trade_ready':trade_ready}))
@@ -382,7 +424,9 @@ def _ensure_one(value, prefix):
 
 def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
     """Preview against complete source copy, then return address/value writes.
-    User cannot send arbitrary A1 ranges or mark a pivot certified.
+    User cannot send arbitrary A1 ranges. Confirming a pivot requires a
+    dated price, evidence, administrator session, preview and explicit publish.
+    A confirmed pivot (and its date) cannot be replaced by an estimate.
     """
     if category not in VALID_CATEGORIES:raise SettingsError('Sección no permitida')
     _ensure_one(entries,category)
@@ -419,12 +463,71 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
                 if tier not in ('T1','T2','T3') or target>1:raise SettingsError('Tier o target inválido')
                 change('positions',row,2,tier);change('positions',row,3,target)
             else:
-                for field,col in [('cycle_low',1),('o1',3),('o2',5),('o3',7),('o4',8),('o5',9),('c1_reference',11),('c2_reference',12)]:
-                    if field in x and x[field] is not None:
-                        change('pivots',_find_row(b,'pivots',token),col,_numeric(x[field],field))
                 prow=_find_row(b,'pivots',token)
-                change('pivots',prow,14,'PENDIENTE_CERTIFICACION')
-                change('pivots',prow,15,'KairosWeb Settings · EVIDENCIA NO CERTIFICADA: '+evidence.strip()[:90])
+                original=raw[SHEETS['pivots']][prow]
+                try:before=wave_row(original)
+                except WavePivotError as exc:raise SettingsError(str(exc)) from exc
+                # Storing individual per-wave states in S:W and O3/O4/O5 dates in X:Z
+                # requires no Sheet schema change (columns 19-26 were vacant).
+                for col,heading in HEADERS.items():
+                    actual=_get(b,'pivots',0,col)
+                    if actual not in (None,'',heading):raise SettingsError('07_PIVOTES: conflicto en columna nueva '+str(col+1))
+                    if actual!=heading and (('pivots',0,col) not in seen):change('pivots',0,col,heading)
+                prior_cl=before['cycle_low']
+                prior_day=before['cl_date']
+                cl=prior_cl
+                if 'cycle_low' in x and x['cycle_low'] is not None:
+                    cl=_numeric(x['cycle_low'],'Cycle Low')
+                    if cl<=0:raise SettingsError('Cycle Low debe ser positivo')
+                try:dateval=date_iso(x.get('cl_date',prior_day))
+                except WavePivotError as exc:raise SettingsError(str(exc)) from exc
+                cl_state=str(x.get('cl_status',before['cl_status'])).strip().upper()
+                if cl_state not in CL_STATES:raise SettingsError(f'{token} CL: estado no permitido')
+                if before['cl_status']=='CONFIRMADO' and (cl_state!='CONFIRMADO' or cl!=prior_cl or dateval!=prior_day):
+                    raise SettingsError(f'{token} CL CONFIRMADO: pivote inmutable')
+                if before['waves']['o1']['status']=='CONFIRMADO' and (cl!=prior_cl or dateval!=prior_day):
+                    raise SettingsError(f'{token} CL bloqueado por O1 confirmado')
+                if before['cl_status']=='CANDIDATO' and cl_state=='CONFIRMADO':
+                    raise SettingsError(f'{token} CL: primero valida 5L/5R + BOS y publica VALIDADO_TECNICAMENTE')
+                if cl_state!='CANDIDATO' and (cl is None or not dateval):
+                    raise SettingsError(f'{token} CL: validación requiere precio y fecha UTC')
+                if cl_state=='VALIDADO_TECNICAMENTE' and (before['cl_status']!='VALIDADO_TECNICAMENTE' or cl!=prior_cl or dateval!=prior_day):
+                    snapshot=next((str(r[1]) for r in raw[SHEETS['control']] if r and r[0]=='snapshot_id'),None)
+                    if not verify_review(token,cl,dateval,snapshot,x.get('cl_review_proof')):
+                        raise SettingsError(f'{token} CL: requiere revisión MCP semanal 5L/5R+BOS válida para este snapshot')
+                if before['cl_status']=='VALIDADO_TECNICAMENTE' and cl_state=='CONFIRMADO' and (cl!=prior_cl or dateval!=prior_day):
+                    raise SettingsError(f'{token} CL: la confirmación debe conservar precio y fecha técnicamente validados')
+                if cl!=prior_cl and cl is not None:change('pivots',prow,1,cl)
+                if dateval!=prior_day:change('pivots',prow,2,dateval)
+                if cl_state!=before['cl_status']:change('pivots',prow,CL_STATUS_COL,cl_state)
+                just_confirmed=False
+                for wave in WAVES:
+                    prior=before['waves'][wave]
+                    new_state=str(x.get(wave+'_status',prior['status'])).upper()
+                    if new_state not in ('ESTIMADO','CONFIRMADO'):raise SettingsError('Estado inválido de '+wave.upper())
+                    price=prior['price']
+                    if wave in x and x[wave] is not None:
+                        price=_numeric(x[wave],wave)
+                        if price<=0:raise SettingsError(wave.upper()+': precio debe ser positivo')
+                    try:new_date=date_iso(x.get(wave+'_date',prior['date']))
+                    except WavePivotError as exc:raise SettingsError(str(exc)) from exc
+                    if prior['status']=='CONFIRMADO':
+                        if (new_state!='CONFIRMADO' or price!=prior['price'] or new_date!=prior['date']):
+                            raise SettingsError(f'{token} {wave.upper()}: pivote CONFIRMADO inmutable; revisión formal separada requerida')
+                        continue
+                    if new_state=='CONFIRMADO':
+                        if price is None or not new_date:raise SettingsError(f'{token} {wave.upper()}: confirmar exige precio y fecha UTC')
+                        just_confirmed=True
+                    if price!=prior['price'] and price is not None:change('pivots',prow,PRICE_COLS[wave],price)
+                    if new_date!=prior['date']:change('pivots',prow,DATE_COLS[wave],new_date)
+                    if new_state!=prior['status']:change('pivots',prow,STATE_COLS[wave],new_state)
+                if just_confirmed or (before['cl_status']!='CONFIRMADO' and cl_state=='CONFIRMADO'):
+                    change('pivots',prow,16,datetime.now(timezone.utc).isoformat().replace('+00:00','Z'))
+                    change('pivots',prow,15,'KairosWeb · confirmación manual individual; '+evidence.strip()[:80])
+                    change('pivots',prow,14,'CONFIRMACIONES_POR_ONDA')
+                elif any(key in x for key in ('cycle_low','cl_status','o1','o2','o3','o4','o5')):
+                    change('pivots',prow,14,'PENDIENTE_CERTIFICACION')
+                    change('pivots',prow,15,'KairosWeb · candidatos sin certificación; '+evidence.strip()[:80])
     elif category=='tier_custody':
         for x in entries:
             tier=x.get('tier')
@@ -553,12 +656,15 @@ def settings_data():
                   'type':'number','status':'APROBADO_SIMULACION','module_name':'FORECAST',
                   'description':f'{stage.upper()}: nivel Fibonacci {label}. Uno de cuatro tramos independientes que suman 100%. Solo simulación.',
                   'source':'Distribución simulada inicial; se escribe en Sheet solo al guardar'})
-    pivots=[{'token':r[0],'cycle_low':r[1] if len(r)>1 else None,
-             'o1':r[3] if len(r)>3 else None,'o2':r[5] if len(r)>5 else None,
-             'o3':r[7] if len(r)>7 else None,'o4':r[8] if len(r)>8 else None,'o5':r[9] if len(r)>9 else None,
-             'c1_reference':r[11] if len(r)>11 else None,'c2_reference':r[12] if len(r)>12 else None,
-             'status':r[14] if len(r)>14 else None}
-             for r in rows('pivots')[1:] if r and r[0] in state['tokens']]
+    pivots=[]
+    for r in rows('pivots')[1:]:
+        if not r or r[0] not in state['tokens']:continue
+        w=state['wave_pivots']['PUMP' if r[0]=='PUMPFUN' else r[0]]
+        record={'token':r[0], 'cycle_low':w['cycle_low'], 'cl_date':w['cl_date'], 'cl_status':w['cl_status'],
+                'status':r[14] if len(r)>14 else None, 'waves':w['waves']}
+        for wave,item in w['waves'].items():
+            record[wave]=item['price'];record[wave+'_date']=item['date'];record[wave+'_status']=item['status']
+        pivots.append(record)
     return {'status':'OK','snapshot_id':state['control']['snapshot_id'], 'fecha_corte':state['control']['fecha_corte'],
             'schema_version':'5.0.0','write_configured':bool(os.getenv('KAIROS_GOOGLE_WRITER_JSON')),
             'sections':{'units':positions,'targets':positions,'tier_custody':custody,'liquidity':liquidity,'parameters':params,'pivots':pivots},
@@ -583,6 +689,17 @@ def save_changes(data):
         needed.update(('01_CONTROL','10_HISTORIAL','18_SETTINGS_AUDITORIA'))
         if not needed.issubset(sheetids):raise SettingsError('Falta una pestaña obligatoria')
         requests=[]
+        # AA is an optional CL status column. Expand atomically with the first
+        # authorized pivot publication; never change Google Sheets on a GET.
+        if any(name=='pivots' and col>=26 for name,row,col,value in writes):
+            meta=_api('GET','',params={'fields':'sheets(properties(sheetId,title,gridProperties(columnCount)))'})
+            pivot_meta=next((item['properties'] for item in meta.get('sheets',[])
+                             if item.get('properties',{}).get('title')=='07_PIVOTES'),None)
+            if not pivot_meta:raise SettingsError('07_PIVOTES no encontrada en el Master')
+            if int(pivot_meta.get('gridProperties',{}).get('columnCount',0))<27:
+                requests.append({'updateSheetProperties':{'properties':{
+                    'sheetId':sheetids['07_PIVOTES'],'gridProperties':{'columnCount':27}},
+                    'fields':'gridProperties.columnCount'}})
         audit_entries=[]
         for name,row,col,value in writes:
             previous=_get(raw,name,row,col)

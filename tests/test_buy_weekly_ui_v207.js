@@ -1,0 +1,18 @@
+const assert=require('assert');const fs=require('fs');const path=require('path');const vm=require('vm');
+vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../static/purchase_plan.js'),'utf8'));
+const {calculate}=require('../static/o2_sequential.js');
+const tokens=[{token:'A',price:100,current_usdt:200,target:0.2},{token:'B',price:100,current_usdt:800,target:0.8}];
+const levels={A:{ref382:90,c1:80,c2:70,ref786:60},B:{ref382:90,c1:80,c2:70,ref786:60}};
+const fallback={requireEligibility:true,eligibility:{A:true,B:false},weightsByToken:{A:[20,30,40,10],B:[30,30,20,20]}};
+const a=calculate(tokens,levels,[20,30,40,10],1000,1,fallback);
+assert(Math.abs(a.spent-200)<1e-7,`Should reserve 800 USDT, spent ${a.spent}`);
+assert(a.totalByToken[1]===0, 'Structurally blocked B must receive $0');
+assert(a.prices[1].every(x=>x===null),'Blocked B must have no actionable Fibo levels');
+assert.deepStrictEqual(a.consumed.map(x=>Math.round(x)),[40,60,80,20]);
+assert(Math.abs(a.cash-800)<1e-7);
+const blocked=calculate(tokens,levels,[20,30,40,10],1000,1,{requireEligibility:true});
+assert(blocked.spent===0,'Omitted eligibility must fail closed');
+assert(blocked.cash===1000);
+const o4=calculate(tokens,levels,[20,30,40,10],1000,1,{...fallback,weightsByToken:{A:[30,30,20,20]}});
+assert.deepStrictEqual(o4.consumed.map(x=>Math.round(x)),[60,60,40,40]);
+console.log('Web Compras 1W gate, no redistribution, O2/O4 weights PASS');

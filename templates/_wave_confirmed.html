@@ -1,0 +1,12 @@
+{% if payload.confirmed_pivot_count|default(0) > 0 %}
+<section class="panel span-12" aria-label="Pivotes de onda confirmados"><h3>Pivotes confirmados del Master</h3>
+<p class="sub">Precios inmutables en simulaciones; solo cambios administrativos auditados. No constituyen órdenes ni validan por sí solos Elliott.</p>
+<div style="overflow-x:auto"><table><thead><tr><th>Token</th><th>O1</th><th>O2</th><th>O3</th><th>O4</th><th>O5</th></tr></thead><tbody>
+{% for token, record in payload.wave_pivots.items() %}
+{% set confirmed = record.waves.values()|selectattr('status','equalto','CONFIRMADO')|list %}
+{% if confirmed %}<tr><td><strong>{{ token }}</strong></td>
+{% for name in ['o1','o2','o3','o4','o5'] %}{% set w=record.waves[name] %}
+<td>{% if w.status=='CONFIRMADO' %}🔒 {{ w.price }}<small style="display:block">{{ w.date }} · CONFIRMADO</small>{% else %}—{% endif %}</td>
+{% endfor %}</tr>{% endif %}{% endfor %}
+</tbody></table></div></section>
+{% endif %}

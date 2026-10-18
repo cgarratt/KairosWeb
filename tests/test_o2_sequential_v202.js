@@ -3,7 +3,7 @@ global.purchasePlan=require('fs').readFileSync(require('path').join(__dirname,'.
 const vm=require('vm');vm.runInThisContext(global.purchasePlan);
 const {calculate}=require('../static/o2_sequential.js');
 const tokens=[{token:'A',price:100,current_usdt:800,target:.5},{token:'B',price:100,current_usdt:200,target:.5}];
-const levels={A:{c1:90,c2:80},B:{c1:90,c2:80}};
+const levels={A:{ref382:95,c1:90,c2:85,ref786:80},B:{ref382:95,c1:90,c2:85,ref786:80}};
 const r=calculate(tokens,levels,[25,25,25,25],200);
 assert.strictEqual(r.amounts.length,2);
 assert(Math.abs(r.spent-200)<1e-6);

@@ -2,31 +2,26 @@
 from datetime import datetime
 import math
 
-def estimate_post_o1(c1,c2,candles, tolerance=.025):
+def estimate_post_o1(c1,c2,candles,tolerance=.025, *, fixed_o1_date=None,fixed_o1_price=None):
+    """Legacy API fail-closed: old Fib C1/C2 MUST NOT choose an O1 candle.
+
+    Callers must provide a weekly-selected O1 with date AND price. New
+    integrations should use wave_structure.post_o1_daily_low instead.
+    """
+    if not fixed_o1_date or not fixed_o1_price:
+        return {'status':'WEEKLY_O1_REQUIRED','certified':False}
+    from wave_structure import post_o1_daily_low, WaveStructureError
     try:
-        c1,c2=float(c1),float(c2)
-        if not (math.isfinite(c1) and math.isfinite(c2) and c1>c2>0):raise ValueError()
-        o1=c1+.5*(c1-c2)/.118
-    except (TypeError,ValueError,OverflowError):
-        return {'status':'NO_REFERENCE','certified':False}
-    series=[]
-    for candle in candles or []:
-        try:
-            high=float(candle['high']);low=float(candle['low']);date=str(candle.get('open_utc',''))[:10]
-            if not(high>0 and 0<low<=high and date):continue
-            series.append((date,high,low))
-        except (KeyError,TypeError,ValueError):continue
-    series.sort(key=lambda t:t[0])
-    # Only accept a dated daily candle with an observed high close to the
-    # algebraically reconstructed O1. No suitable match -> no semaphore.
-    candidates=[(abs(high/o1-1),-i,i) for i,(_,high,_) in enumerate(series[:-1]) if abs(high/o1-1)<=tolerance]
-    if not candidates:return {'status':'UNVERIFIED_O1','estimated_o1':o1,'certified':False}
-    _,_,index=min(candidates)
-    remainder=series[index+1:]
-    date,lowest=min(((date,low) for date,_,low in remainder),key=lambda x:x[1])
-    return {'status':'PROVISIONAL','estimated_o1':o1,'estimated_o1_date':series[index][0],
-            'post_o1_min':lowest,'post_o1_min_date':date,'certified':False,
-            'source':'BINANCE_SPOT_1D_CLOSED','historical_scope':'post_O1_candidate_daily'}
+        value=float(fixed_o1_price)
+        if not math.isfinite(value) or value<=0:raise ValueError()
+        history=post_o1_daily_low(candles,fixed_o1_date)
+        if history['status']!='OBSERVED_POST_O1':return {'status':history['status'],'certified':False}
+        return {'status':'PROVISIONAL','estimated_o1':value,
+                'estimated_o1_date':str(fixed_o1_date)[:10],
+                'post_o1_min':history['low'],'post_o1_min_date':history['date'],
+                'certified':False,'source':'BINANCE_CLOSED_1D_POST_WEEKLY_O1'}
+    except (ValueError,TypeError,WaveStructureError):
+        return {'status':'INVALID_WEEKLY_O1','certified':False}
 
 def color_state(reference,history):
     if history.get('status')!='PROVISIONAL':return 'unknown'

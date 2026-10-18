@@ -78,44 +78,28 @@ def candidates_hype(data, *, left=5, right=5):
 
 
 def add_uncertified_daily_extrema(candidate, ohlcv):
-    """O1 review value: highest HIGH from a COMPLETE Mon-Sun UTC week after CL.
+    """Legacy UI function: ONLY fully closed weekly O1 observed after dated CL.
 
-    Historical daily Spot candles only. A truncated week is never a pivot;
-    5L/5R, weekly-close BOS, Elliott certification remain unverified. For
-    adjusted SUI/PUMP lows without an approved date, do not recycle the
-    excluded flash-crash timestamp.
+    No daily-extrema pivot detection and no 5L/5R/BOS auto-certification.
     """
-    from datetime import date, timedelta
-    from math import isfinite
+    from wave_structure import full_utc_weeks, weekly_o1_candidate, WaveStructureError
     result=dict(candidate)
-    if not isinstance(ohlcv,dict) or ohlcv.get('status')!='OK':return result
+    if not isinstance(ohlcv,dict) or ohlcv.get('status')!='OK' or ohlcv.get('closed_only') is not True:
+        return result
     if result.get('o1') is not None:return result
-    cl_date=str(result.get('cl_date') or '')[:10]
-    if not cl_date and result.get('token') in ('SUI','PUMPFUN'):
-        result['warning']=(str(result.get('warning') or '')+'; O1 requiere fecha del CL seleccionado (outlier excluido)').strip('; ')
+    if not(result.get('cl_date') and result.get('cycle_low')):
+        result['warning']=(str(result.get('warning') or '')+'; CL sin fecha/precio semanal válido').strip('; ')
         return result
-    try:cl=date.fromisoformat(cl_date)
-    except (TypeError,ValueError):return result
-    weeks={}
-    for r in ohlcv.get('records') or []:
-        try:
-            day=date.fromisoformat(str(r['open_utc'])[:10]);price=float(r['high'])
-            if not isfinite(price) or price<=0:continue
-            monday=day-timedelta(days=day.weekday())
-            if monday<=cl:continue  # exclude any week that contains candidate CL
-            w=weeks.setdefault(monday,{'dates':set(),'price':-1,'peak_date':None})
-            if day in w['dates']:continue
-            w['dates'].add(day)
-            if price>w['price']:w.update(price=price,peak_date=day)
-        except (KeyError,TypeError,ValueError,OverflowError):continue
-    complete=[(m,w) for m,w in weeks.items() if len(w['dates'])==7 and all(m+timedelta(days=j) in w['dates'] for j in range(7))]
-    if not complete:
-        result['warning']=(str(result.get('warning') or '')+'; sin semana completa posterior al CL en OHLCV').strip('; ')
+    try:
+        weeks=full_utc_weeks(ohlcv.get('records') or [])
+        picked=weekly_o1_candidate(weeks,result['cycle_low'],result['cl_date'])
+        if picked.get('price') is None:return result
+    except WaveStructureError:
         return result
-    monday,w=max(complete,key=lambda x:x[1]['price'])
-    result.update(o1=w['price'],o1_date=w['peak_date'].isoformat(),
-                  o1_preliminary_week_utc=monday.isoformat(),
-                  o1_preliminary_method='HIGHEST_FULL_MON_SUN_WEEK_AFTER_CL',o1_certified=False)
+    result.update(o1=picked['price'],o1_date=picked['date'],
+                  o1_preliminary_week_utc=picked['week_start'],
+                  o1_preliminary_method='CLOSED_UTC_WEEK_AFTER_CL',
+                  o1_pivot_5l5r=picked['pivot_5l5r'],o1_certified=False)
     result['warning']=(str(result.get('warning') or '')+
-      '; O1 MAXIMO SEMANAL OBSERVADO (semana cerrada UTC), sin 5L/5R/BOS; NO certificado').strip('; ')
+        '; O1 candidato semanal, requiere 5L/5R, BOS y certificación humana; NO operativo').strip('; ')
     return result

@@ -9,13 +9,20 @@ function classifyDrift(weight,target,bandPP){
   const driftPP=(actual-objective)*100;
   return {status:driftPP>band+1e-9?'SOBRE':driftPP< -band-1e-9?'INFRA':'NEUTRAL',driftPP};
 }
-function calculate(tokens,levelRows,weights,budget,driftBandPP){
+function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
   const levels=levelRows||{}, n=tokens.length, w=weights.map(x=>Math.max(0,Number(x)||0)), sumW=w.reduce((a,b)=>a+b,0);
+  const strict=policy.requireEligibility===true;
+  const allowed=tokens.map(t=>!strict || policy.eligibility?.[t.token]===true);
+  const stageWeights=tokens.map(t=>{const v=policy.weightsByToken?.[t.token]||weights;
+    const arr=v.map(x=>Math.max(0,Number(x)||0));const sum=arr.reduce((a,b)=>a+b,0);
+    return sum>0?arr.map(x=>x/sum):[0,0,0,0];});
   const amounts=Array.from({length:n},()=>[0,0,0,0]);
-  const prices=tokens.map(t=>{const ref=levels[t.token]||{},c1=Number(ref.c1),c2=Number(ref.c2);
-    if(!(c1>0&&c2>0&&c1>c2))return [null,null,null,null];
-    const rise=(c1-c2)/.118,top=c1+.5*rise;
-    return [.382,.5,.618,.786].map(f=>top-f*rise);
+  // Prices MUST arrive from published/candidate WEEKLY CL->O1; NEVER invert
+  // old C1/C2 (50/61.8) to fabricate a structural wave pivot.
+  const prices=tokens.map((t,i)=>{
+    const ref=levels[t.token]||{};
+    const arr=['ref382','c1','c2','ref786'].map(k=>Number(ref[k]));
+    return allowed[i]&&arr.every(x=>Number.isFinite(x)&&x>0) ? arr : [null,null,null,null];
   });
   const units=tokens.map(t=>{const spot=Number(t.price);return spot>0?Math.max(0,Number(t.current_usdt)||0)/spot:0;});
   const target=tokens.map(t=>Math.max(0,Number(t.target)||0));
@@ -27,7 +34,10 @@ function calculate(tokens,levelRows,weights,budget,driftBandPP){
     // Estado ANTES de comprar en este tramo, con compras previas ya incorporadas.
     const preWeights=values.map(x=>crypto>0?x/crypto:NaN);
     const drift=preWeights.map((v,i)=>classifyDrift(v,target[i],driftBandPP));
-    const stageBudget=Math.min(cash,Math.max(0,Number(budget)||0)*(sumW>0?w[j]/sumW:0));
+    // Blocked-token target shares are NOT redistributed.  That cash remains physical USDT.
+    const stageBudget=strict
+      ?Math.min(cash,Math.max(0,Number(budget)||0)*tokens.reduce((s,t,i)=>s+(prices[i][j]>0&&allowed[i]?target[i]*stageWeights[i][j]:0),0))
+      :Math.min(cash,Math.max(0,Number(budget)||0)*(sumW>0?w[j]/sumW:0));
     // Missing Fibonacci anchors have no executable hypothetical limit price.
     // They remain in the portfolio valuation but cannot receive a simulated fill.
     const items=tokens.map((t,i)=>({target:prices[i][j]>0?target[i]:0,current_usdt:values[i]}));

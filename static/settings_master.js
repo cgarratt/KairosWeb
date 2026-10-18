@@ -8,7 +8,7 @@
     tier_custody:'04_CUSTODIA · Porcentajes simulados por Tier; no realiza traspasos reales.',
     liquidity:'03_LIQUIDEZ · Saldos USDT por venue; Quantfury se cuenta una sola vez.',
     parameters:'12_PARAMETROS_KAIROS · Valores aprobados, porcentajes y planes de ventas. Cada parámetro describe su impacto.',
-    pivots:'07_PIVOTES · Cada onda es un candidato PRELIMINAR sin certificación; guardar NO genera órdenes.',mcp:'Diagnóstico MCP independiente del Master. Consultas de solo lectura y reconexión sin reiniciar Render.'};
+    pivots:'07_PIVOTES · CL: CANDIDATO → VALIDADO TÉCNICAMENTE (1W 5L/5R+BOS) → CONFIRMADO. Solo Configuración permite confirmaciones manuales mediante Validar → Publicar; O1–O5 mantienen estados ESTIMADO/CONFIRMADO.',mcp:'Diagnóstico MCP independiente del Master. Consultas de solo lectura y reconexión sin reiniciar Render.'};
   const PARAM_GROUPS=[
     {id:'portfolio',name:'Portafolio',description:'Únicas dos reglas: meta general de liquidez USDT y tolerancia de desvío Balancer.',keys:['STRUCTURAL_USDT_TARGET','DRIFT_BAND_PP']},
     {id:'o2',name:'Compras O2 · Forecast',description:'Cuatro retrocesos independientes: 100% del presupuesto máximo de 25% P de O2.',prefix:'FORECAST_O2_FIB_'},
@@ -42,6 +42,7 @@
   const hint=document.getElementById('settings-admin-state');const more=document.getElementById('settings-pivots-tools');
   const totals=document.getElementById('settings-totals');
   let state=null,tab='units',pivots={},archiveLoaded=false,refreshingPivots=false,autoO1Started=false;
+  const clReviewProofs={};
   function el(t,c,value){const x=document.createElement(t);if(c)x.className=c;if(value!==undefined)x.textContent=String(value);return x;}
   function message(m){status.textContent=m;}
   function numerical(v){const x=Number(v);return Number.isFinite(x)?x:0;}
@@ -115,16 +116,117 @@
     }
     renderTotals();
   }
+  const WAVE_NAMES=['o1','o2','o3','o4','o5'];
+  function pivotControl(type,value,token,field,locked=false){
+    const node=el('input','pivot-matrix-input');node.type=type;
+    node.value=value??'';node.dataset.pivotToken=token;node.dataset.pivotField=field;
+    node.disabled=locked;node.setAttribute('aria-label',token+' '+field);
+    node.addEventListener('input',()=>{node.dataset.userEdited='true';});
+    return node;
+  }
+  function drawPivotTable(){
+    const mount=document.getElementById('settings-pivot-matrix');mount.hidden=false;mount.replaceChildren();
+    const help=el('p','settings-hint','CL: CANDIDATO → VALIDADO TÉCNICAMENTE (5L/5R + BOS 1W) → CONFIRMADO por decisión administrativa. La validación técnica no confirma automáticamente ondas; fechas UTC.');mount.append(help);
+    const wrap=el('div','pivot-matrix-scroll'),table=el('table','pivot-wave-table');
+    const head=el('thead'),header=el('tr');['Token','Cycle Low (1W)','O1','O2','O3','O4','O5'].forEach(label=>header.append(el('th','',label)));head.append(header);table.append(head);
+    const tbody=el('tbody');
+    state.sections.pivots.forEach(rec=>{
+      const row=el('tr');row.dataset.pivotRow=rec.token;row.append(el('th','',rec.token));
+      const cl=el('td','pivot-wave-cell');
+      const clLocked=rec.cl_status==='CONFIRMADO'||rec.o1_status==='CONFIRMADO';
+      cl.classList.toggle('pivot-locked',clLocked);
+      cl.append(pivotControl('number',rec.cycle_low,rec.token,'cycle_low',clLocked),pivotControl('date',rec.cl_date,rec.token,'cl_date',clLocked));
+      const clSelect=el('select','pivot-wave-status');clSelect.dataset.pivotToken=rec.token;clSelect.dataset.pivotField='cl_status';
+      for(const [value,label] of [['CANDIDATO','CANDIDATO'],['VALIDADO_TECNICAMENTE','VALIDADO TÉCNICAMENTE'],['CONFIRMADO','CONFIRMADO']]){
+        const opt=el('option','',label);opt.value=value;clSelect.append(opt);
+      }
+      clSelect.value=rec.cl_status||'CANDIDATO';clSelect.disabled=clLocked;
+      clSelect.setAttribute('aria-label',rec.token+' CL estado');
+      clSelect.addEventListener('change',()=>{clSelect.dataset.userEdited='true';});
+      cl.append(clSelect);
+      if(!clLocked){
+        const verify=el('button','tiny-control','Verificar CL 1W');verify.type='button';verify.dataset.clReviewToken=rec.token;
+        const report=el('span','settings-hint');report.dataset.clReviewResult=rec.token;
+        verify.addEventListener('click',async()=>{
+          const raw=document.querySelector(`[data-pivot-token="${rec.token}"][data-pivot-field="cycle_low"]`)?.value;
+          const date=document.querySelector(`[data-pivot-token="${rec.token}"][data-pivot-field="cl_date"]`)?.value;
+          const price=Number(raw);if(!(price>0)||!date){report.textContent='Se requiere CL positivo y fecha UTC';return;}
+          verify.disabled=true;report.textContent='Verificando 5L/5R y BOS semanal en MCP…';delete clReviewProofs[rec.token];
+          try{
+            const u='/api/settings/pivots/cl-review?'+new URLSearchParams({token:rec.token,cl_price:String(price),cl_date:date});
+            const resp=await fetch(u,{cache:'no-store',credentials:'same-origin'});const result=await resp.json();
+            if(!resp.ok)throw Error(result.reason||result.status||'Error de MCP');
+            report.textContent=result.reason||result.status;
+            if(result.validated&&result.review_proof){
+              clReviewProofs[rec.token]={price,date,proof:result.review_proof};
+              clSelect.value='VALIDADO_TECNICAMENTE';clSelect.dataset.userEdited='true';
+            }else if(rec.cl_status!=='CONFIRMADO')clSelect.value=rec.cl_status||'CANDIDATO';
+          }catch(e){report.textContent='DATA ERROR: '+e.message;}finally{verify.disabled=false;}
+        });
+        cl.append(verify,report);
+      }else cl.append(el('span','pivot-immutable','🔒 CL bloqueado'));
+      row.append(cl);
+      WAVE_NAMES.forEach(w=>{
+        const locked=rec[w+'_status']==='CONFIRMADO';
+        const cell=el('td','pivot-wave-cell'+(locked?' pivot-locked':''));
+        const price=pivotControl('number',rec[w],rec.token,w,locked);price.min='0';price.step='any';price.placeholder='N/D';cell.append(price);
+        const day=pivotControl('date',rec[w+'_date'],rec.token,w+'_date',locked);cell.append(day);
+        const statusSelect=el('select','pivot-wave-status');statusSelect.dataset.pivotToken=rec.token;statusSelect.dataset.pivotField=w+'_status';
+        for(const val of ['ESTIMADO','CONFIRMADO']){const option=el('option','',val);option.value=val;statusSelect.append(option);}
+        statusSelect.value=rec[w+'_status']||'ESTIMADO';statusSelect.disabled=locked;
+        statusSelect.setAttribute('aria-label',rec.token+' '+w+' estado');
+        statusSelect.addEventListener('change',()=>{statusSelect.dataset.userEdited='true';});
+        cell.append(statusSelect);
+        if(locked)cell.append(el('span','pivot-immutable','🔒 Confirmado y bloqueado'));
+        row.append(cell);
+      });
+      tbody.append(row);
+    });
+    table.append(tbody);wrap.append(table);mount.append(wrap);
+    mount.append(el('p','settings-hint','Un pivote CONFIRMADO no puede cambiarse desde Balancer, Compras, Ventas ni Forecast. Para corregirlo se requerirá un procedimiento de revisión separado; no se sobrescribe.'));
+  }
+  function collectPivotMatrix(){
+    const out=[];
+    for(const rec of state.sections.pivots){
+      const data={token:rec.token};let changed=false;
+      const fields=['cycle_low','cl_date','cl_status',...WAVE_NAMES.flatMap(w=>[w,w+'_date',w+'_status'])];
+      for(const field of fields){
+        const input=document.querySelector(`[data-pivot-token="${rec.token}"][data-pivot-field="${field}"]`);
+        if(!input)throw Error('Campo de pivote no disponible: '+rec.token+' '+field);
+        const raw=input.value.trim();
+        let value=null;
+        if(field.endsWith('_status'))value=raw;
+        else if(field.endsWith('_date'))value=raw||null;
+        else if(raw){value=Number(raw);if(!Number.isFinite(value)||value<=0)throw Error(rec.token+' '+field+': precio inválido');}
+        const orig=field==='cl_status'?(rec.cl_status||'CANDIDATO'):(rec[field]??null);
+        if(value!==orig && (typeof value!=='number'||Math.abs(value-Number(orig))>1e-11))changed=true;
+        if(value!==null)data[field]=value;
+      }
+      if(changed){
+        if(data.cl_status==='VALIDADO_TECNICAMENTE'&&rec.cl_status!=='VALIDADO_TECNICAMENTE'){
+          const proof=clReviewProofs[rec.token];
+          if(!proof||proof.price!==data.cycle_low||proof.date!==data.cl_date)throw Error(rec.token+' CL: pulsa «Verificar CL 1W» primero');
+          data.cl_review_proof=proof.proof;
+        }
+        if(data.cl_status==='CONFIRMADO'&&rec.cl_status!=='VALIDADO_TECNICAMENTE'&&rec.cl_status!=='CONFIRMADO')
+          throw Error(rec.token+' CL: publica primero VALIDADO TÉCNICAMENTE y luego confirma en otra revisión');
+        out.push(data);
+      }
+    }
+    return out;
+  }
   function draw(){
     document.getElementById('settings-title').textContent=names[tab];
     document.getElementById('settings-desc').textContent=desc[tab];
     document.getElementById('settings-snapshot').textContent=state?`Snapshot: ${state.snapshot_id} · Corte: ${state.fecha_corte} · Cambios auditados`:'';
     body.replaceChildren();totals.replaceChildren();more.hidden=tab!=='pivots';
+    const pivotMatrix=document.getElementById('settings-pivot-matrix');pivotMatrix.hidden=tab!=='pivots';if(tab!=='pivots')pivotMatrix.replaceChildren();
     const diag=document.getElementById('settings-mcp-panel');if(diag)diag.hidden=tab!=='mcp';
     document.querySelector('.settings-form').hidden=tab==='mcp';
     save.parentElement.hidden=tab==='mcp';
     if(tab==='mcp'){body.textContent='';return;}
     if(!state){body.textContent='Google Sheets no disponible.';return;}
+    if(tab==='pivots'){drawPivotTable();return;}
     const rows=state.sections[tab]||[];
     const groupSlots={};
     if(tab==='parameters'){
@@ -181,7 +283,7 @@
     }
     return n;
   }
-  function collect(){const originals=state.sections[tab]||[];const out=[];
+  function collect(){if(tab==='pivots')return collectPivotMatrix();const originals=state.sections[tab]||[];const out=[];
     originals.forEach((entry,index)=>{const data={[rowKey()]:entry[rowKey()]};let dirty=false;
       for(const [field] of sectionFields[tab]){
         const input=body.querySelector(`[data-index="${index}"][data-field="${field}"]`);
@@ -237,9 +339,20 @@
           throw Error(`${stage}: las cuatro asignaciones deben sumar 100%`);
       }
     }catch(e){message('NO VALIDADO: '+e.message);return;}
-    const accepted=window.confirm('Se validará y publicará una nueva revisión auditada de Google Sheets. ¿Continuar?');if(!accepted)return;
+    const accepted=window.confirm(tab==='pivots'
+      ? '¿Validar propuesta de pivotes por onda? Las confirmaciones publicadas serán inmutables y aplicarán a todos los modos.'
+      : 'Se validará y publicará una nueva revisión auditada de Google Sheets. ¿Continuar?');if(!accepted)return;
     save.disabled=true;message('Validando integridad, publicando y recargando el Master…');
-    try{const res=await api('/api/settings/save',{expected_snapshot_id:state.snapshot_id,section:tab,entries,evidence},state.csrf_token);
+    try{
+      const req={expected_snapshot_id:state.snapshot_id,section:tab,entries,evidence};
+      let res;
+      if(tab==='pivots'){
+        const response=await fetch('/api/settings/preview',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-Kairos-Csrf':state.csrf_token||''},body:JSON.stringify(req)});
+        const preview=await response.json();
+        if(!response.ok||preview.status!=='VALIDATED_DRAFT')throw Error(preview.reason||preview.status||'Preview inválido');
+        if(!window.confirm(`Revisión validada (${preview.changed_fields} campos). ¿PUBLICAR ahora los pivotes en una nueva versión del Master?`)){message('Validado, NO publicado.');return;}
+        res=await api('/api/settings/publish',{...req,preview_token:preview.preview_token,confirm:'PUBLICAR'},state.csrf_token);
+      }else res=await api('/api/settings/save',req,state.csrf_token);
       message(`PUBLICADO: ${res.snapshot_id}. ${res.written_fields} campos auditados. Recargando…`);
       await load();message(`Guardado confirmado en Google Sheets: ${res.snapshot_id}. KairosGPT leerá esta revisión en la siguiente ejecución.`);
     }catch(e){message('NO PUBLICADO / VERIFICAR: '+e.message);}finally{save.disabled=!state?.is_admin||!state?.write_configured;}
@@ -261,15 +374,24 @@
     if(ix<0)return;
     const current=state.sections.pivots[ix];
     for(const field of ['cycle_low','o1','o2','o3','o4','o5']){
-      const input=body.querySelector(`[data-index="${ix}"][data-field="${field}"]`);
+      const input=tab==='pivots'
+        ? document.querySelector(`[data-pivot-token="${rec.token}"][data-pivot-field="${field}"]`)
+        : body.querySelector(`[data-index="${ix}"][data-field="${field}"]`);
       if(!input || input.dataset.userEdited==='true')continue;
       // Historical/approved values from the official table always have priority.
+      if(field==='o1'&&current.o1_status==='CONFIRMADO')continue;
       if(current[field]!==null&&current[field]!==undefined&&current[field]!=='')continue;
       const val=rec[field];
       if(val!==null&&val!==undefined&&rec.status!=='DATA_ERROR'){
         input.value=String(val);
         input.dataset.preloadOrigin=rec.record_origin||rec.source||'MCP_EXPLORATORIO';
       }
+    }
+    // Suggest dates as well as prices; never replace confirmed or manually edited fields.
+    for(const field of ['cl_date',...WAVE_NAMES.map(w=>w+'_date')]){
+      const input=document.querySelector(`[data-pivot-token="${rec.token}"][data-pivot-field="${field}"]`);
+      if(!input||input.disabled||input.dataset.userEdited==='true'||current[field])continue;
+      const val=rec[field];if(val&&rec.status!=='DATA_ERROR')input.value=val;
     }
     const info=body.querySelector(`[data-pivot-info="${rec.token}"]`);
     if(info){

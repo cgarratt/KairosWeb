@@ -10,7 +10,7 @@
       <button class="settings-tab" type="button" data-tab="targets">Objetivos y Tiers</button>
       <button class="settings-tab" type="button" data-tab="tier_custody">Custodia por Tier</button>
       <button class="settings-tab" type="button" data-tab="liquidity">Liquidez por venue</button>
-      <button class="settings-tab" type="button" data-tab="pivots">Pivotes preliminares</button>
+      <button class="settings-tab" type="button" data-tab="pivots">Pivotes O1–O5</button>
       <button class="settings-tab" type="button" data-tab="parameters">Parámetros</button>
       <button class="settings-tab" type="button" data-tab="mcp">Estado de conexiones MCP</button>
       <div class="settings-theme-box"><strong>Aspecto de KairosWeb</strong><label><input type="radio" name="theme-choice" value="light"> ☀️ Claro</label><label><input type="radio" name="theme-choice" value="dark"> 🌙 Azul marino oscuro</label></div>
@@ -29,6 +29,7 @@
         </div>
         <div class="settings-msg" id="mcp-message" role="status">Pruebas MCP independientes; no cambian el Master.</div>
       </section>
+      <div id="settings-pivot-matrix" class="settings-pivot-matrix" hidden></div>
       <div id="settings-data" class="settings-fields">Cargando datos…</div>
       <div id="settings-totals" aria-live="polite"></div>
       <div class="settings-form">

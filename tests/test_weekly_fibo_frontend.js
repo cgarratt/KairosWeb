@@ -1,0 +1,11 @@
+const fs=require('fs'),path=require('path'),vm=require('vm'),assert=require('assert');
+vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../static/purchase_plan.js'),'utf8'));
+const {calculate}=require('../static/o2_sequential.js');
+const tokens=[{token:'PLUME',price:.01769,current_usdt:100,target:.5},{token:'BTC',price:81471,current_usdt:900,target:.5}];
+const none=calculate(tokens,{PLUME:{c1:.0149,c2:.0134},BTC:{c1:72575,c2:69076}},[25,25,25,25],100,1);
+assert.strictEqual(none.spent,0,'No inherited Fib references should create purchases');
+const valid=calculate(tokens,{PLUME:{ref382:.01814294,c1:.016275,c2:.01440706,ref786:.01174762},BTC:{ref382:76074,c1:72575,c2:69076,ref786:64094}},[25,25,25,25],100,1);
+assert(valid.spent>0);
+assert(Math.abs(valid.prices[0][0]-.01814294)<1e-10);
+assert.strictEqual(valid.prices[0][3],.01174762);
+console.log('Weekly Fib UI contract PASS');

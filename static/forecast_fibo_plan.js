@@ -12,7 +12,7 @@
   }
   function budget(portfolio,physicalUsdt,qf){
     if([portfolio,physicalUsdt,qf].some(x=>!Number.isFinite(x)||x<0)||qf>physicalUsdt)throw Error('P/USDT/QF inválidos');
-    const maximum=.25*portfolio;return {maximum,deployable:Math.min(maximum,Math.max(0,physicalUsdt-qf)),shortfall:Math.max(0,maximum-(physicalUsdt-qf))};
+    const maximum=Math.max(0,physicalUsdt-qf),target=.25*portfolio;return {maximum,deployable:maximum,shortfall:Math.max(0,target-maximum),minimumTarget:target};
   }
   function scenarioBuyPrices(w,step){
     if(!w||!w.values)return null;

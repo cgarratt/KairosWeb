@@ -17,3 +17,23 @@
 :root[data-theme="dark"] .alert-timeframe.tf-1h{background:#173758;color:#a9d3ff;border-color:#315c8b}
 :root[data-theme="dark"] .alert-timeframe.tf-4h{background:#38294f;color:#dbc0ff;border-color:#634a84}
 :root[data-theme="dark"] .alert-timeframe.tf-1d{background:#174536;color:#a6e6c2;border-color:#347c59}
+
+/* Development: event-first bell. Prominent directional breaks; mode comes from
+   the event's explicit origin when available, never inferred from 4H alone. */
+.alert-event-type{display:inline-flex;align-items:center;padding:5px 10px;
+  border-radius:8px;font-size:12px;font-weight:850;letter-spacing:.015em;
+  border:1px solid transparent;line-height:1.2;white-space:nowrap}
+.alert-event-type.event-bull{color:#076845;background:#dcf9ec;border-color:#7bd2ac}
+.alert-event-type.event-bear{color:#a02739;background:#ffe4e8;border-color:#f4a5b2}
+.alert-event-type.event-critical{color:#8b4f08;background:#ffefcb;border-color:#edc47f}
+.alert-event-type.event-structural{color:#4c548f;background:#e9ebff;border-color:#bac4f9}
+.alert-event-type.event-generic{color:#234f80;background:#e7f2ff;border-color:#bfd9f4}
+.alert-mode{display:inline-flex;align-items:center;padding:4px 8px;border:1px solid var(--line);
+  border-radius:7px;background:var(--soft);color:var(--text);font-size:11px;font-weight:750}
+:root[data-theme="dark"] .alert-event-type.event-bull{color:#a5fbd7;background:#135541;border-color:#3a9673}
+:root[data-theme="dark"] .alert-event-type.event-bear{color:#ffb7c0;background:#672c3e;border-color:#ac4760}
+:root[data-theme="dark"] .alert-event-type.event-critical{color:#ffe0a2;background:#634921;border-color:#a17834}
+:root[data-theme="dark"] .alert-event-type.event-structural{color:#d6d0ff;background:#393557;border-color:#666091}
+:root[data-theme="dark"] .alert-event-type.event-generic{color:#b8dcff;background:#1b3959;border-color:#38638d}
+:root[data-theme="dark"] .alert-mode{background:#233a57;color:#d3e6ff;border-color:#406080}
+@media(max-width:440px){.alert-event-type{font-size:11px;padding:5px 7px}.alert-meta{gap:6px}}

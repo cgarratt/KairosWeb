@@ -15,7 +15,7 @@ assert.strictEqual(classifyDrift(.51,.5,.5).status,'SOBRE');
 assert.strictEqual(classifyDrift(.51,.5,2).status,'NEUTRAL');
 assert.strictEqual(classifyDrift(.3,.5,NaN).status,'N/D');
 const tokens=[{token:'A',price:100,current_usdt:700,target:.5},{token:'B',price:100,current_usdt:300,target:.5}];
-const levels={A:{c1:90,c2:80}, B:{c1:90,c2:80}};
+const levels={A:{ref382:95,c1:90,c2:85,ref786:80}, B:{ref382:95,c1:90,c2:85,ref786:80}};
 const r=calculate(tokens,levels,[25,25,25,25],200,1);
 assert.strictEqual(r.snapshots.length,4);
 assert.strictEqual(r.snapshots[0].states[0],'SOBRE');
@@ -29,7 +29,7 @@ assert(Math.abs(r.consumed.reduce((a,b)=>a+b,0)-r.spent)<1e-7);
 // A token can go from SOBRE at an earlier stage to INFRA at a later stage
 // thanks to a deeper relative drawdown while prior stage buys are retained.
 const shifting=[{token:'A',price:100,current_usdt:600,target:.5},{token:'B',price:100,current_usdt:400,target:.5}];
-const shiftingLevels={A:{c1:80,c2:60},B:{c1:99,c2:98}};
+const shiftingLevels={A:{ref382:80,c1:65,c2:40,ref786:30},B:{ref382:99,c1:98,c2:97,ref786:96}};
 const s=calculate(shifting,shiftingLevels,[25,25,25,25],40,1);
 assert.strictEqual(s.snapshots[0].states[0],'SOBRE');
 assert.strictEqual(s.snapshots[2].states[0],'INFRA', 'A must become INFRA at C3');

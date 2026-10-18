@@ -6,6 +6,7 @@
 </style>{% endblock %}
 {% block content %}
 <div class="grid"><section class="panel span-12 hero"><div><h2>Balancer</h2><p>Gestión de liquidez · Composición · Escenarios post-balance</p></div><span class="badge ok">● LIVE MCP · PRELIMINAR</span></section>
+{% include '_wave_confirmed.html' %}
 <section class="panel span-12"><div class="liquidity-head"><div><h2>1. Gestión de liquidez y reserva Balancer</h2><p class="sub">Desglose del patrimonio P, piso estructural del 40% y asignación de bolsas.</p></div><span class="badge info">No ejecuta órdenes</span></div>
 <div class="liq-flow">
 <div class="liq-step"><small>◈ Patrimonio P</small><strong>{{ '${:,.0f}'.format(payload.current.P) }}</strong><small>Cripto + USDT consolidado</small></div>

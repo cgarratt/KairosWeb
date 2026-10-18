@@ -240,3 +240,14 @@ html[data-privacy-boot="pending"] .shell{visibility:hidden}
 .privacy-toggle svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .privacy-label{font-size:11px;font-weight:700}
 @media(max-width:680px){.privacy-label{display:none}}
+
+/* Configuración: vista de pivotes por onda, 5 estados independientes */
+.settings-pivot-matrix{min-width:0;margin:14px 0 20px}
+.pivot-matrix-scroll{overflow-x:auto;border:1px solid var(--border,#36506e);border-radius:12px}
+.pivot-wave-table{width:100%;min-width:1120px;border-collapse:collapse;font-size:12px}
+.pivot-wave-table th,.pivot-wave-table td{border-bottom:1px solid var(--border,#36506e);padding:10px;vertical-align:top}
+.pivot-wave-cell{min-width:148px}
+.pivot-wave-cell input,.pivot-wave-cell select{display:block;box-sizing:border-box;width:100%;padding:7px;margin:0 0 5px;background:var(--soft,#1c304c);color:inherit;border:1px solid var(--border,#36506e);border-radius:7px;font-size:12px}
+.pivot-wave-cell input:disabled,.pivot-wave-cell select:disabled{opacity:.8;cursor:not-allowed}
+.pivot-locked{border-left:2px solid #36be98}
+.pivot-immutable{display:block;color:#53d4aa;font-size:10px;white-space:nowrap}

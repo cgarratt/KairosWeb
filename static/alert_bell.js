@@ -9,6 +9,15 @@
     timeZone:'America/Lima',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).format(t)+' (Lima)';};
   let pending=0,writer=false,loading=false;
   const frameClass=frame=>({ '1H':'tf-1h','4H':'tf-4h','1D':'tf-1d' })[frame]||'';
+  const eventClass=kind=>({
+    BREAK_ALCISTA:'event-bull', BREAK_BAJISTA:'event-bear',
+    LIQUIDEZ_CRITICA:'event-critical'
+  })[kind]||(kind.startsWith('BREAK_')?'event-structural':'event-generic');
+  const safeMode=mode=>({
+    Balancer:'Balancer',TradingBot:'TradingBot',Compras:'Compras',
+    Ventas:'Ventas',BSI:'BSI',Forecast:'Forecast',Ciclos:'Ciclos',Alertas:'Alertas'
+  })[mode]||'Alertas';
+
   async function acknowledge(id,button){
     button.disabled=true;button.textContent='Guardando…';
     try{
@@ -38,15 +47,21 @@
         heading.append(el('span','alert-timeframe '+frameClass(tf),tf),
                        el('span','alert-token',item.token||'PORTAFOLIO'),
                        el('span','',formatDate(item.created_utc)));
-        const kind=String(item.kind||'ALERTA').replaceAll('_',' ');
-        heading.append(el('span','alert-event-type',kind));
+        const rawKind=String(item.kind||'ALERTA').toUpperCase();
+        const kind=rawKind.replaceAll('_',' ');
+        const eventLabel=el('span','alert-event-type '+eventClass(rawKind),kind);
+        heading.append(eventLabel);
+        const mode=safeMode(item.mode);
+        const modeBadge=el('span','alert-mode',mode);
+        modeBadge.title=item.mode_identified===true
+          ?'Modo de origen identificado en el registro'
+          :'Origen sin modo explícito; notificación de Alertas Kairos';
+        heading.append(modeBadge);
         if(item.is_trade_ready===true){
           heading.append(el('span','alert-flag','CERTIFICADA'));
-        }else{
-          heading.append(el('span','alert-flag unverified','INFORMATIVA'));
         }
         wrap.append(heading);
-        if(item.action)wrap.append(el('p','alert-action', (item.is_trade_ready?'Acción certificada: ':'Detalle informativo: ')+item.action));
+        if(item.action)wrap.append(el('p','alert-action',item.action));
         if(!item.is_trade_ready)wrap.append(el('p','alert-disclaimer','No constituye orden ni fill verificado.'));
         const controls=el('div','alert-record-controls');
         const readButton=el('button','tiny-control alert-read-one','Marcar leída');

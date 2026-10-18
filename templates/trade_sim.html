@@ -13,7 +13,8 @@
 {% block content %}
 <div class="grid">
 <section class="panel span-12 hero"><div><h2>{{ mode.name }}</h2><p>{{ mode.description }}</p></div><div class="badge info">SIMULACIÓN · SIN ÓRDENES</div></section>
-<section class="panel span-12"><h2>{{ 'Despliegue USDT · O2C1–O2C4' if mode.slug=='compras' else 'Objetivo de liquidez USDT' }}</h2><p class="sub">{{ 'Primero se atienden los déficits; el excedente se invierte entre todos los tokens, respetando la distribución objetivo.' if mode.slug=='compras' else 'Mover el slider vende primero activos sobreponderados y luego distribuye proporcionalmente entre los demás, hasta el límite de Exchange.' }}</p>
+{% include '_wave_confirmed.html' %}
+<section class="panel span-12"><h2>{{ 'Despliegue USDT · retrocesos semanales' if mode.slug=='compras' else 'Objetivo de liquidez USDT' }}</h2><p class="sub">{{ 'Solo tokens con los dos últimos pivotes semanales alcistas 5L/5R + BOS. La liquidez de activos bloqueados permanece en USDT.' if mode.slug=='compras' else 'Mover el slider vende primero activos sobreponderados y luego distribuye proporcionalmente entre los demás, hasta el límite de Exchange.' }}</p>
 <div class="sim-layout" style="margin:18px 0">
 <div class="sim-metric"><small>◉ Patrimonio estimado</small><b id="portfolio-metric">—</b><small>Spot MCP + snapshot</small></div>
 <div class="sim-metric"><small>◈ USDT físico</small><b id="cash-metric">—</b><small id="cash-pct">—</small></div>
@@ -26,13 +27,13 @@
 </div>
 </section>
 {% if mode.slug=='compras' %}
-<section class="panel span-12"><div class="hero" style="align-items:flex-start"><div><h2>Resumen de compras</h2><p class="sub">Distribución orientativa en los cuatro tramos Fibonacci.</p></div><a id="forecast-detail-link" class="btn primary" href="/mode/forecast">Ver niveles y ondas en Forecast ↗</a></div><div class="sim-layout" style="margin-top:18px"><div class="sim-metric"><small>O2C1 · Fib 38.2%</small><b id="buy-tranche-0">—</b></div><div class="sim-metric"><small>O2C2 · Fib 50%</small><b id="buy-tranche-1">—</b></div><div class="sim-metric"><small>O2C3 · Fib 61.8%</small><b id="buy-tranche-2">—</b></div><div class="sim-metric"><small>O2C4 · Fib 78.6%</small><b id="buy-tranche-3">—</b></div></div><p class="footer-note">Las cuatro asignaciones O2C1–O2C4 se leen del Master publicado.</p></section>
+<section class="panel span-12"><div class="hero" style="align-items:flex-start"><div><h2>Resumen de compras</h2><p class="sub">Distribución orientativa en los cuatro tramos Fibonacci.</p></div><a id="forecast-detail-link" class="btn primary" href="/mode/forecast">Ver niveles y ondas en Forecast ↗</a></div><div class="sim-layout" style="margin-top:18px"><div class="sim-metric"><small>C1 · Fib 38.2%</small><b id="buy-tranche-0">—</b></div><div class="sim-metric"><small>C2 · Fib 50%</small><b id="buy-tranche-1">—</b></div><div class="sim-metric"><small>C3 · Fib 61.8%</small><b id="buy-tranche-2">—</b></div><div class="sim-metric"><small>C4 · Fib 78.6%</small><b id="buy-tranche-3">—</b></div></div><p class="footer-note">Cuatro tramos: O2 para O2/retroceso alcista; O4 para onda O4. Pesos del Master publicado; solo compras simuladas con estructura 1W válida.</p></section>
 {% endif %}
 
 <section class="panel span-6"><h2>Distribución del escenario</h2><p class="sub">Asignación USDT referencial por token.</p><div id="alloc-chart" class="bar-list"></div></section>
 <section class="panel span-6"><h2>Liquidez post-escenario</h2><p class="sub">Comparativa de USDT antes vs después. Sin alterar saldos reales.</p><div class="sim-metric" style="margin:15px 0"><small>Situación actual</small><b id="before-cash">—</b><div class="sim-bar"><div id="before-bar"></div></div></div><div class="sim-metric"><small>Después (hipotético)</small><b id="after-cash">—</b><div class="sim-bar"><div id="after-bar"></div></div></div></section>
 {% if mode.slug=='compras' %}
-<section class="panel span-12" id="o2-fibonacci-panel" data-o2-ui-version="{{ master }}"><h2>Asignación USDT para referencias Fibonacci O2</h2>
+<section class="panel span-12" id="o2-fibonacci-panel" data-o2-ui-version="{{ master }}"><h2>Asignación USDT para retrocesos Fibonacci</h2>
 <div class="o2-table-scroll"><table class="o2-table"><thead><tr><th>Token</th><th>Spot</th><th>Precio 38.2%</th><th>USDT</th><th>Precio 50%</th><th>USDT</th><th>Precio 61.8%</th><th>USDT</th><th>Precio 78.6%</th><th>USDT</th><th>Total USDT</th></tr></thead><tbody id="fib-body"></tbody><tfoot id="fib-total"></tfoot></table></div>
 </section>
 {% endif %}
@@ -80,17 +81,21 @@ function renderO2Fibonacci(sim){
     const css=historicalStatus==='hit'?'level-hit':historicalStatus==='near'?'level-near':'';
     const band=Number(source.drift_band_pp);
     const description=hasLevel&&status!=='N/D'
-      ? `${status} · Precompra O2C${j+1}: ${Number(pre.weights[i]*100).toFixed(2)}% / objetivo ${Number(t.target*100).toFixed(2)}%, desvío ${drift.toFixed(2)} pp, banda ±${band.toFixed(2)} pp`
+      ? `${status} · Precompra C${j+1}: ${Number(pre.weights[i]*100).toFixed(2)}% / objetivo ${Number(t.target*100).toFixed(2)}%, desvío ${drift.toFixed(2)} pp, banda ±${band.toFixed(2)} pp`
       : '';
     const label=description
       ? `<span class="o2-drift-dot drift-${status.toLowerCase()}" role="img" aria-label="${description}" title="${description}"></span>`
       : '';
+    const macroCurrency=source.weekly_context?.[t.token]?.quote_currency||'USDT';
     const historicalTitle=historical.status==='PROVISIONAL'
-      ? `Mínimo posterior al O1 candidato (${historical.estimated_o1_date}): ${fibPrice(historical.post_o1_min)} el ${historical.post_o1_min_date}. Provisional, no certifica toque.`
+      ? `Mínimo posterior al O1 candidato (${historical.estimated_o1_date}): ${fibPrice(historical.post_o1_min)} el ${historical.post_o1_min_date}. Moneda macro ${macroCurrency}. Provisional, no certifica toque.`
       : `Histórico post-O1 no verificable (${historical.status||'N/D'}); no se colorea.`;
     return `<td class="${css}" title="${historicalTitle}"><span class="o2-fib-inline">${fibPrice(level)}${label}</span></td><td class="${css}" title="${historicalTitle}">${dollar(amount)}</td>`;
   }).join('');
-  return `<tr><td>${token(t.token)}</td><td>${fibPrice(t.price)}</td>${pairs}<td><b>${dollar(total)}</b></td></tr>`;
+  const ctx=source.weekly_context?.[t.token]||{};
+  const kind=ctx.eligible===true?(ctx.mode==='RETROCESO_ALCISTA'?'RETROCESO ALCISTA':ctx.mode):'BLOQUEADO';
+  const reason=ctx.eligible===true?'Pareja 1W 5L/5R + BOS':'Sin 2 pivotes válidos · '+(ctx.reason||ctx.status||'N/D');
+  return `<tr><td title="${reason}">${token(t.token)}<small style="display:block;color:var(--muted);font-size:10px">${kind}</small></td><td>${fibPrice(t.price)}</td>${pairs}<td><b>${dollar(total)}</b></td></tr>`;
  }).join('');
  el('fib-total').innerHTML=`<tr><td>TOTAL USDT</td><td>—</td>${sim.consumed.map(v=>`<td>—</td><td>${dollar(v)}</td>`).join('')}<td><b>${dollar(sim.spent)}</b></td></tr>`;
 }
@@ -99,7 +104,8 @@ if(mode==='compras'){
   const desired=P*target/100;
   const referenceCapacity=Math.max(0,Math.min(desired,source.current.reference_cap));
   const safeCapacity=Math.max(0,cash-Number(source.structural_liquidity_target??0.4)*P);
-  const sim=window.KairosO2Sequential.calculate(source.tokens,source.o2_levels,o2Weights,referenceCapacity,source.drift_band_pp);
+  const sim=window.KairosO2Sequential.calculate(source.tokens,source.o2_levels,o2Weights,referenceCapacity,source.drift_band_pp,{
+    requireEligibility:true,eligibility:source.buy_eligibility,weightsByToken:source.buy_stage_weights});
   allocated=sim.totalByToken;
   const sum=sim.spent;after=cash-sum;
   el('third-metric').textContent=dollar(trading);el('allocation-metric').textContent=dollar(sum);

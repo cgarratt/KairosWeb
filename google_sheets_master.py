@@ -19,7 +19,7 @@ SHEETS = {
     'custody': "'04_CUSTODIA'!A4:G7",
     'orders': "'05_ORDENES'!A4:P250",
     'fills': "'06_FILLS'!A4:P250",
-    'pivots': "'07_PIVOTES'!A4:Q16",
+    'pivots': "'07_PIVOTES'!A4:AA16",
     'integral': "'08_INTEGRAL'!A4:F15",
     'bsi': "'09_BSI'!A4:S16",
     'validation': "'11_VALIDACIONES'!A4:D25",
@@ -198,11 +198,19 @@ def parse_master(raw):
                 key=(venue,order_id,trade_id)
                 if key in _fill_keys:raise SheetDataError(f'fills: duplicate (venue,order_id,trade_id) at row {rownum}')
                 _fill_keys.add(key);historical_fills+=1
-    pivot_levels={}; old_pivot_sources=set()
+    from wave_pivots import wave_row, fib_from_anchors, WavePivotError
+    pivot_levels={}; wave_pivots={}; old_pivot_sources=set()
     for r in blocks['pivots'][1:]:
         if not r or r[0] not in SYMBOLS:continue
         symbol='PUMP' if r[0]=='PUMPFUN' else r[0]
-        if _cell(r,14)=='REFERENCIA_HISTORICA':
+        try:wave_pivots[symbol]=wave_row(r)
+        except WavePivotError as exc:raise SheetDataError(str(exc)) from exc
+        anchors=fib_from_anchors(wave_pivots[symbol]['cycle_low'],wave_pivots[symbol]['waves']['o1']['price'])
+        if anchors:
+            pivot_levels[symbol]={**anchors,'state':'ANCHORS_ESTIMADOS_O_CONFIRMADOS',
+                                  'certified_o1':wave_pivots[symbol]['waves']['o1']['status']=='CONFIRMADO',
+                                  'source':'07_PIVOTES CL/O1; sólo simulación'}
+        elif _cell(r,11) is not None and _cell(r,12) is not None:
             pivot_levels[symbol]={'c1':_cell(r,11),'c2':_cell(r,12),'state':'REFERENCIA_HISTORICA'}
             old_pivot_sources.add(str(_cell(r,15,'')))
         else:pivot_levels[symbol]={'c1':None,'c2':None,'state':'SIN_DATO'}
@@ -234,7 +242,8 @@ def parse_master(raw):
               'liquidity_venues_USDT':venues,'units_snapshot_as_of':ctrl['fecha_corte']}
     return {'control':ctrl,'snapshot':snapshot,'tokens':list(holdings), 'targets':targets,'tiers':tiers,
             'cost_basis':costs, 'parameters':params, 'custody_policy':custody_targets,
-            'o2_levels':{'source':'Google Sheets 07_PIVOTES: REFERENCIA_HISTORICA NO CERTIFICADA',
+            'wave_pivots':wave_pivots,
+            'o2_levels':{'source':'Google Sheets 07_PIVOTES: CL/O1 estimados o confirmados por onda; referencias históricas supletorias, simulación',
                          'status':'REFERENCE_NOT_ACTIONABLE','levels':pivot_levels},
             'bsi_archive':bsi_rows,
             'integral':{'historical_capital_usdt':_number(meta.get('Capital inicial histórico'),'capital historical'),

@@ -57,7 +57,8 @@
 {% endblock %}
 {% block content %}
 <div class="grid">
-<section class="panel span-12"><div class="fc-hero"><div><h2>Forecast · Ondas y retrocesos</h2><p class="sub">Tabla de referencias O2 y simulador Cycle Low → O5. Compras O2 y O4: máximo 25% de P por onda; ventas O3/O5: tramos Fibonacci configurables. Datos históricos de referencia + escenarios hipotéticos. No representa pronósticos certificados.</p></div><span class="badge info">SIMULACIÓN · SIN ÓRDENES</span></div>
+{% include '_wave_confirmed.html' %}
+<section class="panel span-12"><div class="fc-hero"><div><h2>Forecast · Ondas y retrocesos</h2><p class="sub">Tabla de referencias O2 y simulador Cycle Low → O5. Compras O2 y O4: hasta USDT físico menos ReservaTrading QF; ventas O3/O5: tramos Fibonacci configurables. Datos históricos de referencia + escenarios hipotéticos. No representa pronósticos certificados.</p></div><span class="badge info">SIMULACIÓN · SIN ÓRDENES</span></div>
 
 <p class="footer-note">Referencia de niveles: {{ payload.o2_source }} · Cotizaciones Spot observadas: {{ payload.generated_at }} · Unidades snapshot: {{ payload.snapshot_note }}</p></section>
 <section class="panel span-12"><div class="fc-hero"><div><h2>Trayectoria hipotética por token</h2><p class="sub">Visualización de niveles por etapa, no eje temporal ni probabilidades.</p></div><div class="fc-field" style="flex:0 0 190px"><label for="chart-token">Token</label><select id="chart-token"></select></div></div><div class="fc-controls">
@@ -68,11 +69,11 @@
 </div><svg id="waves-chart" class="fc-chart" viewBox="0 0 740 310" role="img" aria-label="Precios hipotéticos por onda"></svg><p class="fc-legend" id="chart-info">Selecciona un token con referencias disponibles.</p></section>
 
 <section class="panel span-12">
-<h2>Ondas y precios pivote · Cycle Low a O5</h2><p class="sub">Escenario por token. Cycle Low/O1 son anclas <strong>inferidas</strong> de referencias históricas Fib 50% y Fib 61.8%; O2–O5 son niveles hipotéticos según las extensiones y retrocesos elegidos.</p>
+<h2>Ondas y precios pivote · Cycle Low a O5</h2><p class="sub">Escenario por token. Cycle Low/O1 proceden de estructura semanal UTC (confirmada o candidata), nunca se infieren de Fibonacci; O2–O5 son niveles hipotéticos según las extensiones y retrocesos elegidos.</p>
 
 <div id="elliott-note" class="fc-warning"></div>
 <div class="fc-tables"><table><thead><tr><th>Token / Métrica</th><th>Cycle Low (S0)</th><th>O1 (SH1)</th><th>O2 (SL1)</th><th>O3 (SH2)</th><th>O4 (SL2)</th><th>O5 (SH3)</th><th>Estado</th></tr></thead><tbody id="waves-body"></tbody></table></div>
-<p class="footer-note">Secuencia de Kairos H4: O3 = O2 + extensión × (O1 − Cycle Low); O4 = O3 − retroceso × (O3 − O2); O5 = O4 + extensión × (O3 − O2). No se aplica confirmación semanal 5L/5R + BOS; ningún nivel se declara pivot confirmado.</p>
+<p class="footer-note">Secuencia de Kairos H4: O3 = O2 + extensión × (O1 − Cycle Low); O4 = O3 − retroceso × (O3 − O2); O5 = O4 + extensión × (O3 − O2). Los candidatos requieren 5L/5R, cierre semanal BOS y confirmación humana; los pivotes CONFIRMADOS publicados se respetan.</p>
 </section>
 
 
@@ -87,7 +88,7 @@
 <div class="fc-field"><label>Reparto SELL O3 · MASTER</label><output id="o3-master-share" class="fc-source-value">{{ (payload.official_o3_split*100)|round(2) }}% BTC / {{ (payload.official_o3_usdt_split*100)|round(2) }}% USDT</output></div>
 <div class="fc-field"><label>Reparto SELL O5 · MASTER</label><output id="o5-master-share" class="fc-source-value">{{ (payload.official_o5_split*100)|round(2) }}% BTC / {{ (payload.official_o5_usdt_split*100)|round(2) }}% USDT</output></div></div>
 <div class="fc-stage-config"><h3>Distribución por niveles Fibonacci · simulación independiente de Google Sheets</h3><p class="sub">Cada onda tiene 4 porcentajes que deben sumar exactamente 100%; un nivel no alcanzado conserva su presupuesto o unidades.</p><div class="fc-weight-grid" id="forecast-weights"></div><div id="weights-validation" class="fc-warning" role="status"></div></div>
-<div class="fc-warning">Valores iniciales aprobados para simulación; las modificaciones aquí NO se guardan en Google Sheets. Los precios O1–O5 provienen de pivotes reconstruidos sin certificación; las compras utilizan cuatro tramos O2C1–O2C4 y O4C1–O4C4. O3 respeta el objetivo USDT aprobado en el Master ({{ (payload.o3_liquidity_target*100)|round(2) }}% actualmente); O5 no tiene ese límite. O3 prioriza ventas sobreponderadas desde Exchange libre. O4 destina primero el USDT a los infraponderados y luego distribuye excedentes por targets; un balance perfecto puede ser imposible cuando BTC/HODL están protegidos o faltan niveles. Capital QF separado. Se excluyen comisiones y órdenes pendientes. Ninguna orden se transmite.</div>
+<div class="fc-warning">Valores iniciales aprobados para simulación; las modificaciones aquí NO se guardan en Google Sheets. Los precios proceden de anclas semanales publicadas o candidatas no certificadas; las compras utilizan cuatro tramos O2C1–O2C4 y O4C1–O4C4. O3 respeta el objetivo USDT aprobado en el Master ({{ (payload.o3_liquidity_target*100)|round(2) }}% actualmente); O5 no tiene ese límite. O3 prioriza ventas sobreponderadas desde Exchange libre. O4 destina primero el USDT a los infraponderados y luego distribuye excedentes por targets; un balance perfecto puede ser imposible cuando BTC/HODL están protegidos o faltan niveles. Capital QF separado. Se excluyen comisiones y órdenes pendientes. Ninguna orden se transmite.</div>
 <div class="fc-metrics"><div class="fc-kpi"><small>Patrimonio proyectado Post-O5</small><b id="o5-total">—</b></div><div class="fc-kpi"><small>BTC al cierre Post-O5</small><b id="o5-btc">—</b></div><div class="fc-kpi"><small>USDT total Post-O5</small><b id="o5-cash">—</b></div><div class="fc-kpi"><small>HODL bloqueado / Cripto</small><b id="o5-hodl">—</b></div></div>
 <h3 style="margin-top:18px">Evolución del portafolio por onda</h3>
 <div class="fc-tables"><table><thead><tr><th>Indicador</th><th>Inicio</th><th>O2</th><th>O3</th><th>O4</th><th>O5</th></tr></thead><tbody id="cycle-summary"></tbody></table></div>
@@ -99,7 +100,7 @@
 <p class="footer-note" id="cycle-note"></p>
 </section>
 
-<section class="panel span-12"><div class="callout warn"><strong>Alcance y fuentes</strong>Este Forecast no activa órdenes ni sustituye el Forecast oficial de acumulación BTC. Las referencias históricas O2C2/O2C3 y los pivotes reconstruidos deben revisarse contra anclas aprobadas; la progresión O3/O4/O5 es una simulación parametrizada, no una predicción ni un conteo Elliott confirmado. PEPE y VIRTUAL permanecen N/D.</div></section>
+<section class="panel span-12"><div class="callout warn"><strong>Alcance y fuentes</strong>Este Forecast no activa órdenes ni sustituye el Forecast oficial de acumulación BTC. La estructura semanal CL/O1 debe validarse antes de usar retrocesos O2; la progresión O3/O4/O5 es una simulación parametrizada, no una predicción ni un conteo Elliott confirmado. Sin anclas semanales válidas un token permanece N/D.</div></section>
 </div>
 <script src="{{ url_for('static', filename='purchase_plan.js') }}"></script>
 <script src="{{ url_for('static', filename='forecast_balance.js') }}"></script>
@@ -143,16 +144,22 @@ function calcWaves(){
  return fc.pivot_rows.map(p=>{
   const cl=p.cycle_low, o1=p.o1;
   if(cl==null||o1==null||!(o1>cl))return {token:p.token,values:null,state:'N/D'};
-  const rise=o1-cl, o2=o1-o2f*rise, o3=o2+o3e*rise;
-  const o4=o3-o4f*(o3-o2), o5=o4+o5e*(o3-o2);
+  const rise=o1-cl;
+  const fixed=wave=>p.waves?.[wave]?.status==='CONFIRMADO'?Number(p.waves[wave].price):null;
+  const o2=fixed('o2')??(o1-o2f*rise);
+  const o3=fixed('o3')??(o2+o3e*rise);
+  const o4=fixed('o4')??(o3-o4f*(o3-o2));
+  const o5=fixed('o5')??(o4+o5e*(o3-o2));
+  const locked=['o1','o2','o3','o4','o5'].filter(w=>fixed(w)!==null);
   const overlap=o4<=o1;
-  return {token:p.token,values:[cl,o1,o2,o3,o4,o5],state:overlap?'SOLAPAMIENTO O4 / O1':'ESCENARIO'};
+  return {token:p.token,values:[cl,o1,o2,o3,o4,o5],locked,
+    state:overlap?'SOLAPAMIENTO O4 / O1':locked.length?'CONFIRMADOS: '+locked.map(w=>w.toUpperCase()).join(', '):'ESCENARIO'};
  });
 }
 function renderWaves(){
  const result=calcWaves();
  const overlap=result.filter(x=>x.state==='SOLAPAMIENTO O4 / O1').length;
- $('elliott-note').textContent=overlap?`${overlap} activos presentan O4 ≤ O1 en este escenario, incompatible con una onda impulsiva convencional sin diagonal. Ajusta los parámetros o trata los niveles como escenarios no válidos.`:'Solo escenarios. La tabla no certifica Cycle Low, pivotes O1–O5, BOS, temporalidad ni reglas completas Elliott.';
+ $('elliott-note').textContent=overlap?`${overlap} activos presentan O4 ≤ O1 en este escenario, incompatible con una onda impulsiva convencional sin diagonal. Ajusta los parámetros o trata los niveles como escenarios no válidos.`:'Los pivotes CONFIRMADOS se fijan desde Configuración. Los demás son escenarios; ningún control local puede modificar una onda confirmada.';
  $('waves-body').innerHTML=result.map(r=>{
   const nums=r.values||[null,null,null,null,null,null];
   const position=fc.tokens.find(t=>t.token===r.token);
@@ -160,7 +167,7 @@ function renderWaves(){
   const spot=position ? Number(position.price) : NaN;
   const qty=Number.isFinite(units) ? units : 0;
   const valuations=nums.map(v=>Number.isFinite(v)&&v>0 ? qty*v : (Number.isFinite(spot)&&spot>0 ? qty*spot : null));
-  return `<tr><td>${logo(r.token)}<div class="fc-muted">Precio / pivote</div></td>${nums.map(n=>`<td>${price(n)}</td>`).join('')}<td rowspan="2"><span class="fc-tag">${r.state}</span></td></tr>`+
+  return `<tr><td>${logo(r.token)}<div class="fc-muted">Precio / pivote</div></td>${nums.map((n,i)=>`<td>${price(n)}${i>0&&r.locked?.includes('o'+i)?'<div class="fc-muted">🔒 Confirmado</div>':''}</td>`).join('')}<td rowspan="2"><span class="fc-tag">${r.state}</span></td></tr>`+
   `<tr class="wave-value-row"><td><b>Unidades / Valor USDT</b><div class="fc-muted">HOLD, sin operaciones</div></td>${valuations.map(v=>`<td><span class="fc-muted">${new Intl.NumberFormat('en-US',{maximumFractionDigits:6}).format(qty)} u.</span><div><b>${v===null?'N/D':money(v)}</b></div></td>`).join('')}</tr>`;
  }).join('');
  const sel=$('chart-token'),active=sel.value;

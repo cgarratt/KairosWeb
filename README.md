@@ -1,14 +1,5 @@
-# KairosWeb v2.0.5 RELEASE
+# KairosWeb v2.0.7 · GitHub release compacto
 
-Aplicación web independiente de KairosGPT. Contrato Google Sheets `schema_version=5.0.0`.
+Se basa íntegramente en v2.0.6 y conserva donut, campana multiframe, pivotes publicados y verificación CL. **Nueva regla exclusiva Compras:** filtro previo de los últimos dos pivotes semanales 1W 5L/5R+BOS formando LOW→HIGH; O2/O4 o RETROCESO_ALCISTA con pesos O2 por defecto. Si no hay estructura válida, compra 0; caja bloqueada NO se redistribuye. Ventas ordinarias no exige pivotes. Las semanas incompletas no cuentan. HYPE usa Hyperliquid Spot HYPE/USDC.
 
-**Guía y cambios:** [`RELEASE_NOTES_v2.0.5.md`](RELEASE_NOTES_v2.0.5.md). Para actualizar GitHub, extrae el ZIP **en la raíz del repositorio** y reemplaza tanto `app.py` como `templates/` y `static/`. No cargar solo archivos Python ni un ZIP como archivo aislado.
-
-Verificación posterior en Render: `/health` debe mostrar `version=2.0.5`, `status=UP` y `release_assets.consistent=true`. En `/mode/compras` verificar el atributo `data-o2-ui-version=2.0.5` y los círculos en precios Fibonacci.
-
-No contiene credenciales ni ejecuta órdenes. Las simulaciones no alteran el inventario PUBLICADO.
-
-## Paquete compacto para GitHub
-Esta distribución conserva la versión **2.0.5** sin cambios funcionales. Se han separado las notas y las pruebas históricas de los archivos necesarios para actualizar GitHub. El ZIP debe descomprimirse antes de subir su **contenido** (no el ZIP en sí) a la raíz de `cgarratt/KairosWeb`, incluidas `templates/` y `static/`. Los archivos previos que ya existan en GitHub no se eliminan por la carga; puedes archivarlos o borrarlos posteriormente mediante un commit separado.
-
-**Pendiente para un futuro release:** el gráfico donut de capital histórico, no incluido en esta edición de empaquetado.
+Para subir: extraer archivos a la raíz de GitHub, conservando estructura templates/ static/ tests/. No subir secretos. Desplegar en Render y validar `/health` = 2.0.7 y `release_assets.consistent=true`; probar Compras (tokens sin BOS deben mostrar BLOQUEADO y $0) y Ventas sin cambios. Las señales técnicas simuladas **NO** certifican órdenes ni fills. Sin cambios al Master, exchanges o cuentas.
