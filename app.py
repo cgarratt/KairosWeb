@@ -20,7 +20,6 @@ from flask import Flask, Response, jsonify, render_template, request, abort, red
 from fastmcp import Client
 from forecast_math import derive_reference_anchors
 from forecast_fibo_policy import defaults_from_master
-from forecast_fibo_policy import defaults_from_master
 from werkzeug.local import LocalProxy
 from google_sheets_master import get_state, SheetDataError, public_failure_code, cache_status as sheet_cache_status
 from hype_weekly import aggregate_weeks, HypeHistoryError
@@ -30,7 +29,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.4'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.5'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -952,16 +951,18 @@ def mode_page(slug):
         return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master=APP_VERSION), 500
 
 
-# Bell inbox sourced exclusively from KairosGPT Google Sheets 1H ledger.
+# Unified bell inbox sourced exclusively from KairosGPT Google Sheets 1H/4H/1D ledger.
 # Read receipts are stored separately in 17_ALERTAS_LECTURAS; no SQLite/local fallback.
 @app.route('/api/alerts/unread')
 def alerts_unread():
     try:
-        return jsonify(unread_alerts())
+        return jsonify(unread_alerts(timeframe=request.args.get('timeframe')))
+    except SettingsError as exc:
+        return jsonify({'status':'INVALID','reason':str(exc)}),400
     except Exception as exc:
-        app.logger.error('Alertas1H error id=%s class=%s',uuid.uuid4().hex[:10],type(exc).__name__)
-        return jsonify({'status':'DATA_ERROR','origin':'GOOGLE_SHEETS_ALERTAS_1H',
-                        'message':'No se pudo leer el histórico de Alertas 1H. No se muestran notificaciones de otra fuente.'}),503
+        app.logger.error('Alertas error id=%s class=%s',uuid.uuid4().hex[:10],type(exc).__name__)
+        return jsonify({'status':'DATA_ERROR','origin':'GOOGLE_SHEETS_ALERTAS',
+                        'message':'No se pudo leer el histórico de Alertas 1H/4H/1D. No se muestran notificaciones de otra fuente.'}),503
 
 
 def _same_origin(*, csrf_protected_login=False):
@@ -982,8 +983,9 @@ def _same_origin(*, csrf_protected_login=False):
 @app.route('/api/alerts/read-all', methods=['POST'])
 def alerts_mark_all_read():
     if not _same_origin():return jsonify({'status':'FORBIDDEN_ORIGIN'}),403
-    try:return jsonify(mark_all_alerts_read())
-    except SettingsError as exc:return jsonify({'status':'INVALID','reason':str(exc)}),409
+    body=request.get_json(silent=True) or {}
+    try:return jsonify(mark_all_alerts_read(timeframe=body.get('timeframe')))
+    except SettingsError as exc:return jsonify({'status':'INVALID','reason':str(exc)}),400
     except Exception as exc:
         app.logger.error('Mark all alerts read class=%s',type(exc).__name__)
         return jsonify({'status':'DATA_ERROR','message':'No se pudieron guardar los acuses en Google Sheets.'}),503
@@ -1248,9 +1250,37 @@ def tradingbot_candidates():
         diag=diagnostic_error(exc,'tradingbot:ohlcv:'+symbol)
         return jsonify({'status':'DATA_ERROR','diagnostic':diag}),503
 
+def _deployed_asset_status():
+    """Report what is actually on disk, not merely the app.py version string.
+
+    This catches partial GitHub/Render deployments where app.py is new but the
+    templates or static files are from an older release. No secrets exposed.
+    """
+    critical = {
+        'compras_template': ('templates/trade_sim.html', ('o2-drift-dot', 'renderO2Fibonacci', 'allocation-slider', 'data-o2-ui-version')),
+        'o2_simulator': ('static/o2_sequential.js', ('classifyDrift', 'snapshots')),
+        'alerts_bell': ('static/alert_bell.js', ('alert-timeframe', '/api/alerts/read')),
+    }
+    files = {}
+    for key, (filename, markers) in critical.items():
+        try:
+            payload = (BASE / filename).read_bytes()
+            content = payload.decode('utf-8')
+            files[key] = {'present': True, 'sha256_12': hashlib.sha256(payload).hexdigest()[:12],
+                          'markers_ok': all(marker in content for marker in markers)}
+        except (OSError, UnicodeError):
+            files[key] = {'present': False, 'sha256_12': None, 'markers_ok': False}
+    return {'consistent': all(f['present'] and f['markers_ok'] for f in files.values()),
+            'files': files}
+
+
 @app.route('/health')
 def health():
-    return jsonify({'status':'UP','service':'KairosWeb','version':APP_VERSION,'sheets_status':sheet_cache_status()})
+    assets = _deployed_asset_status()
+    response = {'status': 'UP' if assets['consistent'] else 'DEGRADED',
+                'service': 'KairosWeb', 'version': APP_VERSION,
+                'release_assets': assets, 'sheets_status': sheet_cache_status()}
+    return jsonify(response), (200 if assets['consistent'] else 503)
 
 @app.route('/api/portfolio')
 def portfolio():

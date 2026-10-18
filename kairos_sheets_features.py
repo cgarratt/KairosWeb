@@ -1,4 +1,4 @@
-"""Shared Google Sheets features: 1H alert inbox, receipts, and controlled settings writes.
+"""Shared Google Sheets features: multi-timeframe alert inbox, receipts, and controlled settings writes.
 
 Credentials: read-only KAIROS_GOOGLE_SERVICE_ACCOUNT_JSON (existing), and optional
 separate KAIROS_GOOGLE_WRITER_JSON with Editor permission ONLY on Master.
@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import json
 import math
 import os
+import re
 import threading
 from urllib.parse import quote
 
@@ -138,43 +139,106 @@ def alert_category(event, *, bsi_enabled=False):
     return None
 
 
-def alert_inbox(blocks, limit=150, *, bsi_enabled=False):
-    """ONLY certified 1H actions; unread + deduplicated by material instruction.
+ALERT_TIMEFRAMES = frozenset(('1H', '4H', '1D'))
+_INFO_1H_KINDS = frozenset(('NIVEL_PROXIMO','NIVEL_TOCADO','REQUIERE_REVISION'))
+_INFO_4H_KINDS = frozenset(('BREAK_BAJISTA','BREAK_ALCISTA','NUEVA_ESTRUCTURA'))
+_INFO_1D_KINDS = frozenset(('NUEVA_ONDA','RECALCULO_MACRO','BALANCER_ACCION',
+                            'BSI_ACCION','LIQUIDEZ_CRITICA'))
+_NO_NOTIFICATION_KINDS = frozenset(('SIN_ALERTA','SIN_ALERTAS','SIN_EVENTOS','DATA_ERROR',
+                                     'ERROR','RESUMEN','HEARTBEAT'))
 
-    Historical WATCH/PRECONFIRMADO are preserved by GPT but never visible here.
-    Mark-all acts on this same filtered set, not on unshown historical WATCH.
+
+def _timeframe_filter(frame):
+    if frame is None or (isinstance(frame,str) and frame.strip().upper() in ('','ALL','TODOS')):
+        return None
+    if not isinstance(frame,str) or frame.strip().upper() not in ALERT_TIMEFRAMES:
+        raise SettingsError('timeframe inválido: usar 1H, 4H o 1D')
+    return frame.strip().upper()
+
+
+def _alert_notice_category(event, frame, *, bsi_enabled=False):
+    """Classify informative ledger events without certifying a trade.
+
+    Legacy 1H trading actions still require the strict certification check.
+    New market/structure/macro alerts may be displayed as informative WATCH.
     """
-    runs={r.get('corrida_id'):r for r in _header_records(blocks['runs']) if str(r.get('marco','')).upper()=='1H'}
+    kind=str(event.get('tipo_alerta') or '').strip().upper()
+    if not re.fullmatch(r'[A-Z][A-Z0-9_]{2,79}',kind) or kind in _NO_NOTIFICATION_KINDS:
+        return None, False
+    if frame=='1H':
+        if kind in _INFO_1H_KINDS or kind.startswith(('FILL_','NIVEL_','REQUIERE_REVISION_')):
+            return ('FILL / REVISIÓN' if kind.startswith('FILL_') else 'NIVEL / REVISIÓN'),False
+        classified=alert_category(event,bsi_enabled=bsi_enabled)
+        # Preserve the historical rule: noncertified COMPRA/VENTA/BSI SELL
+        # never enter the bell as execution-ready recommendations.
+        return classified,classified is not None
+    if frame=='4H':
+        return ('ESTRUCTURA 4H' if kind in _INFO_4H_KINDS or
+                kind.startswith(('BREAK_','NUEVA_','ESTRUCTURA_')) else 'ALERTA 4H'),False
+    if frame=='1D':
+        return ('CICLO / PORTAFOLIO 1D' if kind in _INFO_1D_KINDS or
+                kind.startswith(('RECALCULO_','NUEVA_','BALANCER_','BSI_','LIQUIDEZ_'))
+                else 'ALERTA 1D'),False
+    return None,False
+
+
+def alert_inbox(blocks, limit=150, *, bsi_enabled=False, timeframe=None):
+    """Unified 1H/4H/1D unread inbox, with informative events clearly nonexecutible.
+
+    The corrida's timeframe is authoritative, and differing event marco is rejected.
+    Latest-by-signal deduplication is scoped to timeframe; reading a newer
+    duplicate must not cause an older one to reappear.
+    """
+    requested=_timeframe_filter(timeframe)
+    runs={str(r.get('corrida_id')):str(r.get('marco') or '').upper().strip()
+          for r in _header_records(blocks['runs'])
+          if str(r.get('corrida_id') or '').strip() and
+          str(r.get('marco') or '').upper().strip() in ALERT_TIMEFRAMES}
     seen={str(r.get('evento_id','')) for r in _header_records(blocks['receipts']) if r.get('leido_utc')}
     gathered=[]
     for x in _header_records(blocks['events']):
-        eid=str(x.get('evento_id') or '')
-        if not eid or x.get('corrida_id') not in runs:continue
-        category=alert_category(x,bsi_enabled=bsi_enabled)
+        eid=str(x.get('evento_id') or '').strip()
+        frame=runs.get(str(x.get('corrida_id') or ''))
+        if not eid or not frame or (requested and frame!=requested):continue
+        declared=str(x.get('marco') or frame).upper().strip()
+        if declared!=frame:continue
+        category,trade_ready=_alert_notice_category(x,frame,bsi_enabled=bsi_enabled)
         if category is None:continue
         try:dt=datetime.fromisoformat(str(x['creado_utc']).replace('Z','+00:00'))
         except (KeyError,ValueError,TypeError):continue
         if dt.tzinfo is None:continue
-        token=str(x.get('token') or '').strip()
+        kind=str(x.get('tipo_alerta') or '').upper().strip()
+        token=str(x.get('token') or '').strip() or ('PORTAFOLIO' if frame=='1D' else 'MERCADO')
         action=str(x.get('accion_sugerida') or '').strip()
-        if not token:continue
-        key=(category,token,action.upper().strip(),str(x.get('nivel_usdt') or ''),str(x.get('usdt_preparar') or ''))
+        signal=str(x.get('clave_senal') or '').strip()
+        # Every FILL_* is a separate ledger event, even if identical symbols/levels.
+        if kind.startswith('FILL_'):
+            key=(frame,eid)
+        elif trade_ready and frame=='1H':
+            # Legacy certified instructions dedupe by material action, not by
+            # changing ledger signal IDs (preserves preexisting receipt logic).
+            key=(frame,category,token,action.upper(),str(x.get('nivel_usdt') or ''),
+                 str(x.get('usdt_preparar') or ''))
+        else:
+            key=(frame,token,kind,signal or (action.upper(),str(x.get('nivel_usdt') or ''),
+                                            str(x.get('usdt_preparar') or '')))
         gathered.append((key, {'id':eid,'token':token,'created_utc':dt.astimezone(timezone.utc).isoformat().replace('+00:00','Z'),
-                       'action':action,'state':str(x.get('estado_evento')),
-                       'certification':str(x.get('certificacion')),'category':category,
-                       'kind':str(x.get('tipo_alerta') or ''),'timeframe':str(x.get('marco') or '1H'),
+                       'action':action,'state':str(x.get('estado_evento') or ''),
+                       'certification':str(x.get('certificacion') or ''),'category':category,
+                       'kind':kind,'timeframe':frame,
                        'spot_usdt':x.get('spot_usdt'),'level_usdt':x.get('nivel_usdt'),
                        'usdt_prepare':x.get('usdt_preparar'), 'run_id':str(x.get('corrida_id') or ''),
-                       'source':'KAIROSGPT_GOOGLE_SHEETS','is_trade_ready':category=='TRADINGBOT READY'}))
+                       'source':'KAIROSGPT_GOOGLE_SHEETS','is_trade_ready':trade_ready}))
     gathered.sort(key=lambda x:(x[1]['created_utc'],x[1]['id']),reverse=True)
     records=[];dedupe=set()
     for key, record in gathered:
         if key in dedupe:continue
         dedupe.add(key)
-        # A newer read signal suppresses stale unreads with the same action.
         if record['id'] in seen:continue
         records.append(record)
-    return {'status':'OK','source':'KAIROSGPT_GOOGLE_SHEETS','scope':'UNREAD_ACTIONABLE_1H_ONLY',
+    counts={frame:sum(r['timeframe']==frame for r in records) for frame in ('1H','4H','1D')}
+    return {'status':'OK','source':'KAIROSGPT_GOOGLE_SHEETS','scope':'UNREAD_1H_4H_1D',
+            'timeframe':requested or 'ALL','timeframe_counts':counts,
             'unread_count':len(records),'records':records[:limit] if limit is not None else records,
             'limited':limit is not None and len(records)>limit}
 
@@ -208,8 +272,8 @@ def _bsi_selling_approved():
     except Exception:
         return False
 
-def unread_alerts():
-    result=alert_inbox(read_ranges(INBOX_SHEETS),bsi_enabled=_bsi_selling_approved())
+def unread_alerts(timeframe=None):
+    result=alert_inbox(read_ranges(INBOX_SHEETS),bsi_enabled=_bsi_selling_approved(),timeframe=timeframe)
     result['can_mark_read']=bool(os.getenv('KAIROS_GOOGLE_WRITER_JSON'))
     return result
 
@@ -219,29 +283,43 @@ def mark_alert_read(event_id):
         raise SettingsError('evento_id no válido')
     with WRITE_LOCK:
         blocks=read_ranges(INBOX_SHEETS)
-        run_ids={r.get('corrida_id') for r in _header_records(blocks['runs']) if str(r.get('marco','')).upper()=='1H'}
-        event_ids={str(x.get('evento_id')) for x in _header_records(blocks['events']) if x.get('corrida_id') in run_ids}
-        if event_id not in event_ids:raise SettingsError('Evento 1H no encontrado')
-        existing={str(x.get('evento_id')) for x in _header_records(blocks['receipts'])}
-        if event_id in existing:return {'status':'OK','already_read':True}
+        # Only accept IDs backed by a matching valid timeframe in the ledger.
+        # Legacy 1H receipt compatibility is retained even for informational
+        # WATCH events not displayed by the bell's explicit notification filter.
+        runs={str(r.get('corrida_id')):str(r.get('marco') or '').upper().strip()
+              for r in _header_records(blocks['runs'])
+              if str(r.get('marco') or '').upper().strip() in ALERT_TIMEFRAMES}
+        frame=None
+        for item in _header_records(blocks['events']):
+            if str(item.get('evento_id') or '')!=event_id:continue
+            candidate=runs.get(str(item.get('corrida_id') or ''))
+            if candidate and str(item.get('marco') or candidate).upper().strip()==candidate:
+                frame=candidate
+                break
+        if frame is None:raise SettingsError('Evento 1H/4H/1D no encontrado o marco inconsistente')
+        existing={str(x.get('evento_id')) for x in _header_records(blocks['receipts'])
+                  if x.get('leido_utc')}
+        if event_id in existing:
+            return {'status':'OK','id':event_id,'already_read':True}
         now=datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
-        # Append-only receipt; one event ID per notification. Account-wide read status.
         sheet_ids=_sheet_ids()
+        if '17_ALERTAS_LECTURAS' not in sheet_ids:raise SettingsError('Falta hoja de lecturas')
+        row=[event_id,now,'KairosWeb','LEIDO',frame]
         request={'appendCells':{'sheetId':sheet_ids['17_ALERTAS_LECTURAS'],
-                                'rows':[{'values':[{'userEnteredValue':{'stringValue':v}} for v in [event_id,now,'KairosWeb','LEIDO','1H']]}],
+                                'rows':[{'values':[{'userEnteredValue':{'stringValue':v}} for v in row]}],
                                 'fields':'userEnteredValue'}}
         _api('POST',':batchUpdate',write=True,payload={'requests':[request]})
-        return {'status':'OK','id':event_id,'read_utc':now}
+        return {'status':'OK','id':event_id,'timeframe':frame,'read_utc':now}
 
 
-
-def mark_all_alerts_read():
-    """One idempotent receipt batch for all historical unread 1H events, never 4H."""
+def mark_all_alerts_read(timeframe=None):
+    """One append-only, idempotent Sheets batch for unread 1H/4H/1D notifications."""
+    requested=_timeframe_filter(timeframe)
     with WRITE_LOCK:
         blocks=read_ranges(INBOX_SHEETS)
-        unread=alert_inbox(blocks,limit=None,bsi_enabled=_bsi_selling_approved())['records']
+        unread=alert_inbox(blocks,limit=None,bsi_enabled=_bsi_selling_approved(),timeframe=requested)['records']
         if not unread:
-            return {'status':'OK','marked':0,'already_read':True}
+            return {'status':'OK','marked':0,'already_read':True,'timeframe':requested or 'ALL'}
         if len(unread)>1800:
             raise SettingsError('Demasiados eventos; revisar el rango histórico antes de confirmar lectura')
         now=datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
@@ -249,11 +327,12 @@ def mark_all_alerts_read():
         if '17_ALERTAS_LECTURAS' not in sheet_ids:raise SettingsError('Falta hoja de lecturas')
         rows=[]
         for e in unread:
-            row=[e['id'],now,'KairosWeb','LEIDO','1H']
+            row=[e['id'],now,'KairosWeb','LEIDO',e['timeframe']]
             rows.append({'values':[{'userEnteredValue':{'stringValue':v}} for v in row]})
         _api('POST',':batchUpdate',write=True,payload={'requests':[{'appendCells':{
             'sheetId':sheet_ids['17_ALERTAS_LECTURAS'],'rows':rows,'fields':'userEnteredValue'}}]})
-        return {'status':'OK','marked':len(rows),'read_utc':now}
+        return {'status':'OK','marked':len(rows),'timeframe':requested or 'ALL','read_utc':now}
+
 
 def _sheet_ids():
     response=_api('GET','',params={'fields':'sheets(properties(sheetId,title))'})

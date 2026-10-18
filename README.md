@@ -1,5 +1,14 @@
-# KairosWeb v1.9.0
+# KairosWeb v2.0.5 RELEASE
 
-Release sobre v1.8.0. Incluye **versión abreviada en encabezado**, **semáforo informativo de niveles Fibonacci** en Forecast y **etiquetas breves de reservas USDT** en Balancer. Conserva Forecast dinámico con reglas de custodia y splits O3/O5 del Master.
+Aplicación web independiente de KairosGPT. Contrato Google Sheets `schema_version=5.0.0`.
 
-Leer [RELEASE_NOTES_v1.9.0.md](RELEASE_NOTES_v1.9.0.md). Despliegue manual en GitHub/Render; este paquete no escribe Google Sheets ni ejecuta órdenes.
+**Guía y cambios:** [`RELEASE_NOTES_v2.0.5.md`](RELEASE_NOTES_v2.0.5.md). Para actualizar GitHub, extrae el ZIP **en la raíz del repositorio** y reemplaza tanto `app.py` como `templates/` y `static/`. No cargar solo archivos Python ni un ZIP como archivo aislado.
+
+Verificación posterior en Render: `/health` debe mostrar `version=2.0.5`, `status=UP` y `release_assets.consistent=true`. En `/mode/compras` verificar el atributo `data-o2-ui-version=2.0.5` y los círculos en precios Fibonacci.
+
+No contiene credenciales ni ejecuta órdenes. Las simulaciones no alteran el inventario PUBLICADO.
+
+## Paquete compacto para GitHub
+Esta distribución conserva la versión **2.0.5** sin cambios funcionales. Se han separado las notas y las pruebas históricas de los archivos necesarios para actualizar GitHub. El ZIP debe descomprimirse antes de subir su **contenido** (no el ZIP en sí) a la raíz de `cgarratt/KairosWeb`, incluidas `templates/` y `static/`. Los archivos previos que ya existan en GitHub no se eliminan por la carga; puedes archivarlos o borrarlos posteriormente mediante un commit separado.
+
+**Pendiente para un futuro release:** el gráfico donut de capital histórico, no incluido en esta edición de empaquetado.

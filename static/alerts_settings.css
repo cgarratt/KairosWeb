@@ -4,3 +4,16 @@
 .settings-layout{display:grid;grid-template-columns:220px 1fr;gap:18px}.settings-side{display:flex;flex-direction:column;gap:8px}.settings-tab{border:1px solid var(--line);border-radius:11px;background:#fff;padding:12px;cursor:pointer;font-weight:700;color:#284466;text-align:left}.settings-tab.selected{color:#fff;background:var(--blue);border-color:var(--blue)}.settings-content{min-width:0}.settings-fields{display:grid;gap:10px}.settings-row{display:grid;grid-template-columns:125px repeat(var(--columns,4),minmax(100px,1fr));gap:8px;align-items:end;border-bottom:1px solid #e6edf5;padding:12px 0}.settings-row .token-name{font-weight:800;padding-bottom:10px}.settings-field{display:flex;flex-direction:column;gap:5px;min-width:0}.settings-field label{font-size:11px;color:#617590}.settings-field input,.settings-field select{width:100%;padding:9px;border:1px solid #ccd9e9;border-radius:9px;background:#fff;color:#20334d;font-size:13px}.settings-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0}.settings-form label{display:flex;flex-direction:column;gap:6px;color:#5c708c;font-size:12px;font-weight:700}.settings-form input,.settings-form textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;color:var(--text)}.settings-form .wide{grid-column:span 2}.settings-buttons{display:flex;gap:10px;flex-wrap:wrap}.settings-msg{margin:12px 0;border-radius:12px;padding:12px;background:#f1f7fc;border:1px solid #dae7f6;font-size:13px;white-space:pre-wrap}.settings-hint{font-size:12px;color:var(--muted);line-height:1.5}.settings-row.pivots{--columns:3}.settings-row.param{grid-template-columns:minmax(260px,1fr) minmax(160px,220px)}
 @media(max-width:900px){.settings-layout{grid-template-columns:1fr}.settings-side{flex-direction:row;overflow-x:auto}.settings-tab{white-space:nowrap}.settings-row{grid-template-columns:1fr 1fr}.settings-row .token-name{grid-column:span 2}.settings-form{grid-template-columns:1fr}.settings-form .wide{grid-column:span 1}.settings-row.param{grid-template-columns:1fr 1fr}}
 @media(max-width:680px){.right-tools{align-self:flex-end;margin-top:-47px}.alerts-popover{right:-55px;max-width:calc(100vw - 34px)}}
+
+/* Shared Kairos bell — one inbox, visibly distinct timeframe tags. */
+.alert-timeframe{display:inline-flex;align-items:center;justify-content:center;min-width:30px;padding:3px 6px;border-radius:6px;font-size:11px;font-weight:850;letter-spacing:.02em;border:1px solid transparent}
+.alert-timeframe.tf-1h{background:#e7f2ff;color:#17539e;border-color:#b4d4f7}
+.alert-timeframe.tf-4h{background:#f5edff;color:#623da1;border-color:#ddc5fa}
+.alert-timeframe.tf-1d{background:#e4f8ed;color:#166340;border-color:#afe1c4}
+.alert-event-type{font-weight:750;color:var(--text);font-size:10px}
+.alert-record-controls{display:flex;justify-content:flex-end;margin-top:6px}
+.alert-disclaimer{font-size:11px;color:var(--muted);margin:3px 0 7px}
+.alert-read-one:disabled{opacity:.55;cursor:not-allowed}
+:root[data-theme="dark"] .alert-timeframe.tf-1h{background:#173758;color:#a9d3ff;border-color:#315c8b}
+:root[data-theme="dark"] .alert-timeframe.tf-4h{background:#38294f;color:#dbc0ff;border-color:#634a84}
+:root[data-theme="dark"] .alert-timeframe.tf-1d{background:#174536;color:#a6e6c2;border-color:#347c59}

@@ -69,7 +69,7 @@
   .sort-arrow{font-size:13px;color:#2472c3;min-width:12px}
   th[aria-sort="ascending"],th[aria-sort="descending"]{color:#1958a2}
   </style>
-  <link rel="stylesheet" href="{{ url_for('static',filename='alerts_settings.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static',filename='alerts_settings.css') }}?v={{ master }}">
   <link rel="stylesheet" href="{{ url_for('static',filename='theme.css') }}?v={{ master }}">
   {% block head %}{% endblock %}
 </head>
@@ -96,13 +96,13 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path d="M3 3 21 21"/></svg><span class="privacy-label">Mostrar</span>
         </button>
         <div class="alerts-wrap">
-          <button type="button" class="tool-icon" id="bell-open" aria-label="Alertas Kairos accionables sin leer" aria-expanded="false" aria-controls="alerts-popover" title="Alertas Kairos">
+          <button type="button" class="tool-icon" id="bell-open" aria-label="Alertas Kairos sin leer, 1H, 4H y 1D" aria-expanded="false" aria-controls="alerts-popover" title="Alertas Kairos">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></svg>
             <span id="bell-count" class="bell-count" hidden>0</span>
           </button>
           <div class="alerts-popover" id="alerts-popover" hidden>
             <div class="alerts-head"><strong>Alertas Kairos</strong><div class="settings-buttons"><button type="button" id="alerts-read-all" class="tiny-control" disabled>Marcar todas como leídas</button><button type="button" id="alerts-refresh" class="tiny-control">Actualizar</button></div></div>
-            <p class="alerts-caption">Solo acciones certificadas de KairosGPT; WATCH, PRECONFIRMADO y errores no urgentes quedan fuera.</p>
+            <p class="alerts-caption">Notificaciones 1H, 4H y 1D. Las alertas de vigilancia son informativas: no certifican órdenes, fills ni señales BSI.</p>
             <div id="alerts-list" class="alerts-list" aria-live="polite">Consultando…</div>
           </div>
         </div>
@@ -123,7 +123,7 @@
     {% block content %}{% endblock %}
   </div>
   <script defer src="{{ url_for('static', filename='table_sort.js') }}"></script>
-  <script defer src="{{ url_for('static', filename='alert_bell.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='alert_bell.js') }}?v={{ master }}"></script>
   <script defer src="{{ url_for('static', filename='theme.js') }}"></script>
   <script defer src="{{ url_for('static', filename='tooltips.js') }}?v={{ master }}"></script>
   <script defer src="{{ url_for('static', filename='privacy.js') }}?v={{ master }}"></script>

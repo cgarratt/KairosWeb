@@ -1,0 +1,344 @@
+{
+  "product": "KairosWeb",
+  "version": "2.0.5",
+  "base_release": "2.0.4",
+  "schema_version": "5.0.0",
+  "scope": "KairosWeb only",
+  "mode": "source-only, read-only simulation & alert read receipts via preexisting Google Sheets writer",
+  "files": [
+    {
+      "path": ".gitignore",
+      "sha256": "811b1846428a21fa35faf4076ee75b7d26b0cb1815784127c5bdc624ef94518d",
+      "bytes": 31
+    },
+    {
+      "path": "README.md",
+      "sha256": "7b26e21df222c9ccbf24ea555ededdedd7e5a0221ba40742ed1072ea90a60d22",
+      "bytes": 1352
+    },
+    {
+      "path": "RELEASE_NOTES_v2.0.5.md",
+      "sha256": "d8926f13826109bdc292fbf3516cb3e3d00236c951ac2ceb786b459c0f437e67",
+      "bytes": 4200
+    },
+    {
+      "path": "admin_origin.py",
+      "sha256": "7b7cd0a8bb25f8b0bdf98b7ffbef6a543acb98e3a4e62bb3da3f7badfa8f0f0c",
+      "bytes": 2850
+    },
+    {
+      "path": "app.py",
+      "sha256": "8d6b68565f7c397f9d191cb61ab86104b0c92605da8c245364557358c6ca51af",
+      "bytes": 86844
+    },
+    {
+      "path": "forecast_fibo_policy.py",
+      "sha256": "daa2ad4e72ca2fb0f884d85aa879288fabda03c7d3b1142dcb27f85c9282ecaa",
+      "bytes": 3508
+    },
+    {
+      "path": "forecast_math.py",
+      "sha256": "6eda9b0a79a252e1ddf93b9d56f39b9b0fdc8de29ecb5dacbacc67eedd9f1ebf",
+      "bytes": 1131
+    },
+    {
+      "path": "google_sheets_master.py",
+      "sha256": "26de4be978cb6f819eba72d574929e9370a5e88303c38532058b597cfbf304ea",
+      "bytes": 20251
+    },
+    {
+      "path": "hype_weekly.py",
+      "sha256": "be74bc45c7d1a8a8b92caf067794e5e11137cefff7b1dc12900dff97420adc19",
+      "bytes": 2783
+    },
+    {
+      "path": "kairos_sheets_features.py",
+      "sha256": "1531a1c32c65239d4d957ebf8e5c567a4c67aa1e885889d7a98eaf4df550a41e",
+      "bytes": 36472
+    },
+    {
+      "path": "o2_history.py",
+      "sha256": "5c569e9062eede48cb85915242b129554afb8f8e89fbcd90a1392314a4397f4f",
+      "bytes": 1965
+    },
+    {
+      "path": "pivot_candidates.py",
+      "sha256": "45bf4b56d8da1e8f2bed3387e97bd1fcd83bc581cfc5d1bcd0b4897bd52ddb88",
+      "bytes": 7068
+    },
+    {
+      "path": "pivot_preload.py",
+      "sha256": "5e00d545da1aca113ccd66bbc69bc66e812be35a8d6c96236261982fc0576e44",
+      "bytes": 3955
+    },
+    {
+      "path": "render.yaml",
+      "sha256": "2fe40dfca557991461cd9e5b7fcd797a48f063028b9bd6d8afb348f2b2dc1da7",
+      "bytes": 1026
+    },
+    {
+      "path": "requirements.txt",
+      "sha256": "e1d3ffa6aba5d67244d389d16dac37a010a08fbd717fd78201f6ea2cc988ab87",
+      "bytes": 87
+    },
+    {
+      "path": "static/alert_bell.js",
+      "sha256": "b1605c8b18d147794890a147d1295a7559d890b213a70970870e780a532b0300",
+      "bytes": 5061
+    },
+    {
+      "path": "static/alerts_settings.css",
+      "sha256": "e461d545dc4277d3a3ed35f98148d31ec814814297c051b4f1057b8f93ad9afd",
+      "bytes": 5173
+    },
+    {
+      "path": "static/forecast_balance.js",
+      "sha256": "eb3aeaa80b976bc49a4c7635baeb897ff928ad7dccd221ba58211ab3c763c603",
+      "bytes": 3549
+    },
+    {
+      "path": "static/forecast_fibo_plan.js",
+      "sha256": "073eee56374766c871f89667bccd36a8ea68c6c47ed56f04f3aa3367c6bbddc2",
+      "bytes": 1810
+    },
+    {
+      "path": "static/forecast_level_status.js",
+      "sha256": "9e0f4f154168de274031c6478c9b48a4ecb4312e3432f41e10f0e58f83993e39",
+      "bytes": 1828
+    },
+    {
+      "path": "static/forecast_segments.js",
+      "sha256": "9a6b0623fd1d0dac28a8c7ffb095f46f798ddc2177fdff1233fa7475b3196b5f",
+      "bytes": 3046
+    },
+    {
+      "path": "static/kairos-horizon-horizontal.svg",
+      "sha256": "b20ebf5f697c7cedf00e0e998e225e12d35f0f08fd859d38b58397fdbdce8a1a",
+      "bytes": 842
+    },
+    {
+      "path": "static/kairos-horizon.svg",
+      "sha256": "1a43750619a97825f2a92065e6ee3ef5f3e9f4fadd3780dc407755ae1130081c",
+      "bytes": 501
+    },
+    {
+      "path": "static/mcp_settings.js",
+      "sha256": "f6bb504fcaaff5bd346dbb94e885aba9f66299082246748935ed2da282fe03ee",
+      "bytes": 3611
+    },
+    {
+      "path": "static/o2_sequential.js",
+      "sha256": "f62bf1cae9f8047e55ff4ff8d552eba247369d6e18833954d36d42c7bbd02302",
+      "bytes": 2883
+    },
+    {
+      "path": "static/privacy.js",
+      "sha256": "8a7c026109135a43bfb36733d2a348418373beaf1c9abf90d5b961f5d8c3d69a",
+      "bytes": 4876
+    },
+    {
+      "path": "static/purchase_plan.js",
+      "sha256": "bcf5a1d3f8aec57a771631271efb7910747b8dd527e6fddb4eb020ec7582e08a",
+      "bytes": 1321
+    },
+    {
+      "path": "static/settings_format.js",
+      "sha256": "c1dc9bce4e02fa40ff450adc4e7bf128a6b15cd0488cf51293294cefb2b85868",
+      "bytes": 4182
+    },
+    {
+      "path": "static/settings_master.js",
+      "sha256": "c423f80a8a168f881904b74564becfb3b22b376851296e48cb0087fb85d2d2e7",
+      "bytes": 26780
+    },
+    {
+      "path": "static/table_sort.js",
+      "sha256": "6915cb9d19f9535ed3bdda102094201a9fbae885070cb2cf750d659a3916d7cb",
+      "bytes": 4477
+    },
+    {
+      "path": "static/theme.css",
+      "sha256": "cb2c8d8f489e4112bbf7ce6f66e32ede840651ea6c6fc1b59830e7460bff930f",
+      "bytes": 17543
+    },
+    {
+      "path": "static/theme.js",
+      "sha256": "065e0a338cbf6e0e819e2b4176953bfcc52f198fc457cbe336fec0c903082a9d",
+      "bytes": 1045
+    },
+    {
+      "path": "static/tooltips.js",
+      "sha256": "d6c0967b52498562b8e64657ddf704277f177473a08afa6597fc3d022065011e",
+      "bytes": 3397
+    },
+    {
+      "path": "templates/admin_login.html",
+      "sha256": "bfe877e1de20444596c2d3fcc55fd011db7c99f898638ae5ed5770001d3e061c",
+      "bytes": 951
+    },
+    {
+      "path": "templates/balancer.html",
+      "sha256": "be745a48a36341ac504657a996c44064f3435c292041fbbc8f5f210621e9f6ba",
+      "bytes": 11632
+    },
+    {
+      "path": "templates/base.html",
+      "sha256": "37eebe75930b53118a2e529e6cb956a25ffd8f13e39d964d8991a56b2494e533",
+      "bytes": 17205
+    },
+    {
+      "path": "templates/forecast.html",
+      "sha256": "7c7cbb41210b7063ec0df1e411156ad49f28a2df03e57297b0a53796311ae750",
+      "bytes": 34396
+    },
+    {
+      "path": "templates/index.html",
+      "sha256": "e4f418fe6cfc0e758a6e669ac8be1060d8bc49c570701dea08174081e010602a",
+      "bytes": 17977
+    },
+    {
+      "path": "templates/mode.html",
+      "sha256": "091b93d1278fbb8dbeaf4517d69c76c2877602e3043e9534fc81ef2d961981bf",
+      "bytes": 5185
+    },
+    {
+      "path": "templates/portfolio_integral.html",
+      "sha256": "ca82f585f7c6da50898f6f5d745d404d6edbdf18476b0e6588158a64188c484a",
+      "bytes": 7933
+    },
+    {
+      "path": "templates/settings.html",
+      "sha256": "d713aeceea544f89bf141573b0c1a2a1ede04b60519e9d2b92c3723c00bead3c",
+      "bytes": 5092
+    },
+    {
+      "path": "templates/sheet_error.html",
+      "sha256": "f657b1e816f8f116bedafc6ce1e10c7a6c19276c6c38de419f170914062669f9",
+      "bytes": 249
+    },
+    {
+      "path": "templates/trade_sim.html",
+      "sha256": "86b91abd1f4f0b06cca87dc707aa665635df6d0bbbdd72cc98756f3c5554484d",
+      "bytes": 16903
+    },
+    {
+      "path": "templates/tradingbot.html",
+      "sha256": "3357c0f94c8804d1f76955457afe433b2e510d8a6c154f03b5a52e555fe8d933",
+      "bytes": 11258
+    },
+    {
+      "path": "tests/browser_o2_drift_labels_v203.py",
+      "sha256": "aebaa34a6b713a082b87e0253dde006ef66ec27d167c49c89cbca1c7c19f4cfc",
+      "bytes": 2695
+    },
+    {
+      "path": "tests/browser_release_v205.py",
+      "sha256": "f1024e7c10f89ba53f701c694d8cb0a6b5993778bf5a8eba475d9aecdd5799fa",
+      "bytes": 3035
+    },
+    {
+      "path": "tests/test_admin_origin.py",
+      "sha256": "b30a74208f5e2f73bab1717e363558707b737b0b03d4ec914a19370602fbf157",
+      "bytes": 2491
+    },
+    {
+      "path": "tests/test_alerts_multiframe_dev.py",
+      "sha256": "73459c51f3217d94059df0fc76816d741d4f0714cf3d73699628d88bff0b25e1",
+      "bytes": 8391
+    },
+    {
+      "path": "tests/test_balancer_ui_v19.py",
+      "sha256": "49613296a972a28ea2da95797b0367d7c2e34088c063f1c22eae9dadfa92c3a2",
+      "bytes": 1286
+    },
+    {
+      "path": "tests/test_forecast_balance.js",
+      "sha256": "08a161ba7fd3d662c60c54e8ef83745f890f787c494adb3e854406f01fda6254",
+      "bytes": 1643
+    },
+    {
+      "path": "tests/test_forecast_balance_upgrade.py",
+      "sha256": "c93f6b39656bacb01bf2bf167bfcd8006c2d48adb98edb596ef22b4a2b14ff02",
+      "bytes": 1060
+    },
+    {
+      "path": "tests/test_forecast_fibo_v14.js",
+      "sha256": "d62afdca338fc0824526ee968ec26ee2abe35220932096a08c3e4f94e2456ba1",
+      "bytes": 775
+    },
+    {
+      "path": "tests/test_forecast_level_status_v19.js",
+      "sha256": "6e936c91e46ae6f1a73b3d345fe7e4a62da28386d4d860b9db76f6f9592e6795",
+      "bytes": 1036
+    },
+    {
+      "path": "tests/test_forecast_segments.js",
+      "sha256": "e2c068c25107d6c4b506c40b2e9d9c0d1a2ff58941a89f2cf8afeb3c8d0f7a8e",
+      "bytes": 1531
+    },
+    {
+      "path": "tests/test_google_sheets_master.py",
+      "sha256": "47ca0f63cac18ad79a8fe6e60e8ec6004a5b7cf8002e1c6b3c81316c3b7a8dd0",
+      "bytes": 10108
+    },
+    {
+      "path": "tests/test_hype_weekly.py",
+      "sha256": "61bd163ba478d03c958f182164d0ddc46932abc71c459b59231ca430d425d3be",
+      "bytes": 1397
+    },
+    {
+      "path": "tests/test_mode_template.py",
+      "sha256": "67fcd34943aeb57c1b39e761553843b80099e007174648f952769d111da6b8a4",
+      "bytes": 441
+    },
+    {
+      "path": "tests/test_o2_drift_labels_v203.js",
+      "sha256": "5ef08b11042c70a9f9052dd1e3612a420cd7f1c637a45afa68c47b503e6759cc",
+      "bytes": 2469
+    },
+    {
+      "path": "tests/test_o2_history_v204.py",
+      "sha256": "19fd85c2da5afe0e3411daf25712e8db3cd6286fc49bdea55974a1a8bb849d19",
+      "bytes": 832
+    },
+    {
+      "path": "tests/test_o2_sequential_v202.js",
+      "sha256": "991c41006d7aede1b4eb9920335cff901bfbc1cba19ebd29b86335f7a5f880f4",
+      "bytes": 872
+    },
+    {
+      "path": "tests/test_pivot_preload_v12.py",
+      "sha256": "a07d2046a23bfe1566b6ca0b818cc89b5f1db2cc117d5f13c9000ba2c4f5a97f",
+      "bytes": 4385
+    },
+    {
+      "path": "tests/test_purchase_slider_default_v201.py",
+      "sha256": "790d8bb24564c8a1894c8a723296d218b58c85d372ddbec491e5d900a357b683",
+      "bytes": 333
+    },
+    {
+      "path": "tests/test_release_v205.py",
+      "sha256": "71635622bcce29ad1b9079d76d04802e7515e602e972f6e9413a40fe0e109e20",
+      "bytes": 1924
+    },
+    {
+      "path": "tests/test_settings_format.js",
+      "sha256": "93a8e6282b6251b71c19f6c08a100f1afa0fe4d9571cee4207e9f46fbb1b4712",
+      "bytes": 826
+    },
+    {
+      "path": "tests/test_sheets_features.py",
+      "sha256": "abeff91918a6486928560ffb547bd2b8af3c26b4e0fc3e3a956d3e418674bdec",
+      "bytes": 9116
+    },
+    {
+      "path": "wave_nomenclature.py",
+      "sha256": "f95e4a834a0e71603ed2ea21f08795df216e48f36bb05882a239505d78d8685a",
+      "bytes": 1004
+    }
+  ],
+  "file_count": 66,
+  "package_variant": "GITHUB_COMPACTO",
+  "description": "Same v2.0.5 application source, trimmed historical documentation/legacy tests; excluded items in separate archive",
+  "self_manifest_excluded_from_hashes": true
+}
