@@ -5,7 +5,7 @@ from 07 are never recertified. Archived cycle data is exploratory only.
 """
 from wave_structure import (full_utc_weeks, weekly_o1_candidate, fib_grid,
                             post_o1_daily_low, weekly_wave_candidates, WaveStructureError)
-from buy_weekly_policy import select_buy_impulse
+from buy_weekly_policy import select_buy_impulse, proposed_simulation_impulse
 
 def resolve(token, published, archived, data):
     """Build an explicit CL/O1 and Fib O2 reference with traceable evidence."""
@@ -51,7 +51,7 @@ def resolve(token, published, archived, data):
         return dict(empty,status='INVALID_WEEKLY_SEQUENCE')
 
 
-def resolve_long_term_buy(token, published, data):
+def resolve_long_term_buy(token, published, data, archived=None):
     """Strict mode Compras only: latest 1W LOW->HIGH, 5L/5R and bullish BOS.
 
     No fallthrough to archived candidate prices or daily approximate highs.
@@ -66,6 +66,10 @@ def resolve_long_term_buy(token, published, data):
     try:
         weeks=full_utc_weeks(data.get('records') or [])
         decision=select_buy_impulse(weeks,published)
+        if not decision['eligible'] and decision.get('reason')!='ANCLA_CONFIRMADA_EN_CONFLICTO':
+            proposed=proposed_simulation_impulse(weeks,published,archived)
+            if proposed['eligible']:
+                decision=proposed
         if not decision['eligible']:
             return {**decision,'history':{'status':'N/D'},'quote_currency':'USDC' if token=='HYPE' else 'USDT'}
         high=decision['anchors']['high']

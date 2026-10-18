@@ -50,3 +50,66 @@ def test_confirmed_pivot_never_overwritten():
     ctx=select_buy_impulse(make_weeks());high=ctx['anchors']['high'];
     tampered={'waves':{'o1':{'status':'CONFIRMADO','date':high['date'],'price':199}}}
     assert select_buy_impulse(make_weeks(),tampered)['reason']=='ANCLA_CONFIRMADA_EN_CONFLICTO'
+
+
+def test_proposed_pair_can_simulate_without_weekly_bos():
+    from buy_weekly_policy import proposed_simulation_impulse
+    weeks=make_weeks(bos=False)
+    low=next(w for w in weeks if w['low']==50)
+    high=next(w for w in weeks if w['high']==200)
+    pub={'cycle_low':low['low'],'cl_date':low['low_date'],'cl_status':'PROPUESTO',
+         'waves':{'o1':{'price':high['high'],'date':high['high_date'],'status':'PROPUESTO'}}}
+    result=proposed_simulation_impulse(weeks,pub)
+    assert result['eligible'] is True
+    assert result['status']=='PROPUESTO_SIMULACION'
+    assert result['operational_blocked'] is True
+    assert result['mode']=='O2'
+    assert result['levels']['c1']==125
+
+
+def test_no_extreme_nd_blocks_simulation():
+    from buy_weekly_policy import proposed_simulation_impulse
+    weeks=make_weeks(bos=False)
+    assert not proposed_simulation_impulse(weeks,{})['eligible']
+    assert proposed_simulation_impulse(weeks,{})['reason']=='EXTREMO_LOW_ND'
+
+
+def test_archive_proposals_allow_simulated_levels_when_master_nd():
+    from buy_weekly_policy import proposed_simulation_impulse
+    weeks=make_weeks(bos=False)
+    lo=next(w for w in weeks if w['low']==50)
+    hi=next(w for w in weeks if w['high']==200)
+    draft=proposed_simulation_impulse(weeks,{},{'cycle_low':lo['low'], 'cl_date':lo['low_date'],
+        'o1':hi['high'], 'o1_date':hi['high_date']})
+    assert draft['eligible'] and draft['simulation_only'] and draft['operational_blocked']
+    assert draft['pivot_authority']['high']['status']=='PROPUESTO'
+
+
+def test_archived_invalid_or_open_week_cannot_grant_simulation():
+    from buy_weekly_policy import proposed_simulation_impulse
+    weeks=make_weeks(bos=False)
+    lo=next(w for w in weeks if w['low']==50)
+    hi=next(w for w in weeks if w['high']==200)
+    bogus=proposed_simulation_impulse(weeks,{},{'cycle_low':lo['low'], 'cl_date':lo['low_date'],
+        'o1':hi['high']+1, 'o1_date':hi['high_date']})
+    assert not bogus['eligible']
+    assert bogus['reason']=='EXTREMO_NO_COINCIDE_CON_1W_CERRADA'
+
+
+def test_confirmed_mismatch_not_downgraded_to_proposal():
+    from buy_weekly_policy import select_buy_impulse, proposed_simulation_impulse
+    weeks=make_weeks(); base=select_buy_impulse(weeks)
+    hi=base['anchors']['high']; lo=base['anchors']['low']
+    published={'cycle_low':lo['price'],'cl_date':lo['date'],'cl_status':'CONFIRMADO',
+       'waves':{'o1':{'price':hi['price']+1,'date':hi['date'],'status':'CONFIRMADO'}}}
+    assert not proposed_simulation_impulse(weeks,published)['eligible']
+
+
+def test_existing_cl_but_o1_nd_remains_blocked():
+    from buy_weekly_policy import proposed_simulation_impulse
+    weeks=make_weeks(bos=False)
+    low=next(w for w in weeks if w['low']==50)
+    p={'cycle_low':low['low'],'cl_date':low['low_date'],'cl_status':'PROPUESTO'}
+    result=proposed_simulation_impulse(weeks,p)
+    assert not result['eligible']
+    assert result['reason']=='EXTREMO_HIGH_ND'

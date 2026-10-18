@@ -11,18 +11,19 @@ import pytest
 def pair():
     weeks=make_weeks()
     draft=select_buy_impulse(weeks)
-    assert not draft['eligible'] and draft['reason']=='EXTREMOS_NO_VALIDADOS_EN_MASTER'
+    assert not draft['eligible'] and draft['reason']=='EXTREMOS_ND_EN_MASTER'
     return weeks,draft['anchors']['low'],draft['anchors']['high']
 
 def registered(low, high, low_state, high_state):
     return {'cycle_low':low['price'],'cl_date':low['date'],'cl_status':low_state,
             'waves':{'o1':{'price':high['price'],'date':high['date'],'status':high_state}}}
 
-def test_strict_symmetric_gate_for_published_pivots():
+def test_published_proposed_and_validated_allowed_in_simulation():
     weeks,low,high=pair()
     for a,b in [('PROPUESTO','VALIDADO'),('VALIDADO','PROPUESTO'),('PROPUESTO','PROPUESTO')]:
         res=select_buy_impulse(weeks,registered(low,high,a,b))
-        assert not res['eligible'] and res['reason']=='EXTREMOS_NO_VALIDADOS_EN_MASTER'
+        assert res['eligible'] and res['status']=='PROPUESTO_SIMULACION'
+        assert res['operational_blocked'] and res['simulation_only']
     for a,b in [('VALIDADO','VALIDADO'),('VALIDADO','CONFIRMADO'),('CONFIRMADO','VALIDADO'),('CONFIRMADO','CONFIRMADO')]:
         assert select_buy_impulse(weeks,registered(low,high,a,b))['eligible']
     altered=registered(low,high,'CONFIRMADO','VALIDADO')

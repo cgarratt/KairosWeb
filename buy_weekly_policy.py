@@ -1,7 +1,7 @@
 """Kairos LONG-TERM COMPRAS eligibility, shared with KairosGPT.
 
-Only the two most recent, *published VALIDADO/CONFIRMADO* closed-week pivots may
-supply an upward impulse.  No daily maxima, O2 legacy inverse Fibonacci or
+The two latest weekly anchors, including published or MCP PROPUESTO candidates,
+may supply a SIMULATION. Only independently approved pivots enable operations.  No daily maxima, O2 legacy inverse Fibonacci or
 unvalidated Elliott guesses.  Pure function: no MCP calls or Sheet writes.
 
 This is deliberately NOT a restriction on ordinary VENTAS or on explicitly
@@ -80,7 +80,7 @@ def _approved_extreme(published, kind, anchor, *, tolerance=1e-5):
             if str(when)[:10]==anchor['date'] and isclose(float(price),float(anchor['price']),rel_tol=tolerance):
                 matching.append({'pivot':name,'status':{'ESTIMADO':'PROPUESTO','CANDIDATO':'PROPUESTO','VALIDADO_TECNICAMENTE':'VALIDADO'}.get(str(status).upper(),str(status).upper())})
         except (TypeError,ValueError):continue
-    approved=next((x for x in matching if x['status'] in ('VALIDADO','CONFIRMADO')),None)
+    approved=next((x for x in matching if x['status'] in ('VALIDADO','CONFIRMADO')),None) or next((x for x in matching if x['status']=='PROPUESTO'),None)
     return approved,matching
 
 def select_buy_impulse(weeks, published=None, *, left=5, right=5):
@@ -134,13 +134,15 @@ def select_buy_impulse(weeks, published=None, *, left=5, right=5):
         low_ok,low_states=_approved_extreme(published,'LOW',low)
         high_ok,high_states=_approved_extreme(published,'HIGH',high)
         if not low_ok or not high_ok:
-            return blocked('EXTREMOS_NO_VALIDADOS_EN_MASTER',
+            return blocked('EXTREMOS_ND_EN_MASTER',
                            anchors={'low':low,'high':high},
                            low_state=low_ok or low_states or [{'status':'PROPUESTO'}],
                            high_state=high_ok or high_states or [{'status':'PROPUESTO'}])
         mode=_anchor_match(published,low,high)
         levels=fib_grid('O2',{'CL':low['price'],'O1':high['price']})
-        return {'status':'VALIDADO_TECNICAMENTE_NO_OPERATIVO','eligible':True,
+        provisional=any(p['status']=='PROPUESTO' for p in (low_ok,high_ok))
+        return {'status':'PROPUESTO_SIMULACION' if provisional else 'VALIDADO_TECNICAMENTE_NO_OPERATIVO',
+                'eligible':True,'simulation_only':True,'operational_blocked':provisional,
                 'reason':'PAREJA_SEMANAL_ALCISTA_5L5R_BOS', 'mode':mode,
                 'anchors':{'low':low,'high':high},'bos':bos,
                 'levels':dict(zip(('ref382','c1','c2','ref786'),levels.values())),
@@ -148,3 +150,65 @@ def select_buy_impulse(weeks, published=None, *, left=5, right=5):
                 'requires_explicit_user_trade_approval':True}
     except (ValueError,TypeError,KeyError) as exc:
         return blocked('ESTRUCTURA_INVALIDA',detail=str(exc)[:140])
+
+
+
+def proposed_simulation_impulse(weeks, published=None, archived=None):
+    """Non-actionable Compras preview when the most recent anchor is PROPUESTO.
+
+    Use an explicitly dated 1W LOW/HIGH from the Master or its MCP candidate
+    archive, or a freshly observed HIGH in a *closed* UTC week following a
+    dated CL candidate. Missing price/date (N/D), weekly mismatch and bearish
+    order fail closed. Never infer anchors by inverting legacy Fibonacci.
+    """
+    def deny(reason):
+        return {'eligible':False,'status':'BLOQUEADO','reason':reason,
+                'levels':None,'anchors':None,'mode':None}
+    published=published or {}; archived=archived or {}
+    waves=published.get('waves') or {}
+    anchors=[]
+    def add(label,kind,price,when,status,source):
+        if price is None or not when:return
+        try:
+            p=positive(price,label);d=iso_date(when,label).isoformat()
+            state={'ESTIMADO':'PROPUESTO','CANDIDATO':'PROPUESTO',
+                   'VALIDADO_TECNICAMENTE':'VALIDADO'}.get(str(status or 'PROPUESTO').upper(),str(status or 'PROPUESTO').upper())
+            if state not in ('PROPUESTO','VALIDADO','CONFIRMADO'):return
+            anchors.append({'pivot':label,'kind':kind,'price':p,'date':d,'status':state,'source':source})
+        except (ValueError,TypeError):pass
+    add('CL','LOW',published.get('cycle_low') or archived.get('cycle_low'),
+        published.get('cl_date') or archived.get('cl_date'),
+        published.get('cl_status','PROPUESTO'),'MASTER' if published.get('cycle_low') else 'MCP_ARCHIVE')
+    for name,kind in [('o1','HIGH'),('o2','LOW'),('o3','HIGH'),('o4','LOW'),('o5','HIGH')]:
+        rec=waves.get(name) or {}
+        add(name.upper(),kind,rec.get('price'),rec.get('date'),rec.get('status'), 'MASTER')
+    if not any(x['pivot']=='O1' for x in anchors):
+        add('O1','HIGH',archived.get('o1'),archived.get('o1_date'),'PROPUESTO','MCP_ARCHIVE')
+    lows=[x for x in anchors if x['kind']=='LOW']
+    if not lows:return deny('EXTREMO_LOW_ND')
+    # Do not manufacture an O1 when its price/date are N/D in both
+    # the published Master and its explicitly archived MCP proposals.
+    if len(anchors)<2:return deny('EXTREMO_HIGH_ND')
+    anchors.sort(key=lambda x:(x['date'],{'CL':0,'O1':1,'O2':2,'O3':3,'O4':4,'O5':5}.get(x['pivot'],9)))
+    low,high=anchors[-2:]
+    if low['kind']!='LOW' or high['kind']!='HIGH':return deny('ULTIMOS_PIVOTES_NO_ALCISTAS')
+    if high['price']<=low['price'] or high['date']<=low['date']:return deny('IMPULSO_INVALIDO')
+    def in_closed_week(item,field):
+        # Both anchors must be actual highs/lows observed in full UTC weeks.
+        for week in weeks:
+            if week['week_start']<=item['date']<=week['week_end']:
+                return isclose(float(week[field]),item['price'],rel_tol=1e-4,abs_tol=1e-12)
+        return False
+    if not in_closed_week(low,'low') or not in_closed_week(high,'high'):
+        return deny('EXTREMO_NO_COINCIDE_CON_1W_CERRADA')
+    mode='O2' if (low['pivot'],high['pivot'])==('CL','O1') else ('O4' if (low['pivot'],high['pivot'])==('O2','O3') else 'RETROCESO_ALCISTA')
+    grid=fib_grid('O2',{'CL':low['price'],'O1':high['price']})
+    return {'eligible':True,'status':'PROPUESTO_SIMULACION',
+            'reason':'PAREJA_SEMANAL_PROPUESTA_NO_CERTIFICADA',
+            'mode':mode, 'anchors':{'low':low,'high':high},
+            'levels':dict(zip(('ref382','c1','c2','ref786'),grid.values())),
+            'pivot_authority':{'low':{'pivot':low['pivot'],'status':low['status']},
+                               'high':{'pivot':high['pivot'],'status':high['status']}},
+            'simulation_only':True,'operational_blocked':True,
+            'requires_pivot_validation':True,
+            'requires_explicit_user_trade_approval':True}

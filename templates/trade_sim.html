@@ -14,7 +14,7 @@
 <div class="grid">
 <section class="panel span-12 hero"><div><h2>{{ mode.name }}</h2><p>{{ mode.description }}</p></div><div class="badge info">SIMULACIÓN · SIN ÓRDENES</div></section>
 {% include '_wave_confirmed.html' %}
-<section class="panel span-12"><h2>{{ 'Despliegue USDT · retrocesos semanales' if mode.slug=='compras' else 'Objetivo de liquidez USDT' }}</h2><p class="sub">{{ 'Solo tokens con los dos últimos pivotes semanales alcistas 5L/5R + BOS. La liquidez de activos bloqueados permanece en USDT.' if mode.slug=='compras' else 'Mover el slider vende primero activos sobreponderados y luego distribuye proporcionalmente entre los demás, hasta el límite de Exchange.' }}</p>
+<section class="panel span-12"><h2>{{ 'Despliegue USDT · retrocesos semanales' if mode.slug=='compras' else 'Objetivo de liquidez USDT' }}</h2><p class="sub">{{ 'Simulación: admite dos extremos semanales PROPUESTO / VALIDADO / CONFIRMADO; N/D bloquea. PROPUESTO no certifica órdenes. Caja no asignada permanece en USDT.' if mode.slug=='compras' else 'Mover el slider vende primero activos sobreponderados y luego distribuye proporcionalmente entre los demás, hasta el límite de Exchange.' }}</p>
 <div class="sim-layout{{ ' purchase-metrics' if mode.slug=='compras' else '' }}" style="margin:18px 0">
 <div class="sim-metric"><small>◉ Patrimonio estimado</small><b id="portfolio-metric">—</b><small>Spot MCP + snapshot</small></div>
 <div class="sim-metric"><small>◈ USDT físico</small><b id="cash-metric">—</b><small id="cash-pct">—</small></div>
@@ -97,8 +97,8 @@ function renderO2Fibonacci(sim){
     return `<td class="${css}" title="${historicalTitle}"><span class="o2-fib-inline">${fibPrice(level)}${label}</span></td><td class="${css}" title="${historicalTitle}">${dollar(amount)}</td>`;
   }).join('');
   const ctx=source.weekly_context?.[t.token]||{};
-  const kind=ctx.eligible===true?(ctx.mode==='RETROCESO_ALCISTA'?'RETROCESO ALCISTA':ctx.mode):'BLOQUEADO';
-  const reason=ctx.eligible===true?'Pareja 1W 5L/5R + BOS':'Sin 2 pivotes válidos · '+(ctx.reason||ctx.status||'N/D');
+  const kind=ctx.eligible===true?((ctx.mode==='RETROCESO_ALCISTA'?'RETROCESO ALCISTA':ctx.mode)+(ctx.operational_blocked?' · PROPUESTO':'')):'BLOQUEADO';
+  const reason=ctx.eligible===true?(ctx.operational_blocked?'Simulación provisional · extremos PROPUESTO/no certificados; sin órdenes':'Pareja 1W 5L/5R + BOS, simulación'):'Sin dos extremos semanales disponibles · '+(ctx.reason||ctx.status||'N/D');
   return `<tr><td title="${reason}">${token(t.token)}<small style="display:block;color:var(--muted);font-size:10px">${kind}</small></td><td>${fibPrice(t.price)}</td>${pairs}<td><b>${dollar(total)}</b></td></tr>`;
  }).join('');
  el('fib-total').innerHTML=`<tr><td>TOTAL USDT</td><td>—</td>${sim.consumed.map(v=>`<td>—</td><td>${dollar(v)}</td>`).join('')}<td><b>${dollar(sim.spent)}</b></td></tr>`;

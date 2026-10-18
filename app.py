@@ -29,7 +29,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.8'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.9'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -65,6 +65,7 @@ MODE_DEFS = [
     {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Retrocesos de impulsos alcistas semanales con dos pivotes válidos; sin pivotes, compras bloqueadas.'},
     {'slug':'ventas','name':'Ventas','subtitle':'Objetivo USDT','description':'Propuestas solo SELL para acercarse a la meta de liquidez y reducir sobrepeso.'},
     {'slug':'forecast','name':'Forecast','subtitle':'Cycle Low → O5','description':'Tabla de niveles O2C1–O2C4 y ondas/pivotes proyectados; todo es simulación.'},
+    {'slug':'ordenes','name':'Órdenes','subtitle':'Bandeja de propuestas','description':'Balance de portafolio y objetivos LIMIT Fibonacci 1W, por exchange y token; fase 1 solo lectura.'},
     {'slug':'tradingbot','name':'TradingBot','subtitle':'Táctico 4H','description':'Vista táctica preliminar para la reserva de trading y activos de seguimiento.'},
 ]
 # Future mode enablement is centralized: disabled modes do not appear in any global nav.
@@ -538,7 +539,7 @@ def build_mode_payload(slug, d, observed):
                     if data.get('status')!='OK':
                         data=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
                             {'symbol':token+'USDT','interval':'1d','limit':365})
-                return token,(resolve_long_term_buy(source_token,pub.get(token,{}),data) if slug=='compras'
+                return token,(resolve_long_term_buy(source_token,pub.get(token,{}),data,archive_by_token.get(source_token,{})) if slug=='compras'
                     else resolve_weekly_wave_context(source_token,pub.get(token,{}),
                     archive_by_token.get(source_token,{}),data))
             except Exception:
@@ -551,7 +552,7 @@ def build_mode_payload(slug, d, observed):
     if slug == 'compras':
         return {'o2_histories':weekly_histories,'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
             'kind':'compras', 'current':purchase_current, 'tokens':purchase_tokens,
-            'o2_level_reference':'MCP_WEEKLY_LAST_TWO_5L5R_BOS_NO_ORDERS',
+            'o2_level_reference':'MCP_WEEKLY_PROPOSED_OR_VALIDATED_SIMULATION_ONLY',
             'forecast_o2_allocation':o2_weights, 'o2_levels':weekly_levels,
             'buy_eligibility':{t:bool(c.get('eligible',False)) for t,c in weekly_context.items()},
             'buy_stage_weights':{t:(fibo_allocations['o4'] if c.get('mode')=='O4' else o2_weights)
@@ -953,6 +954,26 @@ def integral_portfolio_page():
                            spot=spot_breakdown, spot_observed=spot_observed,
                            source_note=values['source_note'], total_recorded=sum(x['actual_usdt'] for x in segments),
                            total_target=sum(x['target_usdt'] for x in segments))
+
+@app.route('/mode/ordenes')
+def orders_inbox_page():
+    """Phase 1: no exchange API, no proposed items written to 05_ORDENES."""
+    mode=MODES_BY_SLUG['ordenes']
+    try:
+        observed,d=load_live_dashboard()
+        buy=build_mode_payload('compras',d,observed)
+        bal=balancer_report(d,observed)
+        from orders_inbox import build_order_inbox
+        from wave_macro_context import published_wave_levels
+        wave_levels=published_wave_levels(g.kairos_state['wave_pivots'])
+        inbox=build_order_inbox(d,buy,bal,wave_levels=wave_levels)
+        return render_template('ordenes.html',mode=mode,inbox=inbox,observed=observed,
+                               snapshot=g.kairos_state['control']['snapshot_id'],master=APP_VERSION,error=None)
+    except Exception as exc:
+        incident=uuid.uuid4().hex[:10]
+        app.logger.error('Orders inbox DATA_ERROR id=%s class=%s',incident,type(exc).__name__)
+        return render_template('ordenes.html',mode=mode,inbox=None,observed=None,
+                               snapshot=None,master=APP_VERSION,error='Datos MCP/Sheets o pivotes no disponibles. Ninguna propuesta nueva mostrada.'),503
 
 @app.route('/mode/<slug>')
 def mode_page(slug):
@@ -1393,6 +1414,9 @@ def _deployed_asset_status():
         'weekly_fibonacci': ('wave_structure.py', ('def full_utc_weeks(', 'def fib_grid(')),
         'buy_weekly_gate': ('buy_weekly_policy.py', ('def select_buy_impulse(', 'BOS_ALCISTA_SEMANAL_PENDIENTE')),
         'buy_weekly_ui': ('templates/trade_sim.html', ('buy_eligibility', 'requireEligibility')),
+        'orders_page': ('templates/ordenes.html', ('data-orders-category', 'Referencia técnica más cercana por token', 'FASE 1 · SOLO PROPUESTAS')),
+        'orders_engine': ('orders_inbox.py', ('def build_order_inbox(', 'def structural_sell_candidates(', 'def portfolio_candidates(')),
+        'orders_filters': ('static/orders_inbox.js', ('function visible(', 'orders-category', 'data-orders-category')), 
     }
     files = {}
     for key, (filename, markers) in critical.items():
