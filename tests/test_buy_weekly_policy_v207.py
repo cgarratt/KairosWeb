@@ -19,22 +19,26 @@ def make_weeks(*, final_low=False, bos=True):
     return full_utc_weeks(records)
 
 def test_latest_upward_two_pivots_and_o2_default():
-    weeks=make_weeks();ctx=select_buy_impulse(weeks)
+    weeks=make_weeks();demo=select_buy_impulse(weeks)
+    assert demo['eligible'] is False  # no published VALIDADO/CONFIRMADO pivots
+    low,high=demo['anchors']['low'],demo['anchors']['high']
+    ctx=select_buy_impulse(weeks,{'cycle_low':low['price'],'cl_date':low['date'],'cl_status':'VALIDADO',
+        'waves':{'o1':{'price':high['price'],'date':high['date'],'status':'CONFIRMADO'}}})
     assert ctx['eligible'] is True
-    assert ctx['mode']=='RETROCESO_ALCISTA'
+    assert ctx['mode']=='O2'
     assert ctx['anchors']['low']['price']==50
     assert ctx['anchors']['high']['price']==200
     assert ctx['levels']['c1']==125
     assert ctx['bos']['bos_week']==weeks[29]['week_start']
 
 def test_o2_o4_named_only_when_both_anchors_match():
-    ctx=select_buy_impulse(make_weeks())
-    pair=ctx['anchors'];low=pair['low'];high=pair['high']
-    o2=select_buy_impulse(make_weeks(),{'cycle_low':50,'cl_date':low['date'],
-        'waves':{'o1':{'price':200,'date':high['date'],'status':'ESTIMADO'}}})
+    draft=select_buy_impulse(make_weeks())
+    pair=draft['anchors'];low=pair['low'];high=pair['high']
+    o2=select_buy_impulse(make_weeks(),{'cycle_low':50,'cl_date':low['date'],'cl_status':'VALIDADO',
+        'waves':{'o1':{'price':200,'date':high['date'],'status':'CONFIRMADO'}}})
     assert o2['mode']=='O2'
-    o4=select_buy_impulse(make_weeks(),{'waves':{'o2':{'price':50,'date':low['date']},
-        'o3':{'price':200,'date':high['date']}}})
+    o4=select_buy_impulse(make_weeks(),{'waves':{'o2':{'price':50,'date':low['date'],'status':'VALIDADO'},
+        'o3':{'price':200,'date':high['date'],'status':'VALIDADO'}}})
     assert o4['mode']=='O4'
 
 def test_blocks_without_bos_or_upward_last_two():

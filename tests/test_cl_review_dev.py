@@ -21,7 +21,7 @@ def test_weekly_validation_5l5r_plus_close_bos():
                       'high':high,'low':low,'close':close})
     price_date=weeks[12]['low_date']
     result=review_cl(weeks,1,price_date)
-    assert result['validated'] and result['status']=='VALIDADO_TECNICAMENTE'
+    assert result['validated'] and result['status']=='VALIDADO'
     assert result['protected_high']==30
     assert result['bos_week']==weeks[18]['week_start']
     not_bos=[dict(w,close=9) for w in weeks]
@@ -34,7 +34,7 @@ def test_cl_requires_technical_proof_and_two_published_steps(monkeypatch):
     monkeypatch.setenv('KAIROS_SESSION_SECRET','a_very_secure_test_session_secret_for_kairos')
     raw=demo_master()
     snapshot=next(r[1] for r in raw[SHEETS['control']] if r and r[0]=='snapshot_id')
-    candidate={'token':'BTC','cycle_low':.2772,'cl_date':'2026-02-01','cl_status':'VALIDADO_TECNICAMENTE'}
+    candidate={'token':'BTC','cycle_low':.2772,'cl_date':'2026-02-01','cl_status':'VALIDADO'}
     with pytest.raises(SettingsError,match='requiere revisión MCP'):
         prepare_changes(raw,'pivots',[candidate],evidence='Validación técnica pendiente en MCP')
     with pytest.raises(SettingsError,match='primero valida'):
@@ -45,18 +45,18 @@ def test_cl_requires_technical_proof_and_two_published_steps(monkeypatch):
     assert not verify_review('BTC',.2773,'2026-02-01',snapshot,proof)
     edits,updated=prepare_changes(raw,'pivots',[{**candidate,'cl_review_proof':proof}],
                                   evidence='CL BTC cumple 5L5R y BOS semanal revisado')
-    assert ('pivots',1,26,'VALIDADO_TECNICAMENTE') in edits
-    assert updated['wave_pivots']['BTC']['cl_status']=='VALIDADO_TECNICAMENTE'
+    assert ('pivots',1,26,'VALIDADO') in edits
+    assert updated['wave_pivots']['BTC']['cl_status']=='VALIDADO'
     # Step 2 occurs only after the technical status is *published* in the Master.
     raw[SHEETS['pivots']][1].extend([None]*27)
     raw[SHEETS['pivots']][1][1]=.2772;raw[SHEETS['pivots']][1][2]='2026-02-01'
-    raw[SHEETS['pivots']][1][26]='VALIDADO_TECNICAMENTE'
+    raw[SHEETS['pivots']][1][26]='VALIDADO'
     edits,confirmed=prepare_changes(raw,'pivots',[{'token':'BTC','cl_status':'CONFIRMADO'}],
             evidence='Usuario confirma formalmente el Cycle Low después de revisar estructura semanal')
     assert ('pivots',1,26,'CONFIRMADO') in edits
     assert confirmed['wave_pivots']['BTC']['cl_status']=='CONFIRMADO'
     raw[SHEETS['pivots']][1][26]='CONFIRMADO'
-    for mutation in ({'token':'BTC','cycle_low':.25},{'token':'BTC','cl_status':'CANDIDATO'},
+    for mutation in ({'token':'BTC','cycle_low':.25},{'token':'BTC','cl_status':'PROPUESTO'},
                      {'token':'BTC','cl_date':'2026-02-02'}):
         with pytest.raises(SettingsError,match='inmutable'):
             prepare_changes(raw,'pivots',[mutation],evidence='Intento de modificar CL confirmado')

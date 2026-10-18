@@ -105,7 +105,7 @@ def weekly_o1_candidate(weeks, cl_price, cl_date, *, published_o1=None, left=5,r
     if published_o1 and published_o1.get('price') and published_o1.get('date'):
         val=positive(published_o1['price'],'estimated O1');dt=iso_date(published_o1['date'],'O1 date')
         if dt<=start or val<=cl:raise WaveStructureError('Estimated O1 invalid relative to CL')
-        return {'price':val,'date':dt.isoformat(),'status':'ESTIMADO','source':'07_PIVOTES_PUBLICADO',
+        return {'price':val,'date':dt.isoformat(),'status':('VALIDADO' if published_o1.get('status') in ('VALIDADO','VALIDADO_TECNICAMENTE') else 'PROPUESTO'),'source':'07_PIVOTES_PUBLICADO',
                 'week_start':(dt-timedelta(days=dt.weekday())).isoformat(),'pivot_5l5r':False,
                 'bos_certified_by_mcp':False}
     eligible=[(i,w) for i,w in enumerate(weeks) if iso_date(w['week_start'],'week')>start and w['high']>cl]
@@ -117,7 +117,7 @@ def weekly_o1_candidate(weeks, cl_price, cl_date, *, published_o1=None, left=5,r
     pivot=(index>=left and index+right<len(weeks) and
            all(w['high']>x['high'] for x in weeks[index-left:index]+weeks[index+1:index+right+1]))
     return {'price':w['high'],'date':w['high_date'],'week_start':w['week_start'],
-            'status':'ESTIMADO','source':'MCP_WEEKLY_CLOSED_CANDIDATE',
+            'status':'PROPUESTO','source':'MCP_WEEKLY_CLOSED_CANDIDATE',
             'pivot_5l5r':pivot,'bos_certified_by_mcp':False,
             'review':'BOS and human certification required; never executable'}
 
@@ -164,7 +164,7 @@ def weekly_wave_candidates(weeks, cl_date, *, left=5, right=5):
         if not candidates:break
         i,curr=candidates[0]
         chosen[wave]={'price':curr[kind],'date':curr[f'{kind}_date'],
-                      'week_start':curr['week_start'],'status':'ESTIMADO',
+                      'week_start':curr['week_start'],'status':'PROPUESTO',
                       'pivot_5l5r':True,'bos_status':'PENDIENTE_VALIDACION',
                       'human_certification':False,'source':'MCP_WEEKLY_CLOSED'}
         last_idx=i

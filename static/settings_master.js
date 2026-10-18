@@ -8,7 +8,7 @@
     tier_custody:'04_CUSTODIA · Porcentajes simulados por Tier; no realiza traspasos reales.',
     liquidity:'03_LIQUIDEZ · Saldos USDT por venue; Quantfury se cuenta una sola vez.',
     parameters:'12_PARAMETROS_KAIROS · Valores aprobados, porcentajes y planes de ventas. Cada parámetro describe su impacto.',
-    pivots:'07_PIVOTES · CL: CANDIDATO → VALIDADO TÉCNICAMENTE (1W 5L/5R+BOS) → CONFIRMADO. Solo Configuración permite confirmaciones manuales mediante Validar → Publicar; O1–O5 mantienen estados ESTIMADO/CONFIRMADO.',mcp:'Diagnóstico MCP independiente del Master. Consultas de solo lectura y reconexión sin reiniciar Render.'};
+    pivots:'07_PIVOTES · CL y O1–O5: PROPUESTO → VALIDADO (5L/5R+BOS 1W) → CONFIRMADO. «Actualizar candidatos desde MCP» revisa todos los no confirmados; «Validar → Publicar» registra estados sin ejecutar órdenes.',mcp:'Diagnóstico MCP independiente del Master. Consultas de solo lectura y reconexión sin reiniciar Render.'};
   const PARAM_GROUPS=[
     {id:'portfolio',name:'Portafolio',description:'Únicas dos reglas: meta general de liquidez USDT y tolerancia de desvío Balancer.',keys:['STRUCTURAL_USDT_TARGET','DRIFT_BAND_PP']},
     {id:'o2',name:'Compras O2 · Forecast',description:'Cuatro retrocesos independientes: 100% del presupuesto máximo de 25% P de O2.',prefix:'FORECAST_O2_FIB_'},
@@ -43,8 +43,38 @@
   const totals=document.getElementById('settings-totals');
   let state=null,tab='units',pivots={},archiveLoaded=false,refreshingPivots=false,autoO1Started=false;
   const clReviewProofs={};
+  const waveReviewProofs={};
+
+  let bulkReviewing=false;
   function el(t,c,value){const x=document.createElement(t);if(c)x.className=c;if(value!==undefined)x.textContent=String(value);return x;}
   function message(m){status.textContent=m;}
+  // Shared, decorative token logos in Configuración. Only approved tokens
+  // receive a logo; other settings keys/venues/tiers remain plain text.
+  // Assets match the catalog already used by the KairosWeb dashboard.
+  const SETTINGS_COIN_LOGOS=Object.freeze({
+    BTC:'bitcoin-btc', ETH:'ethereum-eth', SOL:'solana-sol',
+    LINK:'chainlink-link', HYPE:'hyperliquid-hype', HBAR:'hedera-hbar',
+    SUI:'sui-sui', ONDO:'ondo-finance-ondo',
+    PUMP:'pump-fun-pump', PUMPFUN:'pump-fun-pump',
+    PLUME:'plume-plume', PEPE:'pepe-pepe',
+    VIRTUAL:'virtual-protocol-virtual'
+  });
+  function settingsTokenLabel(token){
+    const key=String(token??'').toUpperCase();
+    const wrap=el('span','settings-token-identity');
+    const logo=SETTINGS_COIN_LOGOS[key];
+    if(logo){
+      const icon=el('span','coin-icon settings-coin-icon');
+      const fallback=el('span','coin-fallback',key==='PUMPFUN'?'PU':key.slice(0,2));
+      const img=el('img');
+      img.loading='lazy';img.decoding='async';img.alt='';
+      img.src='https://cryptologos.cc/logos/'+logo+'-logo.png';
+      img.addEventListener('error',()=>{img.remove();icon.classList.add('missing');});
+      icon.append(fallback,img);wrap.append(icon);
+    }
+    wrap.append(el('strong','token-name',String(token??'')));
+    return wrap;
+  }
   function numerical(v){const x=Number(v);return Number.isFinite(x)?x:0;}
   function cleanFloat(v){return String(Number(Number(v).toPrecision(12)));}
   const pc=(n)=>`${cleanFloat(n)}%`;
@@ -126,45 +156,25 @@
   }
   function drawPivotTable(){
     const mount=document.getElementById('settings-pivot-matrix');mount.hidden=false;mount.replaceChildren();
-    const help=el('p','settings-hint','CL: CANDIDATO → VALIDADO TÉCNICAMENTE (5L/5R + BOS 1W) → CONFIRMADO por decisión administrativa. La validación técnica no confirma automáticamente ondas; fechas UTC.');mount.append(help);
+    const help=el('p','settings-hint','CL y O1–O5: PROPUESTO → VALIDADO → CONFIRMADO. Solo el último estado queda bloqueado; el MCP no publica ni confirma automáticamente. Fechas UTC.');mount.append(help);
     const wrap=el('div','pivot-matrix-scroll'),table=el('table','pivot-wave-table');
     const head=el('thead'),header=el('tr');['Token','Cycle Low (1W)','O1','O2','O3','O4','O5'].forEach(label=>header.append(el('th','',label)));head.append(header);table.append(head);
     const tbody=el('tbody');
     state.sections.pivots.forEach(rec=>{
-      const row=el('tr');row.dataset.pivotRow=rec.token;row.append(el('th','',rec.token));
+      const row=el('tr');row.dataset.pivotRow=rec.token;const tokenHead=el('th','settings-pivot-token');tokenHead.append(settingsTokenLabel(rec.token));row.append(tokenHead);
       const cl=el('td','pivot-wave-cell');
       const clLocked=rec.cl_status==='CONFIRMADO'||rec.o1_status==='CONFIRMADO';
       cl.classList.toggle('pivot-locked',clLocked);
       cl.append(pivotControl('number',rec.cycle_low,rec.token,'cycle_low',clLocked),pivotControl('date',rec.cl_date,rec.token,'cl_date',clLocked));
       const clSelect=el('select','pivot-wave-status');clSelect.dataset.pivotToken=rec.token;clSelect.dataset.pivotField='cl_status';
-      for(const [value,label] of [['CANDIDATO','CANDIDATO'],['VALIDADO_TECNICAMENTE','VALIDADO TÉCNICAMENTE'],['CONFIRMADO','CONFIRMADO']]){
+      for(const [value,label] of [['PROPUESTO','PROPUESTO'],['VALIDADO','VALIDADO'],['CONFIRMADO','CONFIRMADO']]){
         const opt=el('option','',label);opt.value=value;clSelect.append(opt);
       }
-      clSelect.value=rec.cl_status||'CANDIDATO';clSelect.disabled=clLocked;
+      clSelect.value=rec.cl_status||'PROPUESTO';clSelect.disabled=clLocked;
       clSelect.setAttribute('aria-label',rec.token+' CL estado');
       clSelect.addEventListener('change',()=>{clSelect.dataset.userEdited='true';});
       cl.append(clSelect);
-      if(!clLocked){
-        const verify=el('button','tiny-control','Verificar CL 1W');verify.type='button';verify.dataset.clReviewToken=rec.token;
-        const report=el('span','settings-hint');report.dataset.clReviewResult=rec.token;
-        verify.addEventListener('click',async()=>{
-          const raw=document.querySelector(`[data-pivot-token="${rec.token}"][data-pivot-field="cycle_low"]`)?.value;
-          const date=document.querySelector(`[data-pivot-token="${rec.token}"][data-pivot-field="cl_date"]`)?.value;
-          const price=Number(raw);if(!(price>0)||!date){report.textContent='Se requiere CL positivo y fecha UTC';return;}
-          verify.disabled=true;report.textContent='Verificando 5L/5R y BOS semanal en MCP…';delete clReviewProofs[rec.token];
-          try{
-            const u='/api/settings/pivots/cl-review?'+new URLSearchParams({token:rec.token,cl_price:String(price),cl_date:date});
-            const resp=await fetch(u,{cache:'no-store',credentials:'same-origin'});const result=await resp.json();
-            if(!resp.ok)throw Error(result.reason||result.status||'Error de MCP');
-            report.textContent=result.reason||result.status;
-            if(result.validated&&result.review_proof){
-              clReviewProofs[rec.token]={price,date,proof:result.review_proof};
-              clSelect.value='VALIDADO_TECNICAMENTE';clSelect.dataset.userEdited='true';
-            }else if(rec.cl_status!=='CONFIRMADO')clSelect.value=rec.cl_status||'CANDIDATO';
-          }catch(e){report.textContent='DATA ERROR: '+e.message;}finally{verify.disabled=false;}
-        });
-        cl.append(verify,report);
-      }else cl.append(el('span','pivot-immutable','🔒 CL bloqueado'));
+      if(clLocked)cl.append(el('span','pivot-immutable','🔒 CL bloqueado'));
       row.append(cl);
       WAVE_NAMES.forEach(w=>{
         const locked=rec[w+'_status']==='CONFIRMADO';
@@ -172,8 +182,8 @@
         const price=pivotControl('number',rec[w],rec.token,w,locked);price.min='0';price.step='any';price.placeholder='N/D';cell.append(price);
         const day=pivotControl('date',rec[w+'_date'],rec.token,w+'_date',locked);cell.append(day);
         const statusSelect=el('select','pivot-wave-status');statusSelect.dataset.pivotToken=rec.token;statusSelect.dataset.pivotField=w+'_status';
-        for(const val of ['ESTIMADO','CONFIRMADO']){const option=el('option','',val);option.value=val;statusSelect.append(option);}
-        statusSelect.value=rec[w+'_status']||'ESTIMADO';statusSelect.disabled=locked;
+        for(const val of ['PROPUESTO','VALIDADO','CONFIRMADO']){const option=el('option','',val);option.value=val;statusSelect.append(option);}
+        statusSelect.value=rec[w+'_status']||'PROPUESTO';statusSelect.disabled=locked;
         statusSelect.setAttribute('aria-label',rec.token+' '+w+' estado');
         statusSelect.addEventListener('change',()=>{statusSelect.dataset.userEdited='true';});
         cell.append(statusSelect);
@@ -198,17 +208,28 @@
         if(field.endsWith('_status'))value=raw;
         else if(field.endsWith('_date'))value=raw||null;
         else if(raw){value=Number(raw);if(!Number.isFinite(value)||value<=0)throw Error(rec.token+' '+field+': precio inválido');}
-        const orig=field==='cl_status'?(rec.cl_status||'CANDIDATO'):(rec[field]??null);
+        const orig=field==='cl_status'?(rec.cl_status||'PROPUESTO'):(rec[field]??null);
         if(value!==orig && (typeof value!=='number'||Math.abs(value-Number(orig))>1e-11))changed=true;
         if(value!==null)data[field]=value;
       }
       if(changed){
-        if(data.cl_status==='VALIDADO_TECNICAMENTE'&&rec.cl_status!=='VALIDADO_TECNICAMENTE'){
+        if(data.cl_status==='VALIDADO'&&(rec.cl_status!=='VALIDADO'||data.cycle_low!==rec.cycle_low||data.cl_date!==rec.cl_date)){
           const proof=clReviewProofs[rec.token];
-          if(!proof||proof.price!==data.cycle_low||proof.date!==data.cl_date)throw Error(rec.token+' CL: pulsa «Verificar CL 1W» primero');
+          if(!proof||proof.price!==data.cycle_low||proof.date!==data.cl_date)throw Error(rec.token+' CL: pulsa «Actualizar candidatos desde MCP» para verificar 1W');
           data.cl_review_proof=proof.proof;
         }
-        if(data.cl_status==='CONFIRMADO'&&rec.cl_status!=='VALIDADO_TECNICAMENTE'&&rec.cl_status!=='CONFIRMADO')
+        for(const w of WAVE_NAMES){
+          const v=data[w+'_status'];
+          if(v==='VALIDADO'&&(rec[w+'_status']!=='VALIDADO'||data[w]!==rec[w]||data[w+'_date']!==rec[w+'_date'])){
+            const proof=waveReviewProofs[rec.token+'|'+w];
+            if(!proof||proof.price!==data[w]||proof.date!==data[w+'_date'])
+              throw Error(rec.token+' '+w.toUpperCase()+': requiere validación 1W mediante «Actualizar candidatos desde MCP»');
+            data[w+'_review_proof']=proof.proof;
+          }
+          if(v==='CONFIRMADO'&&rec[w+'_status']!=='VALIDADO'&&rec[w+'_status']!=='CONFIRMADO')
+            throw Error(rec.token+' '+w.toUpperCase()+': publica primero VALIDADO y después CONFIRMADO');
+        }
+        if(data.cl_status==='CONFIRMADO'&&rec.cl_status!=='VALIDADO'&&rec.cl_status!=='CONFIRMADO')
           throw Error(rec.token+' CL: publica primero VALIDADO TÉCNICAMENTE y luego confirma en otra revisión');
         out.push(data);
       }
@@ -218,6 +239,7 @@
   function draw(){
     document.getElementById('settings-title').textContent=names[tab];
     document.getElementById('settings-desc').textContent=desc[tab];
+    save.textContent=tab==='pivots'?'Validar → Publicar pivotes':'Guardar cambios';
     document.getElementById('settings-snapshot').textContent=state?`Snapshot: ${state.snapshot_id} · Corte: ${state.fecha_corte} · Cambios auditados`:'';
     body.replaceChildren();totals.replaceChildren();more.hidden=tab!=='pivots';
     const pivotMatrix=document.getElementById('settings-pivot-matrix');pivotMatrix.hidden=tab!=='pivots';if(tab!=='pivots')pivotMatrix.replaceChildren();
@@ -251,7 +273,8 @@
         primary.append(el('strong','token-name',fmt.labels[entry.key]||entry.key),el('small','settings-key',entry.key));
         if(entry.description)primary.append(el('p','parameter-description',entry.description));
         primary.append(el('small','settings-hint',`Área: ${entry.module_name} · Estado: ${entry.status} · Fuente: ${entry.source||'Master'}`));
-      }else primary.append(el('strong','token-name',entry[rowKey()]));
+      }else if((tab==='units'||tab==='targets')&&entry.token)primary.append(settingsTokenLabel(entry.token));
+      else primary.append(el('strong','token-name',entry[rowKey()]));
       item.append(primary);
       for(const [field,label] of sectionFields[tab])makeField(item,entry,index,field,label);
       if(tab==='units'){
@@ -379,8 +402,8 @@
         : body.querySelector(`[data-index="${ix}"][data-field="${field}"]`);
       if(!input || input.dataset.userEdited==='true')continue;
       // Historical/approved values from the official table always have priority.
-      if(field==='o1'&&current.o1_status==='CONFIRMADO')continue;
-      if(current[field]!==null&&current[field]!==undefined&&current[field]!=='')continue;
+      if(field==='cycle_low'&&current.cl_status==='CONFIRMADO')continue;
+      if(field!=='cycle_low'&&current[field+'_status']==='CONFIRMADO')continue;
       const val=rec[field];
       if(val!==null&&val!==undefined&&rec.status!=='DATA_ERROR'){
         input.value=String(val);
@@ -390,7 +413,7 @@
     // Suggest dates as well as prices; never replace confirmed or manually edited fields.
     for(const field of ['cl_date',...WAVE_NAMES.map(w=>w+'_date')]){
       const input=document.querySelector(`[data-pivot-token="${rec.token}"][data-pivot-field="${field}"]`);
-      if(!input||input.disabled||input.dataset.userEdited==='true'||current[field])continue;
+      if(!input||input.disabled||input.dataset.userEdited==='true')continue;
       const val=rec[field];if(val&&rec.status!=='DATA_ERROR')input.value=val;
     }
     const info=body.querySelector(`[data-pivot-info="${rec.token}"]`);
@@ -420,7 +443,7 @@
       message('Datos MCP históricos preliminares cargados. No se han modificado ni certificado los pivotes del Master.');
       // Enrich missing O1 in the background, per token, without blocking Settings.
       // Existing official fields and user edits always take priority.
-      if(tab==='pivots'&&!autoO1Started)enrichMissingO1();
+      if(tab==='pivots'&&!autoO1Started&&!refreshingPivots)enrichMissingO1();
     }catch(e){archiveLoaded=false;progress.textContent='No se pudo consultar el archivo de candidatos: '+e.message+'; puedes intentar actualización MCP.';}
   }
   async function enrichMissingO1(){
@@ -443,6 +466,39 @@
     done++;progress.textContent=`Archivo MCP 12/12 · O1 preliminares recalculadas ${done}/${candidates.length} · ${ok} propuestas · no certificadas`;
     }}
     await Promise.all([worker(),worker()]);
+  }
+  async function reviewUnconfirmedToken(token){
+    const rec=(state?.sections?.pivots||[]).find(x=>x.token===token);if(!rec)return;
+    for(const wave of ['cl',...WAVE_NAMES]){
+      const isCl=wave==='cl';const base=isCl?'cycle_low':wave;const field=isCl?'cl_status':wave+'_status';
+      if(rec[field]==='CONFIRMADO')continue;
+      const priceEl=document.querySelector(`[data-pivot-token="${token}"][data-pivot-field="${base}"]`);
+      const dateEl=document.querySelector(`[data-pivot-token="${token}"][data-pivot-field="${isCl?'cl_date':wave+'_date'}"]`);
+      const select=document.querySelector(`[data-pivot-token="${token}"][data-pivot-field="${field}"]`);
+      const price=Number(priceEl?.value),day=dateEl?.value;
+      if(!priceEl||!dateEl||!select||!(price>0)||!day||priceEl.dataset.userEdited==='true'||dateEl.dataset.userEdited==='true')continue;
+      const prevPrice=priceEl.value,prevDate=dateEl.value;
+      try{
+        const u='/api/settings/pivots/technical-review?'+new URLSearchParams({token,wave,price:String(price),date:day});
+        const resp=await fetch(u,{cache:'no-store',credentials:'same-origin'});
+        const result=await resp.json();if(!resp.ok)throw Error(result.reason||result.status||'DATA ERROR');
+        if(priceEl.value!==prevPrice||dateEl.value!==prevDate)continue;
+        if(result.validated&&result.review_proof){
+          const proof={price,date:day,proof:result.review_proof};
+          if(isCl)clReviewProofs[token]=proof;else waveReviewProofs[token+'|'+wave]=proof;
+          select.value='VALIDADO';select.dataset.userEdited='true';
+        }else{
+          if(isCl)delete clReviewProofs[token];else delete waveReviewProofs[token+'|'+wave];
+          // A completed, negative 1W assessment downgrades the DRAFT to
+          // PROPUESTO. It never silently changes the PUBLISHED Master.
+          // Network errors fall into catch() and preserve prior status instead.
+          select.value='PROPUESTO';select.dataset.userEdited='true';
+        }
+      }catch(e){
+        const info=document.getElementById('settings-preliminary-progress');
+        if(info)info.textContent+=' · '+token+' '+wave.toUpperCase()+': revisión pendiente';
+      }
+    }
   }
   async function refreshLivePivots(){
     if(refreshingPivots||!state)return;
@@ -468,11 +524,13 @@
             if(hint)hint.textContent+=(hint.textContent?' · ':'')+`Actualización MCP falló: ${r?.warning||'sin respuesta'}`;
           }else{
             applyPivotCandidate(r);ok++;
+            // One button both refreshes and technically reviews every unconfirmed pivot.
+            await reviewUnconfirmedToken(token);
             if(token!=='HYPE'&&!(r.o1>0)&&pivots[token]?.cl_date){
               try{
                 const fast=await getPivotPayload('/api/settings/pivots/preliminary?o1_only=1&token='+encodeURIComponent(token));
                 const proposed=(fast.records||[]).find(x=>x.token===token);
-                if(proposed?.o1>0)applyPivotCandidate(proposed);
+                if(proposed?.o1>0){applyPivotCandidate(proposed);await reviewUnconfirmedToken(token);}
               }catch(e){const hint=body.querySelector(`[data-pivot-info="${token}"]`);
                 if(hint)hint.textContent+=' · O1 pendiente por MCP: '+e.message;}
             }
@@ -483,7 +541,7 @@
     }
     try{await Promise.all([worker(),worker()]);
       archiveLoaded=true;
-      message(`Revisión finalizada: ${ok} tokens actualizados desde MCP; ${failed} conservaron el archivo histórico. Valida cada onda antes de Guardar; los pivotes NO están certificados.`);
+      message(`Revisión MCP: ${ok} tokens consultados, ${failed} pendientes. PROPUESTO/VALIDADO requieren «Validar → Publicar»; ningún pivote se confirma automáticamente.`);
     }finally{refreshingPivots=false;button.disabled=false;}
   }
   document.getElementById('settings-preliminary').addEventListener('click',refreshLivePivots);

@@ -15,7 +15,13 @@ STATE_COLS = {wave:18+i for i,wave in enumerate(WAVES)}
 HEADERS = {18:'O1 estado',19:'O2 estado',20:'O3 estado',21:'O4 estado',22:'O5 estado',
            23:'O3 fecha UTC',24:'O4 fecha UTC',25:'O5 fecha UTC',26:'CL estado validación 1W'}
 CL_STATUS_COL = 26
-CL_STATES = ('CANDIDATO','VALIDADO_TECNICAMENTE','CONFIRMADO')
+PIVOT_STATES = ('PROPUESTO','VALIDADO','CONFIRMADO')
+CL_STATES = PIVOT_STATES
+LEGACY_STATES = {'CANDIDATO':'PROPUESTO','VALIDADO_TECNICAMENTE':'VALIDADO','ESTIMADO':'PROPUESTO'}
+
+def normalized_status(value):
+    status=str(value or 'PROPUESTO').strip().upper()
+    return LEGACY_STATES.get(status,status)
 
 class WavePivotError(ValueError):
     pass
@@ -37,20 +43,20 @@ def date_iso(value):
 
 def wave_row(row):
     output={'cycle_low':cell(row,1),'cl_date':cell(row,2),'waves':{}}
-    cl_status=str(cell(row,CL_STATUS_COL) or 'CANDIDATO').strip().upper()
+    cl_status=normalized_status(cell(row,CL_STATUS_COL))
     if cl_status not in CL_STATES:raise WavePivotError(f'{row[0]} CL: estado no permitido')
-    if cl_status!='CANDIDATO' and (cell(row,1) is None or date_iso(cell(row,2)) is None):
+    if cl_status!='PROPUESTO' and (cell(row,1) is None or date_iso(cell(row,2)) is None):
         raise WavePivotError(f'{row[0]} CL: validación requiere precio y fecha')
     output['cl_status']=cl_status
     for wave in WAVES:
-        status=str(cell(row,STATE_COLS[wave]) or 'ESTIMADO').strip().upper()
-        if status not in ('ESTIMADO','CONFIRMADO'):
+        status=normalized_status(cell(row,STATE_COLS[wave]))
+        if status not in PIVOT_STATES:
             raise WavePivotError(f'{row[0]} {wave.upper()}: estado no permitido')
         price=cell(row,PRICE_COLS[wave]); when=date_iso(cell(row,DATE_COLS[wave]))
         if price is not None:
             if isinstance(price,bool) or not isinstance(price,(float,int)) or not math.isfinite(float(price)) or price<=0:
                 raise WavePivotError(f'{row[0]} {wave.upper()}: precio positivo obligatorio')
-        if status=='CONFIRMADO' and (price is None or not when):
+        if status in ('VALIDADO','CONFIRMADO') and (price is None or not when):
             raise WavePivotError(f'{row[0]} {wave.upper()}: confirmado sin precio y fecha')
         output['waves'][wave]={'price':price,'date':when,'status':status}
     return output

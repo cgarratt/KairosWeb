@@ -1,6 +1,6 @@
 """Kairos LONG-TERM COMPRAS eligibility, shared with KairosGPT.
 
-Only the two most recent, *technically validated* closed-week pivot swings may
+Only the two most recent, *published VALIDADO/CONFIRMADO* closed-week pivots may
 supply an upward impulse.  No daily maxima, O2 legacy inverse Fibonacci or
 unvalidated Elliott guesses.  Pure function: no MCP calls or Sheet writes.
 
@@ -63,6 +63,26 @@ def _anchor_match(published, low, high, *, tol=1e-5):
     return 'RETROCESO_ALCISTA'
 
 
+
+def _approved_extreme(published, kind, anchor, *, tolerance=1e-5):
+    """Gate Compras on PUBLISHED 07_PIVOTES state, not fresh MCP proposals."""
+    published=published or {}
+    items=[]
+    if kind=='LOW' and published.get('cycle_low') is not None:
+        items.append(('CL',published.get('cycle_low'),published.get('cl_date'),published.get('cl_status','PROPUESTO')))
+    for name,rec in (published.get('waves') or {}).items():
+        if name.lower() not in (('o2','o4') if kind=='LOW' else ('o1','o3','o5')):continue
+        items.append((name.upper(),rec.get('price'),rec.get('date'),rec.get('status','PROPUESTO')))
+    matching=[]
+    for name,price,when,status in items:
+        if not when or price is None:continue
+        try:
+            if str(when)[:10]==anchor['date'] and isclose(float(price),float(anchor['price']),rel_tol=tolerance):
+                matching.append({'pivot':name,'status':{'ESTIMADO':'PROPUESTO','CANDIDATO':'PROPUESTO','VALIDADO_TECNICAMENTE':'VALIDADO'}.get(str(status).upper(),str(status).upper())})
+        except (TypeError,ValueError):continue
+    approved=next((x for x in matching if x['status'] in ('VALIDADO','CONFIRMADO')),None)
+    return approved,matching
+
 def select_buy_impulse(weeks, published=None, *, left=5, right=5):
     """Return an eligible latest bullish impulse or a detailed blocked status.
 
@@ -111,12 +131,20 @@ def select_buy_impulse(weeks, published=None, *, left=5, right=5):
             if str(dt)[:10]==matched['date'] and not isclose(float(price),matched['price'],rel_tol=1e-5):
                 return blocked('ANCLA_CONFIRMADA_EN_CONFLICTO',confirmed=name,
                                anchors={'low':low,'high':high})
+        low_ok,low_states=_approved_extreme(published,'LOW',low)
+        high_ok,high_states=_approved_extreme(published,'HIGH',high)
+        if not low_ok or not high_ok:
+            return blocked('EXTREMOS_NO_VALIDADOS_EN_MASTER',
+                           anchors={'low':low,'high':high},
+                           low_state=low_ok or low_states or [{'status':'PROPUESTO'}],
+                           high_state=high_ok or high_states or [{'status':'PROPUESTO'}])
         mode=_anchor_match(published,low,high)
         levels=fib_grid('O2',{'CL':low['price'],'O1':high['price']})
         return {'status':'VALIDADO_TECNICAMENTE_NO_OPERATIVO','eligible':True,
                 'reason':'PAREJA_SEMANAL_ALCISTA_5L5R_BOS', 'mode':mode,
                 'anchors':{'low':low,'high':high},'bos':bos,
                 'levels':dict(zip(('ref382','c1','c2','ref786'),levels.values())),
-                'requires_human_certification_for_orders':True}
+                'pivot_authority':{'low':low_ok,'high':high_ok},
+                'requires_explicit_user_trade_approval':True}
     except (ValueError,TypeError,KeyError) as exc:
         return blocked('ESTRUCTURA_INVALIDA',detail=str(exc)[:140])

@@ -18,7 +18,7 @@ from urllib.parse import quote
 from forecast_fibo_policy import (STAGE_KEYS, DEFAULTS, stringify_weights, parse_weights, ForecastAllocationError,
     TRANCHE_KEYS, TRANCHES, ALL_TRANCHE_KEYS, STAGE_FOR_KEY, validate_weights, defaults_from_master)
 from google_sheets_master import SHEET_ID_DEFAULT, SHEETS, SheetDataError, parse_master, _remote_data
-from wave_pivots import WAVES, PRICE_COLS, DATE_COLS, STATE_COLS, HEADERS, wave_row, date_iso, WavePivotError, CL_STATUS_COL, CL_STATES
+from wave_pivots import WAVES, PRICE_COLS, DATE_COLS, STATE_COLS, HEADERS, wave_row, date_iso, WavePivotError, CL_STATUS_COL, CL_STATES, PIVOT_STATES, normalized_status
 from cl_validation import verify_review
 
 SPREADSHEET_HOST = "https://sheets.googleapis.com/v4/spreadsheets"
@@ -481,21 +481,21 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
                     if cl<=0:raise SettingsError('Cycle Low debe ser positivo')
                 try:dateval=date_iso(x.get('cl_date',prior_day))
                 except WavePivotError as exc:raise SettingsError(str(exc)) from exc
-                cl_state=str(x.get('cl_status',before['cl_status'])).strip().upper()
+                cl_state=normalized_status(x.get('cl_status',before['cl_status']))
                 if cl_state not in CL_STATES:raise SettingsError(f'{token} CL: estado no permitido')
                 if before['cl_status']=='CONFIRMADO' and (cl_state!='CONFIRMADO' or cl!=prior_cl or dateval!=prior_day):
                     raise SettingsError(f'{token} CL CONFIRMADO: pivote inmutable')
                 if before['waves']['o1']['status']=='CONFIRMADO' and (cl!=prior_cl or dateval!=prior_day):
                     raise SettingsError(f'{token} CL bloqueado por O1 confirmado')
-                if before['cl_status']=='CANDIDATO' and cl_state=='CONFIRMADO':
-                    raise SettingsError(f'{token} CL: primero valida 5L/5R + BOS y publica VALIDADO_TECNICAMENTE')
-                if cl_state!='CANDIDATO' and (cl is None or not dateval):
+                if before['cl_status']=='PROPUESTO' and cl_state=='CONFIRMADO':
+                    raise SettingsError(f'{token} CL: primero valida 5L/5R + BOS y publica VALIDADO')
+                if cl_state!='PROPUESTO' and (cl is None or not dateval):
                     raise SettingsError(f'{token} CL: validación requiere precio y fecha UTC')
-                if cl_state=='VALIDADO_TECNICAMENTE' and (before['cl_status']!='VALIDADO_TECNICAMENTE' or cl!=prior_cl or dateval!=prior_day):
+                if cl_state=='VALIDADO' and (before['cl_status']!='VALIDADO' or cl!=prior_cl or dateval!=prior_day):
                     snapshot=next((str(r[1]) for r in raw[SHEETS['control']] if r and r[0]=='snapshot_id'),None)
                     if not verify_review(token,cl,dateval,snapshot,x.get('cl_review_proof')):
                         raise SettingsError(f'{token} CL: requiere revisión MCP semanal 5L/5R+BOS válida para este snapshot')
-                if before['cl_status']=='VALIDADO_TECNICAMENTE' and cl_state=='CONFIRMADO' and (cl!=prior_cl or dateval!=prior_day):
+                if before['cl_status']=='VALIDADO' and cl_state=='CONFIRMADO' and (cl!=prior_cl or dateval!=prior_day):
                     raise SettingsError(f'{token} CL: la confirmación debe conservar precio y fecha técnicamente validados')
                 if cl!=prior_cl and cl is not None:change('pivots',prow,1,cl)
                 if dateval!=prior_day:change('pivots',prow,2,dateval)
@@ -503,8 +503,8 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
                 just_confirmed=False
                 for wave in WAVES:
                     prior=before['waves'][wave]
-                    new_state=str(x.get(wave+'_status',prior['status'])).upper()
-                    if new_state not in ('ESTIMADO','CONFIRMADO'):raise SettingsError('Estado inválido de '+wave.upper())
+                    new_state=normalized_status(x.get(wave+'_status',prior['status']))
+                    if new_state not in PIVOT_STATES:raise SettingsError('Estado inválido de '+wave.upper())
                     price=prior['price']
                     if wave in x and x[wave] is not None:
                         price=_numeric(x[wave],wave)
@@ -515,8 +515,17 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
                         if (new_state!='CONFIRMADO' or price!=prior['price'] or new_date!=prior['date']):
                             raise SettingsError(f'{token} {wave.upper()}: pivote CONFIRMADO inmutable; revisión formal separada requerida')
                         continue
+                    if new_state!='PROPUESTO' and (price is None or not new_date):
+                        raise SettingsError(f'{token} {wave.upper()}: estado validado exige precio y fecha UTC')
+                    if prior['status']=='PROPUESTO' and new_state=='CONFIRMADO':
+                        raise SettingsError(f'{token} {wave.upper()}: primero publica VALIDADO; después CONFIRMADO')
+                    if new_state=='VALIDADO' and (prior['status']!='VALIDADO' or price!=prior['price'] or new_date!=prior['date']):
+                        snapshot=next((str(r[1]) for r in raw[SHEETS['control']] if r and r[0]=='snapshot_id'),None)
+                        if not verify_review(token+'|'+wave,price,new_date,snapshot,x.get(wave+'_review_proof')):
+                            raise SettingsError(f'{token} {wave.upper()}: necesita evidencia MCP semanal firmada para VALIDADO')
                     if new_state=='CONFIRMADO':
-                        if price is None or not new_date:raise SettingsError(f'{token} {wave.upper()}: confirmar exige precio y fecha UTC')
+                        if prior['status']!='VALIDADO' or price!=prior['price'] or new_date!=prior['date']:
+                            raise SettingsError(f'{token} {wave.upper()}: confirma solo un VALIDADO publicado sin modificar anclas')
                         just_confirmed=True
                     if price!=prior['price'] and price is not None:change('pivots',prow,PRICE_COLS[wave],price)
                     if new_date!=prior['date']:change('pivots',prow,DATE_COLS[wave],new_date)

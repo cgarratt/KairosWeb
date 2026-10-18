@@ -22,7 +22,7 @@ def test_structural_excludes_open_week_and_legacy_reverse():
     assert len(weeks)==5
     assert all(w['high']!=.02419 for w in weeks)
     o1=weekly_o1_candidate(weeks,.00836,'2025-10-10')
-    assert o1['status']=='ESTIMADO'
+    assert o1['status']=='PROPUESTO'
     assert o1['price']==.02308
     assert o1['week_start']=='2026-10-05'
     assert o1['pivot_5l5r'] is False
@@ -76,5 +76,5 @@ def test_all_five_weekly_pivots_require_five_l_and_five_r():
     result=weekly_wave_candidates(weeks,'2025-12-01')
     assert list(result)==['O1','O2','O3','O4','O5']
     assert [v['price'] for v in result.values()]==[10,1,20,2,30]
-    assert all(v['status']=='ESTIMADO' and v['bos_status']=='PENDIENTE_VALIDACION'
+    assert all(v['status']=='PROPUESTO' and v['bos_status']=='PENDIENTE_VALIDACION'
                and v['pivot_5l5r'] for v in result.values())

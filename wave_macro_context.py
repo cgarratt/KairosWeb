@@ -28,7 +28,7 @@ def resolve(token, published, archived, data):
         # Confirmed or manually reviewed wave takes precedence; MCP never
         # overwrites one. Historical archive's O1 is a candidate only.
         pub_o1=published.get('waves',{}).get('o1') or {}
-        archived_o1={'price':archived['o1'],'date':archived.get('o1_date'),'status':'ESTIMADO'} if archived.get('o1') and archived.get('o1_date') else None
+        archived_o1={'price':archived['o1'],'date':archived.get('o1_date'),'status':'PROPUESTO'} if archived.get('o1') and archived.get('o1_date') else None
         selected=weekly_o1_candidate(weeks,cl,cl_date,published_o1=pub_o1 if pub_o1.get('price') else archived_o1)
         if not selected.get('price'):return dict(empty,status=selected.get('status','NO_WEEKLY_O1'))
         structural=weekly_wave_candidates(weeks,cl_date)

@@ -29,7 +29,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.7'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.8'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1115,7 +1115,7 @@ def settings_save():
     # A manual CONFIRMADO pivot must be previewed and explicitly published.
     # Legacy direct-save remains available only for candidates and other settings.
     if body.get('section')=='pivots' and any(
-        entry.get(w+'_status') in (('VALIDADO_TECNICAMENTE','CONFIRMADO') if w=='cl' else ('CONFIRMADO',))
+        entry.get(w+'_status') in ('VALIDADO','VALIDADO_TECNICAMENTE','CONFIRMADO')
         for entry in (body.get('entries') if isinstance(body.get('entries'),list) else [])
         if isinstance(entry,dict) for w in ('o1','o2','o3','o4','o5','cl')):
         return jsonify({'status':'PREVIEW_REQUIRED','reason':'Usa Validar y Publicar para confirmar pivotes por onda.'}),409
@@ -1205,14 +1205,8 @@ def cl_technical_review_endpoint():
             if market.get('pair')!='HYPE/USDC':raise RuntimeError('HYPE macro pair mismatch')
         else:
             name='PUMP' if token=='PUMPFUN' else token
-            # Retrieve enough days BEFORE CL for five full-left weeks, plus
-            # all the weeks after it. Fixed 365 days silently excludes archived
-            # CLs from October 2025 when queried after October 2026.
-            age=(datetime.now(timezone.utc).date()-datetime.fromisoformat(when).date()).days
-            required=max(120,age+7*(int(approved_numeric('WEEKLY_PIVOT_LEFT'))+2))
-            if required>999:raise RuntimeError('CL exceeds bounded MCP history; paginate explicitly')
-            market=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
-                                      {'symbol':name+'USDT','interval':'1d','limit':required})
+            from cl_review_history import fetch_closed_binance_history
+            market=fetch_closed_binance_history(call_mcp_resilient,name,when)
             if market.get('symbol')!=name+'USDT':raise RuntimeError('Binance symbol mismatch')
         if market.get('status')!='OK' or not market.get('closed_only') or not market.get('records'):
             raise RuntimeError('Closed daily MCP history unavailable')
@@ -1229,6 +1223,48 @@ def cl_technical_review_endpoint():
     except Exception as exc:
         app.logger.warning('CL technical review failed token=%s class=%s',token,type(exc).__name__)
         return jsonify({'status':'DATA_ERROR','token':token,'reason':'No fue posible validar 1W 5L/5R+BOS con MCP cerrado; CL sigue candidato.'}),503
+
+
+@app.route('/api/settings/pivots/technical-review')
+def pivot_technical_review_endpoint():
+    """MCP 1W evidence for ONE proposed/validated extreme; never publishes."""
+    if not _admin_authorized():return jsonify({'status':'ADMIN_AUTH_REQUIRED'}),403
+    from pivot_preload import TOKENS
+    from wave_pivots import date_iso
+    from wave_structure import full_utc_weeks
+    from cl_validation import review_cl, review_wave, sign_review
+    token=request.args.get('token','').strip().upper()
+    wave=request.args.get('wave','').lower().strip()
+    if token not in TOKENS or wave not in ('cl','o1','o2','o3','o4','o5'):
+        return jsonify({'status':'INVALID_PIVOT'}),400
+    try:
+        price=float(request.args.get('price',''));when=date_iso(request.args.get('date'))
+        if not when or not math.isfinite(price) or price<=0:return jsonify({'status':'INVALID_ANCHOR'}),400
+    except (ValueError,TypeError):return jsonify({'status':'INVALID_ANCHOR'}),400
+    try:
+        if token=='HYPE':
+            market=call_mcp_resilient('HYPERLIQUID_MCP_URL','get_hype_spot_ohlcv',
+                                     {'interval':'1d','start_date':'2024-11-29','limit':750})
+            if market.get('pair')!='HYPE/USDC':raise ValueError('Wrong HYPE macro market')
+        else:
+            from cl_review_history import fetch_closed_binance_history
+            name='PUMP' if token=='PUMPFUN' else token
+            market=fetch_closed_binance_history(call_mcp_resilient,name,when)
+            if market.get('symbol')!=name+'USDT':raise ValueError('Wrong Binance market')
+        if market.get('status')!='OK' or market.get('closed_only') is not True or not market.get('records'):
+            raise ValueError('Closed MCP candles unavailable')
+        weeks=full_utc_weeks(market['records'])
+        opts={'left':int(approved_numeric('WEEKLY_PIVOT_LEFT')),'right':int(approved_numeric('WEEKLY_PIVOT_RIGHT'))}
+        result=(review_cl(weeks,price,when,**opts) if wave=='cl' else review_wave(weeks,price,when,wave,**opts))
+        if result.get('validated'):
+            result['status']='VALIDADO'
+            result['review_proof']=sign_review(token if wave=='cl' else token+'|'+wave,price,when,g.kairos_state['control']['snapshot_id'])
+        return jsonify({**result,'token':token,'wave':wave,'source':'HYPERLIQUID_SPOT_USDC' if token=='HYPE' else 'BINANCE_SPOT_USDT',
+                       'scope':'TECHNICAL_REVIEW_ONLY','certified':False,'closed_weeks':len(weeks)})
+    except Exception as exc:
+        app.logger.warning('Pivot technical review failed token=%s wave=%s type=%s',token,wave,type(exc).__name__)
+        return jsonify({'status':'DATA_ERROR','reason':'Revisión 1W no disponible; no actualizar este pivote',
+                        'token':token,'wave':wave}),503
 
 
 @app.route('/api/settings/pivots/preliminary')
@@ -1352,7 +1388,7 @@ def _deployed_asset_status():
         'o2_simulator': ('static/o2_sequential.js', ('classifyDrift', 'snapshots')),
         'alerts_bell': ('static/alert_bell.js', ('alert-timeframe', '/api/alerts/read', 'event-bull', 'event-bear')),
         'integral_donut': ('templates/portfolio_integral.html', ('data-capital-chart="donut"', 'integral-donut-sector')),
-        'pivots_cl_editor': ('static/settings_master.js', ('verify.dataset.clReviewToken', 'cl_status')),
+        'pivots_cl_editor': ('static/settings_master.js', ('reviewUnconfirmedToken', 'waveReviewProofs', 'cl_status')),
         'cl_review_gate': ('cl_validation.py', ('def review_cl(', 'BOS', 'sign_review')),
         'weekly_fibonacci': ('wave_structure.py', ('def full_utc_weeks(', 'def fib_grid(')),
         'buy_weekly_gate': ('buy_weekly_policy.py', ('def select_buy_impulse(', 'BOS_ALCISTA_SEMANAL_PENDIENTE')),

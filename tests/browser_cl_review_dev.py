@@ -16,7 +16,7 @@ candidates={'status':'OK','records':[{'token':'VIRTUAL','status':'CANDIDATO_ARCH
     'cycle_low':.00000223,'cl_date':'2025-10-10','o1':.00000536,'o1_date':'2026-01-05','certified':False}]}
 markup='''<div id="settings-nav"><button data-tab="units">Unidades</button><button data-tab="pivots">Pivotes O1–O5</button></div>
 <h2 id="settings-title"></h2><div id="settings-desc"></div><div id="settings-snapshot"></div>
-<div id="settings-admin-state"></div><div id="settings-pivots-tools" hidden><button id="settings-preliminary"></button><div id="settings-preliminary-progress"></div></div>
+<div id="settings-admin-state"></div><div id="settings-pivots-tools" hidden><button id="settings-preliminary"></button><button id="settings-cl-review-all">Verificar todos los CL 1W</button><div id="settings-cl-review-progress"></div><div id="settings-preliminary-progress"></div></div>
 <section id="settings-mcp-panel" hidden></section><div class="settings-form"><input id="settings-evidence" value="Pivote confirmado manualmente con evidencia técnica"></div>
 <div id="settings-data"></div><div id="settings-pivot-matrix" hidden></div><div id="settings-totals"></div>
 <div><button id="settings-save">Guardar cambios</button></div><div id="settings-msg"></div>
@@ -45,6 +45,10 @@ with sync_playwright() as pw:
     page.wait_for_function("document.querySelector('[data-pivot-token=VIRTUAL][data-pivot-field=o1]').value==='1.1984'")
     assert page.locator('[data-pivot-token="VIRTUAL"][data-pivot-field="o1_date"]').input_value()=='2026-01-05'
     assert page.locator('[data-pivot-token="PEPE"][data-pivot-field="o1"]').input_value()=='0.00000536'
+    page.locator('#settings-cl-review-all').click()
+    page.wait_for_function("document.querySelector('#settings-cl-review-progress').textContent.includes('11/11')")
+    assert '2 validados en MCP' in page.locator('#settings-cl-review-progress').inner_text()
+    assert page.locator('[data-pivot-token="PEPE"][data-pivot-field="cl_status"]').input_value()=='VALIDADO_TECNICAMENTE'
     page.locator('[data-cl-review-token="VIRTUAL"]').click()
     page.wait_for_function("document.querySelector('[data-pivot-token=VIRTUAL][data-pivot-field=cl_status]').value==='VALIDADO_TECNICAMENTE'")
     assert page.locator('[data-pivot-token="VIRTUAL"][data-pivot-field="cl_status"]').input_value()=='VALIDADO_TECNICAMENTE' 
@@ -53,9 +57,9 @@ with sync_playwright() as pw:
     records=page.evaluate('window.__requests')
     assert records[0]['url']=='/api/settings/preview'
     assert records[1]['url']=='/api/settings/publish'
-    assert records[0]['body']['entries'][0]['token']=='VIRTUAL'
-    assert records[0]['body']['entries'][0]['cl_status']=='VALIDADO_TECNICAMENTE'
-    assert records[0]['body']['entries'][0]['cl_review_proof'].startswith('1000.')
+    assert {r['token'] for r in records[0]['body']['entries']}=={'PEPE','VIRTUAL'}
+    assert all(r['cl_status']=='VALIDADO_TECNICAMENTE' for r in records[0]['body']['entries'])
+    assert all(r['cl_review_proof'].startswith('1000.') for r in records[0]['body']['entries'])
     assert records[1]['body']['confirm']=='PUBLICAR'
     print('PASS Chromium: CL 1W technical review, states, per-token proof, preview then publish')
     browser.close()
