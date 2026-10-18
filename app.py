@@ -1352,7 +1352,7 @@ def _deployed_asset_status():
         'o2_simulator': ('static/o2_sequential.js', ('classifyDrift', 'snapshots')),
         'alerts_bell': ('static/alert_bell.js', ('alert-timeframe', '/api/alerts/read', 'event-bull', 'event-bear')),
         'integral_donut': ('templates/portfolio_integral.html', ('data-capital-chart="donut"', 'integral-donut-sector')),
-        'pivots_cl_editor': ('static/settings_master.js', ('data-cl-review-token', 'cl_status')),
+        'pivots_cl_editor': ('static/settings_master.js', ('verify.dataset.clReviewToken', 'cl_status')),
         'cl_review_gate': ('cl_validation.py', ('def review_cl(', 'BOS', 'sign_review')),
         'weekly_fibonacci': ('wave_structure.py', ('def full_utc_weeks(', 'def fib_grid(')),
         'buy_weekly_gate': ('buy_weekly_policy.py', ('def select_buy_impulse(', 'BOS_ALCISTA_SEMANAL_PENDIENTE')),

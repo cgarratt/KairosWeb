@@ -4,7 +4,7 @@
   "base_release": "2.0.6",
   "sheet_schema_version": "5.0.0",
   "scope": "web_only",
-  "notes": "No Sheets writes, no orders, no Render deployment or automatic ChatGPT project instruction change",
+  "notes": "No Sheets writes, no orders, no Render deployment or automatic ChatGPT project instruction change; HOTFIX 1: /health asset marker correction",
   "files": [
     {
       "path": ".gitignore",
@@ -18,8 +18,8 @@
     },
     {
       "path": "RELEASE_NOTES_v2.0.7.md",
-      "bytes": 1104,
-      "sha256": "533d401009fe819f85a32f21cb4447a6c1d281adaa300cd1d80e7b0ea2aae656"
+      "bytes": 1618,
+      "sha256": "2f0c1549ac9e0fc5bf9dd2171b652de14bde6fd10d7101e668f103911f718988"
     },
     {
       "path": "admin_origin.py",
@@ -28,8 +28,8 @@
     },
     {
       "path": "app.py",
-      "bytes": 93582,
-      "sha256": "5a511a965da328d4b47e2fb3ff3db0dd7018c65625cb068cc1b2d3b4745ce38b"
+      "bytes": 93590,
+      "sha256": "b37811b3c147887d5fec9a5c9cccd41df9726f2f488714965c12dac35379b938"
     },
     {
       "path": "buy_weekly_policy.py",
@@ -416,5 +416,10 @@
       "bytes": 9221,
       "sha256": "9f9889f8a7fcc50a3839f0ecfef2ab3fedd72dd997ef24981238b5ab16ca2244"
     }
-  ]
+  ],
+  "hotfix": {
+    "revision": "1",
+    "issue": "asset diagnostic falsely returned 503 for settings_master.js",
+    "source_file": "app.py"
+  }
 }
