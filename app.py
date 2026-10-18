@@ -29,7 +29,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.9'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.10'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -534,9 +534,13 @@ def build_mode_payload(slug, d, observed):
                     data=call_mcp_resilient('HYPERLIQUID_MCP_URL','get_hype_spot_ohlcv',
                         {'interval':'1d','start_date':'2024-11-29','limit':750})
                 else:
-                    data=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
-                        {'symbol':token+'USDT','interval':'1d','limit':550})
-                    if data.get('status')!='OK':
+                    # For proposed previews, retain the dated CL week even
+                    # when 365-day history would begin after the CL.
+                    from cl_review_history import fetch_closed_binance_history
+                    candidate_cl=(pub.get(token,{}) or {}).get('cl_date') or (archive_by_token.get(source_token,{}) or {}).get('cl_date')
+                    if candidate_cl:
+                        data=fetch_closed_binance_history(call_mcp_resilient,token,candidate_cl)
+                    else:
                         data=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
                             {'symbol':token+'USDT','interval':'1d','limit':365})
                 return token,(resolve_long_term_buy(source_token,pub.get(token,{}),data,archive_by_token.get(source_token,{})) if slug=='compras'
@@ -1417,6 +1421,8 @@ def _deployed_asset_status():
         'orders_page': ('templates/ordenes.html', ('data-orders-category', 'Referencia técnica más cercana por token', 'FASE 1 · SOLO PROPUESTAS')),
         'orders_engine': ('orders_inbox.py', ('def build_order_inbox(', 'def structural_sell_candidates(', 'def portfolio_candidates(')),
         'orders_filters': ('static/orders_inbox.js', ('function visible(', 'orders-category', 'data-orders-category')), 
+        'pivot_mcp_status_protection': ('static/settings_master.js', ("current.cl_status!=='PROPUESTO'", "statusInput?.value!=='PROPUESTO'", "if(rec[field]!=='PROPUESTO')continue")),
+        'virtual_flash_exclusion': ('structural_outliers.py', ('VIRTUAL_FLASH_WEEK_START', 'virtual_flash_cl')), 
     }
     files = {}
     for key, (filename, markers) in critical.items():

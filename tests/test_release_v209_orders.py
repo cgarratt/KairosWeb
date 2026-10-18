@@ -4,7 +4,7 @@ R=Path(__file__).resolve().parents[1]
 
 def test_release_version_and_orders_route():
     app=(R/'app.py').read_text()
-    assert "APP_VERSION = '2.0.9'" in app
+    assert "APP_VERSION = '2.0.10'" in app
     assert "@app.route('/mode/ordenes')" in app
     assert "'orders_page':" in app and "'orders_engine':" in app and "'orders_filters':" in app
     assert "'/api/orders/place'" not in app and "'/api/orders/cancel'" not in app

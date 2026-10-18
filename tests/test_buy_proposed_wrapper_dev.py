@@ -31,10 +31,12 @@ def test_web_allows_proposed_for_simulation_and_blocks_nd():
     assert result['eligible'] and result['simulation_only']
     assert result['operational_blocked'] and result['levels']['c1']==125
     assert result['mode']=='O2'
-    no_high=resolve_long_term_buy('BTC',{'cycle_low':lo['low'],
+    no_high_in_master=resolve_long_term_buy('BTC',{'cycle_low':lo['low'],
                             'cl_date':lo['low_date'],'cl_status':'PROPUESTO'},data)
-    assert not no_high['eligible']
-    assert no_high['levels'] is None
+    assert no_high_in_master['eligible'] and no_high_in_master['simulation_only']
+    assert no_high_in_master['pivot_authority']['high']['status']=='PROPUESTO'
+    no_low=resolve_long_term_buy('BTC',{},data)
+    assert not no_low['eligible'] and no_low['levels'] is None
 
 
 def test_web_accepts_historical_mcp_proposal_as_provisional_only():

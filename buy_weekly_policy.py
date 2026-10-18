@@ -10,7 +10,7 @@ hypothetical FORECAST scenarios.
 from __future__ import annotations
 from datetime import date
 from math import isclose
-from wave_structure import BUY_RATIOS, iso_date, fib_grid, positive
+from wave_structure import BUY_RATIOS, iso_date, fib_grid, positive, weekly_o1_candidate
 
 
 class BuyEligibilityError(ValueError):
@@ -186,8 +186,20 @@ def proposed_simulation_impulse(weeks, published=None, archived=None):
         add('O1','HIGH',archived.get('o1'),archived.get('o1_date'),'PROPUESTO','MCP_ARCHIVE')
     lows=[x for x in anchors if x['kind']=='LOW']
     if not lows:return deny('EXTREMO_LOW_ND')
-    # Do not manufacture an O1 when its price/date are N/D in both
-    # the published Master and its explicitly archived MCP proposals.
+    # Settings can show an O1 from MCP that is not yet published. Reconstruct
+    # the same PROPOSED candidate from complete weekly bars for simulation.
+    # Never infer a weekly extremum from the current spot or a legacy Fibo.
+    if not any(x['kind']=='HIGH' for x in anchors):
+        last_low=max(lows,key=lambda x:x['date'])
+        cl_in_week=any(w['week_start']<=last_low['date']<=w['week_end']
+            and isclose(float(w['low']),last_low['price'],rel_tol=1e-4,abs_tol=1e-12)
+            for w in weeks)
+        if cl_in_week:
+            try:
+                found=weekly_o1_candidate(weeks,last_low['price'],last_low['date'])
+                if found.get('price') and found.get('date'):
+                    add('O1','HIGH',found['price'],found['date'],'PROPUESTO','MCP_CLOSED_WEEK_ESTIMATED')
+            except (ValueError,TypeError):pass
     if len(anchors)<2:return deny('EXTREMO_HIGH_ND')
     anchors.sort(key=lambda x:(x['date'],{'CL':0,'O1':1,'O2':2,'O3':3,'O4':4,'O5':5}.get(x['pivot'],9)))
     low,high=anchors[-2:]

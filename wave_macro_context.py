@@ -6,6 +6,7 @@ from 07 are never recertified. Archived cycle data is exploratory only.
 from wave_structure import (full_utc_weeks, weekly_o1_candidate, fib_grid,
                             post_o1_daily_low, weekly_wave_candidates, WaveStructureError)
 from buy_weekly_policy import select_buy_impulse, proposed_simulation_impulse
+from structural_outliers import virtual_flash_cl
 
 def resolve(token, published, archived, data):
     """Build an explicit CL/O1 and Fib O2 reference with traceable evidence."""
@@ -23,6 +24,8 @@ def resolve(token, published, archived, data):
     weeks=full_utc_weeks(records)
     cl=published.get('cycle_low') or archived.get('cycle_low')
     cl_date=published.get('cl_date') or archived.get('cl_date')
+    if token=='VIRTUAL' and virtual_flash_cl(cl,cl_date):
+        return dict(empty,status='VIRTUAL_FLASH_CL_EXCLUDED',history={'status':'EXCLUDED_OUTLIER'})
     if not(cl and cl_date):return dict(empty,status='MISSING_DATED_CL')
     try:
         # Confirmed or manually reviewed wave takes precedence; MCP never
@@ -63,6 +66,8 @@ def resolve_long_term_buy(token, published, data, archived=None):
     if token=='HYPE':
         if data.get('source')!='Hyperliquid Spot' or data.get('pair')!='HYPE/USDC':return dict(deny,reason='VENUE_HYPE_INVALIDO')
     elif data.get('source')!='Binance Spot':return dict(deny,reason='VENUE_BINANCE_INVALIDO')
+    if token=='VIRTUAL' and virtual_flash_cl(published.get('cycle_low'),published.get('cl_date')):
+        return {**deny,'status':'BLOQUEADO','reason':'VIRTUAL_CL_FLASH_EXCLUIDO_REQUIERE_REVISION'}
     try:
         weeks=full_utc_weeks(data.get('records') or [])
         decision=select_buy_impulse(weeks,published)

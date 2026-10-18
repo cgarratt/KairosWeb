@@ -37,6 +37,7 @@
 <section class="panel span-6"><h2>Liquidez post-escenario</h2><p class="sub">Comparativa de USDT antes vs después. Sin alterar saldos reales.</p><div class="sim-metric" style="margin:15px 0"><small>Situación actual</small><b id="before-cash">—</b><div class="sim-bar"><div id="before-bar"></div></div></div><div class="sim-metric"><small>Después (hipotético)</small><b id="after-cash">—</b><div class="sim-bar"><div id="after-bar"></div></div></div></section>
 {% if mode.slug=='compras' %}
 <section class="panel span-12" id="o2-fibonacci-panel" data-o2-ui-version="{{ master }}"><h2>Asignación USDT para retrocesos Fibonacci</h2>
+<p class="sub">Verde = nivel alcanzado <strong>alguna vez después del O1 seleccionado</strong>, aunque el Spot actual esté por encima. Consulta la fecha del mínimo histórico pasando el cursor. No indica una orden reciente ni un fill.</p>
 <div class="o2-table-scroll"><table class="o2-table"><thead><tr><th>Token</th><th>Spot</th><th>Precio 38.2%</th><th>USDT</th><th>Precio 50%</th><th>USDT</th><th>Precio 61.8%</th><th>USDT</th><th>Precio 78.6%</th><th>USDT</th><th>Total USDT</th></tr></thead><tbody id="fib-body"></tbody><tfoot id="fib-total"></tfoot></table></div>
 </section>
 {% endif %}

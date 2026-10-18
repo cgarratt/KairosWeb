@@ -74,4 +74,4 @@ def test_one_global_mcp_button_no_per_token_validation_buttons():
     assert 'Verificar CL 1W' not in js
     assert 'reviewUnconfirmedToken' in js
     assert "'/api/settings/pivots/technical-review?'" in js
-    assert "if(rec[field]==='CONFIRMADO')continue" in js
+    assert "if(rec[field]!=='PROPUESTO')continue" in js

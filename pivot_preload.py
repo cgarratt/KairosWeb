@@ -6,6 +6,7 @@ Never infer an approved pivot or a filled order from this archive.
 from __future__ import annotations
 
 from math import isfinite
+from structural_outliers import virtual_flash_cl
 
 TOKENS = ('BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMPFUN','PLUME','VIRTUAL','PEPE')
 ARCHIVE_A1 = "'07_PIVOTES'!A21:Q33"
@@ -23,7 +24,7 @@ def archive_candidates(rows, params=None):
     """Convert historical MCP records to review-only frontend rows.
 
     Header and source metadata must be valid; do not invent missing values.
-    SUI/PUMP rejected 2025-10-10 flash outliers are excluded.
+    SUI/PUMP and VIRTUAL rejected 2025-10-10 flash candidates are excluded.
     """
     params = params or {}
     if not rows or rows[0][:3] != ['Token','Mercado fuente','CH bruto']:
@@ -43,12 +44,16 @@ def archive_candidates(rows, params=None):
             low=None
         if token=='PUMPFUN' and raw_low is not None and abs(raw_low-.000411)<1e-8 and selected is None:
             low=None
+        excluded_virtual=(token=='VIRTUAL' and virtual_flash_cl(raw_low,get(5)))
+        if excluded_virtual:low=None
         high = _num(get(2))
         o1,o2,o3 = _num(get(6)),_num(get(8)),_num(get(10))
         details = str(get(16) or '').strip()
         warnings = [details] if details else []
         if token in ('SUI','PUMPFUN') and selected is not None:
             warnings.insert(0, 'CL ajustado de política; fecha del mínimo bruto NO aplica al CL seleccionado')
+        if excluded_virtual:
+            warnings.insert(0, 'VIRTUAL: semana UTC 06–12/10/2025 excluida como CL estructural provisional; se conserva mínimo crudo; seleccionar otro CL semanal y publicarlo antes de usarlo')
         if token=='HYPE' and o3 is not None:
             warnings.insert(0, 'O3 es máximo observado sin 5R; NO es pivote confirmado')
         if not any(x is not None for x in (high,low,o1,o2,o3)):
@@ -58,7 +63,7 @@ def archive_candidates(rows, params=None):
             'source':'HISTORICO_MCP_EN_GOOGLE_SHEETS', 'record_origin':'07_PIVOTES A21:Q33',
             'status':'CANDIDATO_ARCHIVADO_NO_CERTIFICADO', 'certified':False,
             'cycle_high':high,'ch_date':get(3) or None,
-            'cycle_low':low,'cl_date':None if selected is not None and token in ('SUI','PUMPFUN') else get(5) or None,
+            'cycle_low':low,'cl_date':None if excluded_virtual or (selected is not None and token in ('SUI','PUMPFUN')) else get(5) or None,
             'raw_cycle_low':raw_low,
             'o1':o1,'o1_date':get(7) or None,
             'o2':o2,'o2_date':get(9) or None,

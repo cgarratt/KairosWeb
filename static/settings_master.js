@@ -8,7 +8,7 @@
     tier_custody:'04_CUSTODIA · Porcentajes simulados por Tier; no realiza traspasos reales.',
     liquidity:'03_LIQUIDEZ · Saldos USDT por venue; Quantfury se cuenta una sola vez.',
     parameters:'12_PARAMETROS_KAIROS · Valores aprobados, porcentajes y planes de ventas. Cada parámetro describe su impacto.',
-    pivots:'07_PIVOTES · CL y O1–O5: PROPUESTO → VALIDADO (5L/5R+BOS 1W) → CONFIRMADO. «Actualizar candidatos desde MCP» revisa todos los no confirmados; «Validar → Publicar» registra estados sin ejecutar órdenes.',mcp:'Diagnóstico MCP independiente del Master. Consultas de solo lectura y reconexión sin reiniciar Render.'};
+    pivots:'07_PIVOTES · CL y O1–O5: PROPUESTO → VALIDADO (5L/5R+BOS 1W) → CONFIRMADO. «Actualizar candidatos desde MCP» actualiza solo PROPUESTO; VALIDADO y CONFIRMADO conservan precio, fecha y estado. «Validar → Publicar» registra cambios administrativos sin ejecutar órdenes.',mcp:'Diagnóstico MCP independiente del Master. Consultas de solo lectura y reconexión sin reiniciar Render.'};
   const PARAM_GROUPS=[
     {id:'portfolio',name:'Portafolio',description:'Únicas dos reglas: meta general de liquidez USDT y tolerancia de desvío Balancer.',keys:['STRUCTURAL_USDT_TARGET','DRIFT_BAND_PP']},
     {id:'o2',name:'Compras O2 · Forecast',description:'Cuatro retrocesos independientes: 100% del presupuesto máximo de 25% P de O2.',prefix:'FORECAST_O2_FIB_'},
@@ -156,7 +156,7 @@
   }
   function drawPivotTable(){
     const mount=document.getElementById('settings-pivot-matrix');mount.hidden=false;mount.replaceChildren();
-    const help=el('p','settings-hint','CL y O1–O5: PROPUESTO → VALIDADO → CONFIRMADO. Solo el último estado queda bloqueado; el MCP no publica ni confirma automáticamente. Fechas UTC.');mount.append(help);
+    const help=el('p','settings-hint','CL y O1–O5: PROPUESTO → VALIDADO → CONFIRMADO. El MCP solo modifica PROPUESTO; VALIDADO queda fijo hasta edición manual y CONFIRMADO requiere revisión formal. Fechas UTC.');mount.append(help);
     const wrap=el('div','pivot-matrix-scroll'),table=el('table','pivot-wave-table');
     const head=el('thead'),header=el('tr');['Token','Cycle Low (1W)','O1','O2','O3','O4','O5'].forEach(label=>header.append(el('th','',label)));head.append(header);table.append(head);
     const tbody=el('tbody');
@@ -193,7 +193,7 @@
       tbody.append(row);
     });
     table.append(tbody);wrap.append(table);mount.append(wrap);
-    mount.append(el('p','settings-hint','Un pivote CONFIRMADO no puede cambiarse desde Balancer, Compras, Ventas ni Forecast. Para corregirlo se requerirá un procedimiento de revisión separado; no se sobrescribe.'));
+    mount.append(el('p','settings-hint','El MCP nunca reemplaza ni degrada un VALIDADO o CONFIRMADO. Puedes editar manualmente un VALIDADO con nueva evidencia 1W y publicación; CONFIRMADO permanece protegido y requiere revisión formal.'));
   }
   function collectPivotMatrix(){
     const out=[];
@@ -402,8 +402,14 @@
         : body.querySelector(`[data-index="${ix}"][data-field="${field}"]`);
       if(!input || input.dataset.userEdited==='true')continue;
       // Historical/approved values from the official table always have priority.
-      if(field==='cycle_low'&&current.cl_status==='CONFIRMADO')continue;
-      if(field!=='cycle_low'&&current[field+'_status']==='CONFIRMADO')continue;
+      // MCP only modifies officially PROPUESTO pivots. VALIDADO and
+      // CONFIRMADO retain their published anchors unless the admin explicitly edits.
+      if(field==='cycle_low'&&current.cl_status!=='PROPUESTO')continue;
+      if(field!=='cycle_low'&&current[field+'_status']!=='PROPUESTO')continue;
+      const statusField=field==='cycle_low'?'cl_status':field+'_status';
+      const statusInput=document.querySelector(`[data-pivot-token="${rec.token}"][data-pivot-field="${statusField}"]`);
+      // Protect also VALIDADO selected in an unpublished/admin draft.
+      if(statusInput?.value!=='PROPUESTO')continue;
       const val=rec[field];
       if(val!==null&&val!==undefined&&rec.status!=='DATA_ERROR'){
         input.value=String(val);
@@ -414,6 +420,11 @@
     for(const field of ['cl_date',...WAVE_NAMES.map(w=>w+'_date')]){
       const input=document.querySelector(`[data-pivot-token="${rec.token}"][data-pivot-field="${field}"]`);
       if(!input||input.disabled||input.dataset.userEdited==='true')continue;
+      if(field==='cl_date'&&current.cl_status!=='PROPUESTO')continue;
+      if(field!=='cl_date'&&current[field.replace('_date','')+'_status']!=='PROPUESTO')continue;
+      const statusField=field==='cl_date'?'cl_status':field.replace('_date','')+'_status';
+      const statusInput=document.querySelector(`[data-pivot-token="${rec.token}"][data-pivot-field="${statusField}"]`);
+      if(statusInput?.value!=='PROPUESTO')continue;
       const val=rec[field];if(val&&rec.status!=='DATA_ERROR')input.value=val;
     }
     const info=body.querySelector(`[data-pivot-info="${rec.token}"]`);
@@ -471,12 +482,14 @@
     const rec=(state?.sections?.pivots||[]).find(x=>x.token===token);if(!rec)return;
     for(const wave of ['cl',...WAVE_NAMES]){
       const isCl=wave==='cl';const base=isCl?'cycle_low':wave;const field=isCl?'cl_status':wave+'_status';
-      if(rec[field]==='CONFIRMADO')continue;
+      // Technical MCP reevaluation is restricted to PROPUESTO;
+      // never silently revalidate or downgrade an already published VAL/CONF.
+      if(rec[field]!=='PROPUESTO')continue;
       const priceEl=document.querySelector(`[data-pivot-token="${token}"][data-pivot-field="${base}"]`);
       const dateEl=document.querySelector(`[data-pivot-token="${token}"][data-pivot-field="${isCl?'cl_date':wave+'_date'}"]`);
       const select=document.querySelector(`[data-pivot-token="${token}"][data-pivot-field="${field}"]`);
       const price=Number(priceEl?.value),day=dateEl?.value;
-      if(!priceEl||!dateEl||!select||!(price>0)||!day||priceEl.dataset.userEdited==='true'||dateEl.dataset.userEdited==='true')continue;
+      if(!priceEl||!dateEl||!select||select.value!=='PROPUESTO'||!(price>0)||!day)continue;
       const prevPrice=priceEl.value,prevDate=dateEl.value;
       try{
         const u='/api/settings/pivots/technical-review?'+new URLSearchParams({token,wave,price:String(price),date:day});
@@ -489,8 +502,8 @@
           select.value='VALIDADO';select.dataset.userEdited='true';
         }else{
           if(isCl)delete clReviewProofs[token];else delete waveReviewProofs[token+'|'+wave];
-          // A completed, negative 1W assessment downgrades the DRAFT to
-          // PROPUESTO. It never silently changes the PUBLISHED Master.
+          // A completed, negative 1W assessment retains PROPUESTO in the
+          // draft. Only pivots that were PROPUESTO enter this path.
           // Network errors fall into catch() and preserve prior status instead.
           select.value='PROPUESTO';select.dataset.userEdited='true';
         }
@@ -524,24 +537,26 @@
             if(hint)hint.textContent+=(hint.textContent?' · ':'')+`Actualización MCP falló: ${r?.warning||'sin respuesta'}`;
           }else{
             applyPivotCandidate(r);ok++;
-            // One button both refreshes and technically reviews every unconfirmed pivot.
-            await reviewUnconfirmedToken(token);
+            // One button refreshes/reviews only the PROPUESTO pivots.
+            if(state.is_admin)await reviewUnconfirmedToken(token);
             if(token!=='HYPE'&&!(r.o1>0)&&pivots[token]?.cl_date){
               try{
                 const fast=await getPivotPayload('/api/settings/pivots/preliminary?o1_only=1&token='+encodeURIComponent(token));
                 const proposed=(fast.records||[]).find(x=>x.token===token);
-                if(proposed?.o1>0){applyPivotCandidate(proposed);await reviewUnconfirmedToken(token);}
+                if(proposed?.o1>0){applyPivotCandidate(proposed);if(state.is_admin)await reviewUnconfirmedToken(token);}
               }catch(e){const hint=body.querySelector(`[data-pivot-info="${token}"]`);
                 if(hint)hint.textContent+=' · O1 pendiente por MCP: '+e.message;}
             }
           }
         }catch(e){failed++;const hint=body.querySelector(`[data-pivot-info="${token}"]`);if(hint)hint.textContent+=' · MCP no disponible para actualizar';}
-        progress.textContent=`Actualización histórica MCP: ${ok+failed}/${tokens.length} consultados · ${ok} correctos · ${failed} pendientes. No se ha publicado nada.`;
+        progress.textContent=`Candidatos MCP: ${ok+failed}/${tokens.length} consultados · ${ok} respuestas recibidas · ${failed} pendientes. La recepción NO equivale a VALIDADO. ${state.is_admin?'Revisión técnica 1W realizada únicamente en pivotes PROPUESTO fechados.':'Inicia sesión como administrador para ejecutar revisión técnica 1W.'} No se ha publicado nada.`;
       }
     }
     try{await Promise.all([worker(),worker()]);
       archiveLoaded=true;
-      message(`Revisión MCP: ${ok} tokens consultados, ${failed} pendientes. PROPUESTO/VALIDADO requieren «Validar → Publicar»; ningún pivote se confirma automáticamente.`);
+      message(state.is_admin
+        ? `MCP: ${ok} tokens consultados, ${failed} pendientes. Verificación 1W solo en PROPUESTO con precio/fecha: VALIDADO requiere prueba técnica; revisa el resultado y usa «Validar → Publicar».`
+        : `MCP: ${ok} tokens consultados, ${failed} pendientes. Solo candidatos PROPUESTO: para realizar la validación 1W y obtener estado VALIDADO, inicia sesión de administrador y vuelve a pulsar «Actualizar candidatos desde MCP». No se ha publicado nada.`);
     }finally{refreshingPivots=false;button.disabled=false;}
   }
   document.getElementById('settings-preliminary').addEventListener('click',refreshLivePivots);

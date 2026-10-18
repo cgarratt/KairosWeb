@@ -105,11 +105,20 @@ def test_confirmed_mismatch_not_downgraded_to_proposal():
     assert not proposed_simulation_impulse(weeks,published)['eligible']
 
 
-def test_existing_cl_but_o1_nd_remains_blocked():
+def test_existing_cl_uses_latest_closed_week_for_proposed_o1():
     from buy_weekly_policy import proposed_simulation_impulse
     weeks=make_weeks(bos=False)
     low=next(w for w in weeks if w['low']==50)
     p={'cycle_low':low['low'],'cl_date':low['low_date'],'cl_status':'PROPUESTO'}
     result=proposed_simulation_impulse(weeks,p)
-    assert not result['eligible']
-    assert result['reason']=='EXTREMO_HIGH_ND'
+    assert result['eligible'] and result['simulation_only'] and result['operational_blocked']
+    assert result['pivot_authority']['high']['status']=='PROPUESTO'
+    assert result['anchors']['high']['date'] > result['anchors']['low']['date']
+
+
+def test_nd_and_unverified_cl_remain_blocked():
+    from buy_weekly_policy import proposed_simulation_impulse
+    weeks=make_weeks(bos=False)
+    assert proposed_simulation_impulse(weeks,{'cycle_low':50})['reason']=='EXTREMO_LOW_ND'
+    # A nominal CL outside the covered weekly range cannot be treated as O1 source.
+    assert not proposed_simulation_impulse(weeks,{}, {'cycle_low':51,'cl_date':'2023-02-01'})['eligible']

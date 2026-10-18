@@ -5,6 +5,7 @@ HYPE: Hyperliquid HYPE/USDC closed 1D -> complete Mon-Sun UTC weeks, 5L/5R.
 """
 from datetime import datetime
 from hype_weekly import aggregate_weeks
+from structural_outliers import virtual_flash_cl
 
 
 def _val(p):
@@ -26,12 +27,16 @@ def candidates_binance(token, data, *, selected_low=None):
     if token=='PUMPFUN' and raw is not None and abs(raw-.000411)<.00000001:
         value=float(selected_low) if selected_low is not None else None
         warnings.append('CL bruto 0.000411 pertenece a semana excluida; usar únicamente PUMP_CL_CANDIDATE del Master, aún no certificado')
+    virtual_excluded=(token=='VIRTUAL' and virtual_flash_cl(raw,_date(cl)))
+    if virtual_excluded:
+        value=None
+        warnings.append('VIRTUAL: CL bruto del flash crash 06–12/10/2025 excluido; proponer nuevo CL desde 1W cerrado, no se certifica automáticamente')
     def wave(key):return _val(wp.get(key))
     selected_override=token in ('SUI','PUMPFUN') and raw is not None and value!=raw
     result={'token':token,'market':('PUMP' if token=='PUMPFUN' else token)+'/USDT',
             'source':'Binance Spot MCP H4','status':'CANDIDATO_NO_CERTIFICADO',
             'cycle_high':_val(ch),'ch_date':_date(ch),
-            'cycle_low':value,'cl_date':None if selected_override else _date(cl),'raw_cycle_low':raw,
+            'cycle_low':value,'cl_date':None if selected_override or virtual_excluded else _date(cl),'raw_cycle_low':raw,
             'o1':wave('SH1'),'o1_date':_date(wp.get('SH1')),
             'o2':wave('SL1'),'o2_date':_date(wp.get('SL1')),
             'o3':wave('SH2'),'o3_date':_date(wp.get('SH2')),
