@@ -38,3 +38,40 @@ assert(Math.abs(scenario.stageBudgets.reduce((a,b)=>a+b,0)-1000)<1e-7);
 assert(scenario.consumed.every((x,i)=>x<=scenario.stageBudgets[i]+1e-7));
 assert(scenario.spent<=1000+1e-7);
 console.log('Scenario Fibonacci % override PASS');
+
+// Slider is a WATERFALL. Each % is a cap over total available USDT,
+// NOT a slice of partial slider-selected budget.
+const plan1=W.waterfall(2587.80,19145,[20,30,40,10]);
+assert.deepStrictEqual(plan1.stageCapacities,[3829,5743.5,7658,1914.5]);
+assert.deepStrictEqual(plan1.stageBudgets,[2587.8,0,0,0]);
+assert.deepStrictEqual(W.waterfall(3829,19145,master).stageBudgets,[3829,0,0,0]);
+assert.deepStrictEqual(W.waterfall(4000,19145,master).stageBudgets,[3829,171,0,0]);
+assert.deepStrictEqual(W.waterfall(9572.5,19145,master).stageBudgets,[3829,5743.5,0,0]);
+assert.deepStrictEqual(W.waterfall(19145,19145,master).stageBudgets,[3829,5743.5,7658,1914.5]);
+assert.deepStrictEqual(W.waterfall(40000,19145,master).stageBudgets,[3829,5743.5,7658,1914.5]);
+assert.deepStrictEqual(W.waterfall(0,19145,master).stageBudgets,[0,0,0,0]);
+// Slider is a percent of available USDT, NOT of patrimony P.
+assert.strictEqual(W.budgetFromAvailablePercent(0,19145),0);
+assert.strictEqual(W.budgetFromAvailablePercent(100,19145),19145);
+assert.strictEqual(W.budgetFromAvailablePercent(50,19145),9572.5);
+assert.strictEqual(W.budgetFromAvailablePercent(13.5,19145),2584.58);
+assert.strictEqual(W.budgetFromAvailablePercent(200,19145),19145);
+assert.strictEqual(W.budgetFromAvailablePercent(-5,19145),0);
+assert.strictEqual(W.budgetFromAvailablePercent(100,0),0);
+assert.deepStrictEqual(W.waterfall(W.budgetFromAvailablePercent(13.5,19145),19145,master).stageBudgets,[2584.58,0,0,0]);
+// Fixed drafts: changing one field does not silently rewrite the other three.
+assert.deepStrictEqual(W.validateDraft(['50.00','18.75','25','6.25']).values,[50,18.75,25,6.25]);
+assert.equal(W.validateDraft(['50','30','40','10']).valid,false);
+assert.equal(W.validateDraft(['50','18.75','25','6.25']).valid,true);
+assert.equal(W.validateDraft(['50','18,75','25','6,25']).valid,true);
+assert.equal(W.validateDraft(['20','','40','10']).valid,false);
+assert.equal(W.validateDraft(['20','30','40','10.001']).valid,false);
+assert.equal(W.validateDraft(['100','0','0','0']).valid,true);
+assert.equal(W.validateDraft(['0','0','0','0']).valid,false);
+const staged=calculate(tokens,levels,[20,30,40,10],2587.80,1,{
+  stageBudgets:plan1.stageBudgets});
+assert.deepStrictEqual(staged.stageBudgets,[2587.8,0,0,0]);
+assert.ok(staged.consumed.slice(1).every(v=>v===0));
+assert.ok(staged.spent<=2587.80+1e-8);
+assert.throws(()=>calculate(tokens,levels,[25,25,25,25],100,1,{stageBudgets:[100,100,0,0]}),/exceed slider/);
+console.log('Waterfall C1→C4 + fixed percentage draft regression PASS');

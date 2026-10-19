@@ -14,7 +14,7 @@ def test_compras_single_maximum_and_slider_budget_independent_of_eligibility():
     assert 'id="actual-buy-spend"' in html
     assert 'id="unallocated-buy-budget"' in html
     assert 'maxBuyCash=Math.max(0,Number(source.current.reference_cap ?? (cash-trading)))' in html
-    assert 'const referenceCapacity=Math.max(0,Math.min(desired,maxBuyCash));' in html
+    assert 'const referenceCapacity=window.KairosPurchaseWeights.budgetFromAvailablePercent(target,maxBuyCash);' in html
     assert "el('selected-buy-budget').textContent=dollar(referenceCapacity)" in html
     assert 'sim.stageBudgets.forEach' in html
     assert 'sim.unallocated' in html
@@ -45,9 +45,27 @@ def test_fibo_percentages_editable_and_local_only():
     assert 'id="fibo-split-{{ loop.index0 }}"' in html
     assert 'id="fibo-split-reset"' in html
     assert 'id="fibo-split-total"' in html
-    assert 'window.KairosPurchaseWeights.rebalance(fiboPercentages,i,value)' in html
+    assert 'window.KairosPurchaseWeights.validateDraft(raw)' in html
+    assert 'id="fibo-split-apply"' in html
+    assert 'window.KairosPurchaseWeights.waterfall(referenceCapacity,maxBuyCash,selectedMix)' in html
+    assert 'stageBudgets:stagedPlan.stageBudgets' in html
     assert 'fiboCustom?window.KairosPurchaseWeights.asFractions(fiboPercentages):null' in html
     assert 'weightsByToken:appliedByToken' in html
     assert 'showFiboControls();paint();' in html
     assert "url_for('static', filename='purchase_weights.js')" in html
     assert (root / 'static/purchase_weights.js').is_file()
+
+
+def test_fibonacci_waterfall_controls_and_no_automatic_rebalance_on_typing():
+    root=Path(__file__).resolve().parents[1]
+    html=(root/'templates/trade_sim.html').read_text(encoding='utf-8')
+    assert 'Cupo máximo:' in html
+    assert 'primero C1, después C2, C3 y C4' in html
+    assert 'id="fibo-split-apply"' in html
+    assert "addEventListener('input',refreshFiboDraft)" in html
+    assert 'const check=refreshFiboDraft();' in html
+    assert 'fiboPercentages=check.values;' in html
+    assert 'window.KairosPurchaseWeights.rebalance(fiboPercentages' not in html
+    assert "window.KairosPurchaseWeights.waterfall(referenceCapacity,maxBuyCash,selectedMix)" in html
+    assert 'stageBudgets:stagedPlan.stageBudgets' in html
+    assert 'Cupo máximo:' in html

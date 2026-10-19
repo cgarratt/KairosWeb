@@ -41,6 +41,17 @@ function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
   const stageBudgets=normalizedMix.map(v=>plannedBudget*v);
   // Avoid carrying floating point residue outside the 100% envelope.
   stageBudgets[3]=Math.max(0,plannedBudget-stageBudgets[0]-stageBudgets[1]-stageBudgets[2]);
+  // Optional scenario-only waterfall from the UI: staged caps are computed
+  // against full cash minus QF. No redistribution when tokens are blocked.
+  if(policy.stageBudgets!==undefined){
+    const planned=policy.stageBudgets;
+    if(!Array.isArray(planned)||planned.length!==4||planned.some(x=>!Number.isFinite(Number(x))||Number(x)<0))
+      throw Error('Four nonnegative planned tranche budgets required');
+    const sum=planned.reduce((a,b)=>a+Number(b),0);
+    if(sum>plannedBudget+0.011)
+      throw Error('Stage budgets cannot exceed slider-selected USDT');
+    for(let j=0;j<4;j++)stageBudgets[j]=Number(planned[j]);
+  }
   const consumed=[0,0,0,0], snapshots=[];let cash=plannedBudget;
   for(let j=0;j<4;j++){
     const px=tokens.map((t,i)=>prices[i][j]||Number(t.price));

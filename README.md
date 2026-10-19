@@ -1,32 +1,28 @@
-# KairosWeb v2.0.16 — paquete para GitHub
+# KairosWeb v2.0.17 — Release completo GitHub
 
-**Release completo** acumulado desde v2.0.15. Contrato Google Sheets **schema_version=5.0.0** sin cambios. Conservar rutas `static/`, `templates/`, `tests/` y `render.yaml`. Actualización de código **no equivale** a despliegue en GitHub/Render.
+**Versión de aplicación:** 2.0.17. **Schema Master:** 5.0.0 (sin cambio). Partir del código de este ZIP completo, desplegando su contenido descomprimido en GitHub; conservar la estructura de carpetas (`static/`, `templates/`, `tests/`). No usar este ZIP, imágenes ni instantáneas locales como fuente para balances o cotizaciones: solo Google Sheets original PUBLICADO + MCP Spot.
 
-## Cambios v2.0.16
+## Cambios desde v2.0.16
 
-### Modo Órdenes (fase 1; propuestas SIN ejecución)
+### Compras: slider como porcentaje de liquidez
 
-- Resumen «Próximas órdenes por Token»: columnas **USDT compra** y **Unidades venta** desde la propuesta seleccionada. Una extensión SELL sin tamaño aprobado muestra **POR DEFINIR** y no inventa unidades.
-- Backlog «Backlog de Ordenes Compra / Venta»: filtro **Nivel** combinado con Exchange, Tier, Operación y Token desplegable.
-- BUY estructurales: presupuesto por tramo y balanceo secuencial con token INFRA, target y QF; BUY Balance se limita asimismo a déficit y objetivo. SELL Balance respeta Exchange libre, BTC NEVER SELL y custodia protegida.
-- El motor no crea órdenes ni altera fills; el nombre «Backlog» designa propuestas hipotéticas.
+- El slider va de **0% a 100% del USDT disponible para Compras**, no del patrimonio total. La liquidez máxima es USDT físico menos Reserva Trading QF una sola vez. A 0%, presupuesto USDT $0; a 100%, todo el disponible elegible como presupuesto *teórico*.
+- El capital del slider llena las cestas **secuencialmente O2C1 (Fib 38.2%) → O2C2 (50%) → O2C3 (61.8%) → O2C4 (78.6%)**, sin pasar a la siguiente antes de completar el cupo de la anterior. Los cupos se calculan con los porcentajes aplicados a la totalidad de USDT disponible, no al importe parcial del slider.
+- El editor de porcentajes permite redactar los cuatro valores **sin modificar automáticamente los demás**. Al sumar exactamente 100.00% se activa «Aplicar porcentajes»; también se puede «Restaurar porcentajes del Master». Solo afectan esta simulación y no escriben al Master.
+- Se mantienen sincronizados tarjetas, matriz Fibonacci, pesos simulados y gráficos inferiores con la distribución seleccionada. El enlace a Forecast mantiene su escala de patrimonio mediante conversión independiente.
+- Compras efectivas hipotéticas: solamente tokens INFRA (según la banda vigente), límite por déficit/target, rebalanceo secuencial y QF protegida. Un importe teórico sin compra elegible permanece en USDT. Pivotes PROPUESTO solo habilitan simulación, **nunca órdenes reales**.
 
-### Modo Compras (simulación local)
+### Órdenes (sin cambios desde v2.0.16)
 
-- Los 4 porcentajes del «Resumen de compras» son **editables**; al cambiar uno, se reajustan proporcionalmente los otros tres, sumando siempre **100.00%**.
-- El porcentaje inicial de O2/O4 proviene de los parámetros aprobados del último Master PUBLICADO. «Restaurar porcentajes del Master» revierte cambios locales. **No se escriben** cambios a Google Sheets.
-- Se actualizan tarjetas USDT C1–C4, matriz de precios, pesos post-compra, distribución por token y liquidez proyectada al cambiar porcentajes o slider.
-- El importe teórico se distribuye al 100% entre los cuatro tramos; las compras efectivas simuladas siguen acotadas por INFRA, déficit, balanceo secuencial y USDT disponible menos QF. El excedente no asignable permanece en USDT.
-- Los ajustes interactivos en Compras **no constituyen órdenes reales** y no representan automáticamente nuevas propuestas en Órdenes sin volver a calcular con los parámetros publicados.
+- Las propuestas BUY / SELL siguen siendo *simuladas*. Resumen con USDT compra y unidades venta, y backlog con filtro Nivel, Exchange, Tier, Operación y Token.
+- Ventas limitadas al Exchange libre; BTC NEVER SELL, HODL/Core protegidos. Precio LIMIT mostrado no es orden enviada.
 
-## Verificación de despliegue
+## Instalación y verificación
 
-1. Descomprimir el ZIP y reemplazar los archivos del repositorio, respetando sus rutas. No publicar el ZIP cerrado como sustituto del código fuente.
-2. Commit / push y desplegar Render; nunca incluir credenciales en el repositorio.
-3. Abrir `/health` y comprobar `version=2.0.16`, `status=UP`, `release_assets.consistent=true`.
-4. Revisar en Compras valores iniciales publicados, edición de mezcla (por ejemplo C1 20→50), conservación 100%, gráficos y «Restaurar»; en Órdenes, verificar columnas, filtro Nivel y ausencia de ejecución.
-5. La verificación HTTP en producción y el funcionamiento de proveedores MCP privados se deben comprobar **después del despliegue**; los tests locales no los certifican.
+1. Descomprimir el ZIP y reemplazar los archivos en el repositorio GitHub. Hacer Commit/Push y desplegar Render. No subir contraseñas ni tokens al repositorio.
+2. Consultar `/health`: debe indicar `version: 2.0.17`, `status: UP`, y `release_assets.consistent: true`.
+3. Comprobar Compras con 0%, 50% y 100% de USDT disponible, secuencia C1→C4, edición fija de mezcla (p.ej. 50/20/20/10), opción Aplicar y Restaurar, pesos y gráficos.
+4. Comprobar que el slider de Ventas sigue basado en su objetivo patrimonial y que Órdenes no envía operaciones.
+5. Comprobar los conectores MCP de producción por separado, en especial Hyperliquid HYPE/USDC: pasar pruebas locales no implica acceso operativo desde Render.
 
-**Datos:** solo Google Sheets ORIGINAL `KAIROS_V5_MASTER` PUBLICADO y proveedores MCP Spot; los ZIP no son fuentes de inventario ni precios. No se alteran Google Sheets, GitHub, Render o exchanges por crear este archivo.
-
-**Integridad:** paquete de 99 archivos (menos de 100), con `RELEASE_MANIFEST_v2.0.16.json` y `SHA256SUMS.txt`.
+**Integridad:** manifiesto de todos los archivos con SHA-256 y `SHA256SUMS.txt`; ZIP con un máximo de 99 archivos. Construir este release **no despliega** ni modifica Google Sheets, GitHub, Render, exchange, órdenes o fills.

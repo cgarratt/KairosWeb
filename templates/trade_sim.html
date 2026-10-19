@@ -8,8 +8,8 @@
 .pivot-anchor-line{display:inline-flex;align-items:center;gap:6px;justify-content:flex-end;white-space:nowrap}
 .pivot-anchor-dot{display:inline-block;width:11px;height:11px;min-width:11px;border-radius:50%;border:1px solid rgba(255,255,255,.65);box-shadow:0 0 0 1px rgba(0,0,0,.14)}
 .pivot-anchor-dot.pivot-propuesto{background:#e54357}.pivot-anchor-dot.pivot-validado{background:#f0a92b}.pivot-anchor-dot.pivot-confirmado{background:#20bb73}
-/* Four editable Fibonacci percentages: local-only, always 100%. */
-.fibo-split-control{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:12px}.fibo-split-control label{font-size:12px;color:var(--muted,#8ca3c2);font-weight:700}.fibo-split-control input{width:92px;max-width:100%;padding:7px 8px;border:1px solid var(--border,#70849b);border-radius:8px;background:var(--surface,#172b47);color:var(--text,#f4f8ff);font:inherit;font-size:15px;text-align:right}.fibo-split-control .fibo-pct{font-weight:700}.fibo-split-reset{border:1px solid var(--border,#70849b);background:transparent;color:inherit;padding:7px 12px;border-radius:8px;cursor:pointer}.fibo-split-reset:hover{background:rgba(54,111,199,.15)}.fibo-split-status{font-size:12px;font-weight:700;color:var(--muted,#8ca3c2)}.fibo-split-status.custom{color:#2aba90}
+/* Editable Fibonacci percentages: draft first, apply only when sum=100%. */
+.fibo-split-control{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:12px}.fibo-split-control label{font-size:12px;color:var(--muted,#8ca3c2);font-weight:700}.fibo-split-control input{width:92px;max-width:100%;padding:7px 8px;border:1px solid var(--border,#70849b);border-radius:8px;background:var(--surface,#172b47);color:var(--text,#f4f8ff);font:inherit;font-size:15px;text-align:right}.fibo-split-control .fibo-pct{font-weight:700}.fibo-split-reset{border:1px solid var(--border,#70849b);background:transparent;color:inherit;padding:7px 12px;border-radius:8px;cursor:pointer}.fibo-split-reset:hover{background:rgba(54,111,199,.15)}.fibo-split-status{font-size:12px;font-weight:700;color:var(--muted,#8ca3c2)}.fibo-split-status.custom{color:#2aba90}.fibo-split-status.invalid{color:#df596c}.fibo-split-apply{border:0;background:#236fc2;color:#fff;border-radius:8px;padding:8px 13px;font:inherit;font-weight:700;cursor:pointer}.fibo-split-apply:disabled{opacity:.45;cursor:not-allowed}.fibo-tranche-cap{display:block;margin-top:3px;color:var(--muted,#8ca3c2);font-size:12px}.fibo-edit-note{color:var(--muted,#8ca3c2);font-size:12px}
 
 
 </style>{% endblock %}
@@ -27,23 +27,24 @@
 {% endif %}
 <div class="sim-metric"><small>{{ '◇ Compra simulada' if mode.slug=='compras' else '◇ Ventas simuladas' }}</small><b id="allocation-metric">—</b><small id="allocation-caption">{{ 'Presupuesto definido por el slider, no compra ejecutada' if mode.slug=='compras' else 'Solo escenario, no orden' }}</small></div>
 </div>
-<div class="control-panel"><div class="sim-panel-title"><strong>{{ 'Despliegue teórico (% de patrimonio P)' if mode.slug=='compras' else 'Liquidez objetivo (% del patrimonio P)' }}</strong><strong id="slider-value" style="font-size:23px;color:#1657a7">—</strong></div>
-<input id="allocation-slider" type="range" aria-label="{{ 'Porcentaje a desplegar' if mode.slug=='compras' else 'Porcentaje de liquidez objetivo' }}" min="{{ 0 if mode.slug=='compras' else payload.current.cash_pct }}" max="{{ payload.current.max_percent }}" step="any" value="{{ payload.current.max_percent if mode.slug=='compras' else ([payload.current.cash_pct,40]|max) }}">
-<div style="display:flex;justify-content:space-between;gap:12px" class="sub"><span>{{ '0% de P' if mode.slug=='compras' else ('%.2f%% USDT actual'|format(payload.current.cash_pct)) }}</span><span>{{ 'Máximo disponible:' if mode.slug=='compras' else '70% USDT objetivo máximo' }} {% if mode.slug=='compras' %}<strong id="max-buy-slider">—</strong>{% endif %}</span></div>
-{% if mode.slug=='compras' %}<p class="sub" style="margin-top:10px">Compra teórica seleccionada por el slider: <strong id="selected-buy-budget">—</strong> · Asignación del presupuesto: 100% entre los cuatro tramos.</p>{% endif %}
+<div class="control-panel"><div class="sim-panel-title"><strong>{{ 'Capital para compras (% de USDT disponible)' if mode.slug=='compras' else 'Liquidez objetivo (% del patrimonio P)' }}</strong><strong id="slider-value" style="font-size:23px;color:#1657a7">—</strong></div>
+<input id="allocation-slider" type="range" aria-label="{{ 'Porcentaje de USDT disponible para compras' if mode.slug=='compras' else 'Porcentaje de liquidez objetivo' }}" min="{{ 0 if mode.slug=='compras' else payload.current.cash_pct }}" max="{{ 100 if mode.slug=='compras' else payload.current.max_percent }}" step="{{ 0.1 if mode.slug=='compras' else 'any' }}" value="{{ 100 if mode.slug=='compras' else ([payload.current.cash_pct,40]|max) }}">
+<div style="display:flex;justify-content:space-between;gap:12px" class="sub"><span>{{ '0% · USDT $0' if mode.slug=='compras' else ('%.2f%% USDT actual'|format(payload.current.cash_pct)) }}</span><span>{{ '100% = Máximo disponible:' if mode.slug=='compras' else '70% USDT objetivo máximo' }} {% if mode.slug=='compras' %}<strong id="max-buy-slider">—</strong>{% endif %}</span></div>
+{% if mode.slug=='compras' %}<p class="sub" style="margin-top:10px">Capital seleccionado (% de USDT disponible) para Compras: <strong id="selected-buy-budget">—</strong> · Llenado secuencial: primero C1, luego C2, C3 y C4.</p>{% endif %}
 </div>
 </section>
 {% if mode.slug=='compras' %}
-<section class="panel span-12"><div class="hero" style="align-items:flex-start"><div><h2>Resumen de compras</h2><p class="sub">Ajusta la proporción de cada retroceso Fibonacci para esta simulación. Los cuatro porcentajes siempre suman 100%.</p></div><a id="forecast-detail-link" class="btn primary" href="/mode/forecast">Ver niveles y ondas en Forecast ↗</a></div>
+<section class="panel span-12"><div class="hero" style="align-items:flex-start"><div><h2>Resumen de compras</h2><p class="sub">Los porcentajes determinan el cupo de cada cesta sobre el máximo disponible. El slider llena primero C1, después C2, C3 y C4. Edita los cuatro porcentajes y pulsa Aplicar cuando sumen 100%.</p></div><a id="forecast-detail-link" class="btn primary" href="/mode/forecast">Ver niveles y ondas en Forecast ↗</a></div>
 <div class="sim-layout" style="margin-top:18px">
 {% for level in ['38.2%', '50%', '61.8%', '78.6%'] %}
-<div class="sim-metric"><small>C{{ loop.index }} · Fib {{ level }}</small><b id="buy-tranche-{{ loop.index0 }}">—</b>
-<div class="fibo-split-control"><label for="fibo-split-{{ loop.index0 }}">Asignación</label><input id="fibo-split-{{ loop.index0 }}" type="number" inputmode="decimal" min="0" max="100" step="0.01" aria-label="Porcentaje para Fibonacci {{ level }}"><span class="fibo-pct">%</span></div></div>
+<div class="sim-metric"><small>O2C{{ loop.index }} · Fib {{ level }}</small><b id="buy-tranche-{{ loop.index0 }}">—</b><small class="fibo-tranche-cap" id="buy-tranche-limit-{{ loop.index0 }}">Cupo máximo: —</small>
+<div class="fibo-split-control"><label for="fibo-split-{{ loop.index0 }}">Cupo</label><input id="fibo-split-{{ loop.index0 }}" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Porcentaje para Fibonacci {{ level }}"><span class="fibo-pct">%</span></div></div>
 {% endfor %}
 </div>
-<div class="fibo-split-control"><span class="fibo-split-status" id="fibo-split-total" role="status" aria-live="polite">Total: 100.00% · Master</span><button id="fibo-split-reset" class="fibo-split-reset" type="button">Restaurar porcentajes del Master</button></div>
+<div class="fibo-split-control"><span class="fibo-split-status" id="fibo-split-total" role="status" aria-live="polite">Total: 100.00% · Master</span><button id="fibo-split-apply" class="fibo-split-apply" type="button" disabled>Aplicar porcentajes</button><button id="fibo-split-reset" class="fibo-split-reset" type="button">Restaurar porcentajes del Master</button></div>
+<p class="fibo-edit-note">Puedes escribir valores fijos en las cuatro casillas sin ajustes automáticos. Hasta aplicar un total de 100%, la simulación conserva los últimos porcentajes válidos.</p>
 <p class="footer-note">Compra efectivamente distribuida: <strong id="actual-buy-spend">—</strong> · Presupuesto no asignado por restricciones: <strong id="unallocated-buy-budget">—</strong>. No son órdenes.</p>
-<p class="footer-note">Los porcentajes del Master son el punto de partida. Cualquier ajuste se aplica <strong>solo a esta simulación</strong>, sin guardar cambios en el Master ni modificar Órdenes. Los cuatro tramos suman el 100% del slider; las compras efectivas siguen limitadas por INFRA, precios semanales válidos y targets, y el remanente permanece en USDT.</p></section>
+<p class="footer-note">Los porcentajes del Master son el punto de partida. Cualquier ajuste se aplica <strong>solo a esta simulación</strong>, sin guardar cambios en el Master ni modificar Órdenes. Los cupos de los cuatro tramos suman el 100% del máximo disponible; el slider los llena de izquierda a derecha. Las compras efectivas siguen limitadas por INFRA, precios semanales válidos y targets, y el remanente permanece en USDT.</p></section>
 {% endif %}
 
 <section class="panel span-6"><h2>Distribución del escenario</h2><p class="sub">Asignación USDT referencial por token.</p><div id="alloc-chart" class="bar-list"></div></section>
@@ -83,9 +84,19 @@ let fiboCustom=false;
 function showFiboControls(){
  if(mode!=='compras')return;
  fiboPercentages.forEach((pct,i)=>{el('fibo-split-'+i).value=pct.toFixed(2)});
- const total=fiboPercentages.reduce((a,b)=>a+b,0);
- el('fibo-split-total').textContent='Total: '+total.toFixed(2)+'% · '+(fiboCustom?'Personalizado':'Master');
- el('fibo-split-total').classList.toggle('custom',fiboCustom);
+ refreshFiboDraft();
+}
+function refreshFiboDraft(){
+ const raw=[0,1,2,3].map(i=>el('fibo-split-'+i).value);
+ const check=window.KairosPurchaseWeights.validateDraft(raw);
+ const status=el('fibo-split-total');
+ const changed=raw.some((v,i)=>check.values?.[i]!==fiboPercentages[i]);
+ status.classList.toggle('invalid',!check.valid);
+ status.classList.toggle('custom',check.valid&&fiboCustom);
+ status.textContent=check.total===null ? check.reason
+    : 'Total: '+check.total.toFixed(2)+'% · '+(check.valid?(changed?'Listo para aplicar':(fiboCustom?'Personalizado':'Master')):check.reason);
+ el('fibo-split-apply').disabled=!check.valid||!changed;
+ return check;
 }
 
 const symbols={BTC:'bitcoin-btc',ETH:'ethereum-eth',SOL:'solana-sol',LINK:'chainlink-link',HYPE:'hyperliquid-hype',HBAR:'hedera-hbar',SUI:'sui-sui',ONDO:'ondo-finance-ondo',PUMP:'pump-fun-pump',PLUME:'plume-plume',PEPE:'pepe-pepe',VIRTUAL:'virtual-protocol-virtual'};
@@ -142,28 +153,39 @@ function renderO2Fibonacci(sim){
 }
 function paint(){let target=Number(el('allocation-slider').value);el('slider-value').textContent=target.toFixed(1)+'%';el('portfolio-metric').textContent=dollar(P);el('cash-metric').textContent=dollar(cash);el('cash-pct').textContent=(100*cash/P).toFixed(1)+'% de P';let allocated=[],after=cash;
 if(mode==='compras'){
-  const desired=P*target/100;
-  const referenceCapacity=Math.max(0,Math.min(desired,maxBuyCash));
+  // COMPRAS: slider 0–100% del USDT operativo máximo, NO del patrimonio P.
+  // Ventas conserva su escala independiente de patrimonio.
+  const referenceCapacity=window.KairosPurchaseWeights.budgetFromAvailablePercent(target,maxBuyCash);
   el('max-buy-metric').textContent=dollar(maxBuyCash);
-  el('max-buy-slider').textContent=dollar(maxBuyCash)+' · '+(100*maxBuyCash/P).toFixed(1)+'% de P';
+  el('max-buy-slider').textContent=dollar(maxBuyCash)+' del USDT operativo';
   const customFractions=fiboCustom?window.KairosPurchaseWeights.asFractions(fiboPercentages):null;
   const appliedWeights=customFractions||o2Weights;
   const appliedByToken=customFractions
     ? Object.fromEntries(source.tokens.map(t=>[t.token,customFractions]))
     : source.buy_stage_weights;
-  const sim=window.KairosO2Sequential.calculate(source.tokens,source.o2_levels,appliedWeights,referenceCapacity,source.drift_band_pp,{
-    requireEligibility:true,eligibility:source.buy_eligibility,weightsByToken:appliedByToken});
+  // Allocate the slider's selected USDT in strict C1→C2→C3→C4 order.
+  // Each basket has a fixed percentage of the FULL maxBuyCash, not of this
+  // slider value. At 3.1% of P, C1 may still be the only basket funded.
+  const selectedMix=fiboCustom?fiboPercentages:fiboMasterPercentages;
+  const stagedPlan=window.KairosPurchaseWeights.waterfall(referenceCapacity,maxBuyCash,selectedMix);
+  const sim=window.KairosO2Sequential.calculate(source.tokens,source.o2_levels,appliedWeights,stagedPlan.selectedBudget,source.drift_band_pp,{
+    requireEligibility:true,eligibility:source.buy_eligibility,weightsByToken:appliedByToken,
+    stageBudgets:stagedPlan.stageBudgets});
   allocated=sim.totalByToken;
   const sum=sim.spent;after=cash-sum;
    el('third-metric').textContent=dollar(trading);
-   el('selected-buy-budget').textContent=dollar(referenceCapacity);
+   el('selected-buy-budget').textContent=dollar(referenceCapacity)+' ('+target.toFixed(1)+'% del disponible)';
    el('allocation-metric').textContent=dollar(referenceCapacity);
    el('actual-buy-spend').textContent=dollar(sum);
    el('unallocated-buy-budget').textContent=dollar(sim.unallocated);
   // Conciliación y restricciones conservadas en la lógica; no mostrar nota amarilla.
   renderO2Fibonacci(sim);
-  sim.stageBudgets.forEach((amount,i)=>{el('buy-tranche-'+i).textContent=dollar(amount);});
-  el('forecast-detail-link').href='/mode/forecast?deploy='+encodeURIComponent(target.toFixed(4));
+  sim.stageBudgets.forEach((amount,i)=>{el('buy-tranche-'+i).textContent=dollar(amount);
+    el('buy-tranche-limit-'+i).textContent='Cupo máximo: '+dollar(stagedPlan.stageCapacities[i]);});
+  // Forecast legacy 'deploy' expects percentage of total patrimony, not the
+  // new 0–100% available-cash slider domain. Preserve the old contract.
+  const forecastPatrimonyPercent=P>0?100*referenceCapacity/P:0;
+  el('forecast-detail-link').href='/mode/forecast?deploy='+encodeURIComponent(forecastPatrimonyPercent.toFixed(4));
 }else{
   const desired=Math.max(0,P*target/100-cash);
   // Etapa 1: vender sobreponderados hasta el menor entre su exceso y el Exchange libre declarado.
@@ -206,18 +228,22 @@ el('before-cash').textContent=dollar(cash)+' ('+(100*cash/P).toFixed(1)+'%)';el(
 if(mode==='compras'){
  showFiboControls();
  for(let i=0;i<4;i++){
-  el('fibo-split-'+i).addEventListener('change',event=>{
-   const value=event.target.value;
-   if(String(value).trim()==='' || !Number.isFinite(Number(value))){showFiboControls();return;}
-   fiboPercentages=window.KairosPurchaseWeights.rebalance(fiboPercentages,i,value);
-   fiboCustom=true;
-   showFiboControls();
-   paint(); // Recalculate tranche cards, weight/USDT matrix, bars and remaining cash.
+  // Do not reassign the other percentages after each keystroke/blur.
+  el('fibo-split-'+i).addEventListener('input',refreshFiboDraft);
+  el('fibo-split-'+i).addEventListener('keydown',event=>{
+   if(event.key==='Enter'&&!el('fibo-split-apply').disabled){event.preventDefault();el('fibo-split-apply').click()}
   });
  }
+ el('fibo-split-apply').addEventListener('click',()=>{
+  const check=refreshFiboDraft();
+  if(!check.valid)return;
+  fiboPercentages=check.values;
+  fiboCustom=fiboPercentages.some((v,i)=>v!==fiboMasterPercentages[i]);
+  showFiboControls();paint();
+ });
  el('fibo-split-reset').addEventListener('click',()=>{
-   fiboPercentages=fiboMasterPercentages.slice();fiboCustom=false;
-   showFiboControls();paint();
+  fiboPercentages=fiboMasterPercentages.slice();fiboCustom=false;
+  showFiboControls();paint();
  });
 }
 el('allocation-slider').addEventListener('input',paint);paint();
