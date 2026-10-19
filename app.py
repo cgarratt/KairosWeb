@@ -29,7 +29,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.17'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.18'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1457,6 +1457,8 @@ def _deployed_asset_status():
         'forecast_published_pivot_locks': ('static/forecast_fibo_plan.js', ("function wavePath(p,selectors)", "const approved=s=>s==='VALIDADO'||s==='CONFIRMADO'", 'fixed[wave]=price;locked.push(wave)')),
         'forecast_locked_chart': ('templates/forecast.html', ('Fibo.wavePath(p,selectors)', "'data-wave-fixed':locked?'true':'false'", '🔒 ${r.statuses[key]}')),
         'buy_post_fibo_weights': ('static/o2_sequential.js', ('postWeights','postCrypto','stageBudgets','unallocated','policy.stageBudgets')),
+        'buy_postweight_semaphore': ('static/o2_sequential.js', ('function postBuySemaphore(', "state:'green'", "state:'amber'", "state:'red'", "state:'none'")),
+        'buy_postweight_color_ui': ('templates/trade_sim.html', ('buy-weight-green', 'buy-weight-amber', 'buy-weight-red', 'postBuySemaphore(amount,postWeight,t.target)', 'USDT &gt; 0')),
         'buy_custom_fibo_weights': ('static/purchase_weights.js', ('function rebalance(', 'function normalize(', 'function asFractions(', 'function waterfall(', 'function validateDraft(')),
         'buy_slider_percent_available': ('templates/trade_sim.html', ('Capital para compras (% de USDT disponible)', 'budgetFromAvailablePercent(target,maxBuyCash)', 'Llenado secuencial: primero C1, luego C2, C3 y C4')),
         'buy_waterfall_fixed_percentages': ('static/purchase_weights.js', ('function waterfall(budget,maximum,percentages)', 'function budgetFromAvailablePercent(percent,maximum)', 'function validateDraft(rawValues)')),

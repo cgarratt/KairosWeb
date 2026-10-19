@@ -29,14 +29,18 @@ def test_backend_maximum_is_cash_less_qf_not_structural_spend():
     assert 'requireEligibility:true' in (root/'templates/trade_sim.html').read_text(encoding='utf-8')
 
 
-def test_fibonacci_title_and_all_three_cells_same_historical_color():
+def test_fibonacci_color_applies_only_to_post_purchase_allocated_cells():
     root = Path(__file__).resolve().parents[1]
     html = (root / 'templates/trade_sim.html').read_text(encoding='utf-8')
     assert 'Maestro de Precios - Retrocesos Fibo' in html
-    assert 'class="${css}" title="Peso cripto post-compra C${j+1}' in html
     assert html.count('<th>% Peso</th>') == 4
-    assert '<td class="${css}" title="${historicalTitle}">${fibPrice(level)}</td>' in html
-    assert '<td class="${css}" title="${historicalTitle}">${dollar(amount)}</td>' in html
+    assert 'postBuySemaphore(amount,postWeight,t.target)' in html
+    assert "const css=semaphore.state==='none'?'':'buy-weight-'+semaphore.state" in html
+    assert '<td class="${css}" title="${explanation}">${fibPrice(level)}</td>' in html
+    assert '<td class="${css}" title="${explanation}">${weightText}</td>' in html
+    assert '<td class="${css}" title="${explanation}">${dollar(amount)}</td>' in html
+    assert 'historicalStatus' not in html
+    assert 'nivel Fibonacci; no depende del Spot actual' not in html
 
 
 def test_fibo_percentages_editable_and_local_only():

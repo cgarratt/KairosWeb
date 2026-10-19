@@ -3,7 +3,7 @@ ROOT=Path(__file__).resolve().parents[1]
 
 def test_identity_and_health_markers_in_release():
     app=(ROOT/'app.py').read_text(encoding='utf-8')
-    assert "APP_VERSION = '2.0.17'" in app
+    assert "APP_VERSION = '2.0.18'" in app
     assert "'buy_p1p2_anchors':" in app and "'buy_p1p2_policy':" in app
     template=(ROOT/'templates/trade_sim.html').read_text(encoding='utf-8')
     engine=(ROOT/'buy_weekly_policy.py').read_text(encoding='utf-8')
@@ -32,7 +32,8 @@ def test_release_2014_matrix_ventas_forecast_and_orders_views():
     assert '<th>P1</th><th>P2</th>' in html
     assert html.count('<th>% Peso</th>') == 4
     assert 'o2-drift-dot drift-' not in html  # los precios Fibo ya no llevan indicador
-    assert 'correctP2=high.date&&historical.estimated_o1_date===high.date' in html
+    assert 'postBuySemaphore(amount,postWeight,t.target)' in html
+    assert 'historicalStatus' not in html
     assert "dollar(P*target/100)+' ('+target.toFixed(1)+'%)'" in html
     assert 'Simulación - Ondas Elliott' in forecast
     assert '<th>O5 (SH3)</th><th>Estado</th>' not in forecast

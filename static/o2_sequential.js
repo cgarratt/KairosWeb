@@ -9,6 +9,20 @@ function classifyDrift(weight,target,bandPP){
   const driftPP=(actual-objective)*100;
   return {status:driftPP>band+1e-9?'SOBRE':driftPP< -band-1e-9?'INFRA':'NEUTRAL',driftPP};
 }
+// Visual traffic light for positive simulated BUY fills only, based on the
+// weight AFTER the same tranche. Drift thresholds are percentage POINTS.
+// This does not modify trade eligibility: INFRA/targets/QF stay independent.
+function postBuySemaphore(amount,postWeight,targetWeight){
+  const fill=Number(amount),post=Number(postWeight),target=Number(targetWeight);
+  if(!Number.isFinite(fill)||fill<0.005 || !Number.isFinite(post)||post<0 ||
+     !Number.isFinite(target)||target<0 || target>1 || post>1)
+    return {state:'none',driftPP:null};
+  const driftPP=100*(post-target);
+  const epsilon=1e-8; // avoid float noise at exactly target or -1 pp
+  if(driftPP>=-epsilon)return {state:'green',driftPP};
+  if(driftPP>=-1-epsilon)return {state:'amber',driftPP};
+  return {state:'red',driftPP};
+}
 function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
   const levels=levelRows||{}, n=tokens.length, w=weights.map(x=>Math.max(0,Number(x)||0)), sumW=w.reduce((a,b)=>a+b,0);
   const bandPP=(driftBandPP===undefined||driftBandPP===null)?1:driftBandPP;
@@ -97,6 +111,6 @@ function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
   }
   return {prices,amounts,stageBudgets,unallocated:Math.max(0,plannedBudget-consumed.reduce((a,b)=>a+b,0)),consumed,totalByToken:amounts.map(a=>a.reduce((s,x)=>s+x,0)),spent:consumed.reduce((a,b)=>a+b,0),cash,snapshots};
 }
-const api={calculate,classifyDrift};if(typeof module!=='undefined'&&module.exports)module.exports=api;
+const api={calculate,classifyDrift,postBuySemaphore};if(typeof module!=='undefined'&&module.exports)module.exports=api;
 root.KairosO2Sequential=api;
 })(typeof window!=='undefined'?window:globalThis);

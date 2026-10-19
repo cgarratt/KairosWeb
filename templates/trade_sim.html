@@ -4,7 +4,14 @@
 <style>
 .sim-layout{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.sim-layout.purchase-metrics{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}.sim-metric{border:1px solid #dce6f4;background:#f7fbff;padding:15px;border-radius:16px}.sim-metric b{font-size:23px;color:#164c94;display:block;margin:9px 0}.sim-metric small{color:#536984}.control-panel{padding:22px;border:1px solid #c7dbf6;border-radius:18px;background:#eef5ff}input[type=range]{width:100%;accent-color:#266ac6;cursor:pointer;height:25px}.sim-rows td{font-variant-numeric:tabular-nums}.sim-actions{display:inline-flex;padding:5px 10px;border-radius:20px;font-size:12px;font-weight:800;background:#e7f8f0;color:#16825d}.sim-actions.watch{background:#fff3d8;color:#8f6900}.sim-actions.sell{background:#ffedf0;color:#af334a}.sim-warn{padding:12px 16px;background:#fff8e9;border-radius:12px;color:#966200;border:1px solid #f0dda9;font-size:13px}.sim-bar{height:15px;border-radius:20px;overflow:hidden;background:#e4eaf3}.sim-bar>div{height:100%;background:linear-gradient(90deg,#1c61b9,#43abe5);transition:width .15s}.sim-panel-title{display:flex;justify-content:space-between;align-items:center;gap:12px}@media(max-width:800px){.sim-layout{grid-template-columns:repeat(2,1fr)}}@media(max-width:530px){.sim-layout{grid-template-columns:1fr}}
 
-.o2-table-scroll{width:100%;overflow-x:auto}.o2-table{min-width:1420px}.o2-table td,.o2-table th{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}.o2-table td:first-child,.o2-table th:first-child{text-align:left}.o2-table td.level-hit{background:rgba(23,163,115,.25)!important;color:#087451;font-weight:800}.o2-table td.level-near{background:rgba(240,169,55,.25)!important;color:#80520b;font-weight:800}.o2-table td.level-blocked{background:rgba(222,58,73,.22)!important;color:#b3213a;font-weight:800}[data-theme="dark"] .o2-table td.level-hit{color:#93fbd0;background:rgba(23,163,115,.3)!important}[data-theme="dark"] .o2-table td.level-near{color:#ffe5a2;background:rgba(240,169,55,.29)!important}[data-theme="dark"] .o2-table td.level-blocked{color:#ffb2bd;background:rgba(222,58,73,.34)!important}
+.o2-table-scroll{width:100%;overflow-x:auto}.o2-table{min-width:1420px}.o2-table td,.o2-table th{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}.o2-table td:first-child,.o2-table th:first-child{text-align:left}
+/* Only a token/stage with simulated BUY > $0 receives a cell background. */
+.o2-table td.buy-weight-green{background:rgba(23,163,115,.25)!important;color:#087451;font-weight:800}
+.o2-table td.buy-weight-amber{background:rgba(240,169,55,.25)!important;color:#80520b;font-weight:800}
+.o2-table td.buy-weight-red{background:rgba(222,58,73,.22)!important;color:#b3213a;font-weight:800}
+[data-theme="dark"] .o2-table td.buy-weight-green{color:#93fbd0;background:rgba(23,163,115,.3)!important}
+[data-theme="dark"] .o2-table td.buy-weight-amber{color:#ffe5a2;background:rgba(240,169,55,.29)!important}
+[data-theme="dark"] .o2-table td.buy-weight-red{color:#ffb2bd;background:rgba(222,58,73,.34)!important}
 .pivot-anchor-line{display:inline-flex;align-items:center;gap:6px;justify-content:flex-end;white-space:nowrap}
 .pivot-anchor-dot{display:inline-block;width:11px;height:11px;min-width:11px;border-radius:50%;border:1px solid rgba(255,255,255,.65);box-shadow:0 0 0 1px rgba(0,0,0,.14)}
 .pivot-anchor-dot.pivot-propuesto{background:#e54357}.pivot-anchor-dot.pivot-validado{background:#f0a92b}.pivot-anchor-dot.pivot-confirmado{background:#20bb73}
@@ -51,7 +58,7 @@
 <section class="panel span-6"><h2>Liquidez post-escenario</h2><p class="sub">Comparativa de USDT antes vs después. Sin alterar saldos reales.</p><div class="sim-metric" style="margin:15px 0"><small>Situación actual</small><b id="before-cash">—</b><div class="sim-bar"><div id="before-bar"></div></div></div><div class="sim-metric"><small>Después (hipotético)</small><b id="after-cash">—</b><div class="sim-bar"><div id="after-bar"></div></div></div></section>
 {% if mode.slug=='compras' %}
 <section class="panel span-12" id="o2-fibonacci-panel" data-o2-ui-version="{{ master }}"><h2>Maestro de Precios - Retrocesos Fibo</h2>
-<p class="sub">Verde = mínimo de una vela diaria cerrada <strong>posterior a P2</strong> menor o igual que el nivel Fibonacci; no depende del Spot actual. Ámbar = mínimo posterior a P2 a menos de 1% del nivel. El % Peso es la ponderación cripto <strong>después de la compra simulada</strong> de cada tramo, valorando el portafolio en ese nivel. Los colores no prueban órdenes ni fills.</p>
+<p class="sub">Solo se colorean Precio, % Peso y USDT cuando el token recibe <strong>USDT &gt; 0</strong> en ese tramo simulado. Semáforo por <strong>desviación del peso cripto post-compra frente al objetivo</strong>, en puntos porcentuales (pp): <strong>verde</strong> = alcanza el objetivo (≥ 0 pp); <strong>ámbar</strong> = desde −1 pp hasta &lt; 0 pp; <strong>rojo</strong> = por debajo de −1 pp. USDT $0 y N/D sin color. Esto no indica ejecución real ni altera el estado de P1/P2.</p>
 <div class="o2-table-scroll"><table class="o2-table"><thead><tr><th>Token</th><th>Spot</th><th>P1</th><th>P2</th><th>Precio 38.2%</th><th>% Peso</th><th>USDT</th><th>Precio 50%</th><th>% Peso</th><th>USDT</th><th>Precio 61.8%</th><th>% Peso</th><th>USDT</th><th>Precio 78.6%</th><th>% Peso</th><th>USDT</th><th>Total USDT</th></tr></thead><tbody id="fib-body"></tbody><tfoot id="fib-total"></tfoot></table></div>
 </section>
 {% endif %}
@@ -117,24 +124,18 @@ function renderO2Fibonacci(sim){
   const pairs=prices[i].map((level,j)=>{
     const amount=amounts[i][j];
     const hasLevel=Number.isFinite(level)&&level>0;
-    const historical=source.o2_histories?.[t.token]||{status:'DATA_ERROR'};
-    const high=(source.weekly_context?.[t.token]?.anchors?.high||{});
-    const correctP2=high.date&&historical.estimated_o1_date===high.date;
-    let historicalStatus='unknown';
-    if(hasLevel&&correctP2&&historical.status==='PROVISIONAL'&&Number(historical.post_o1_min)>0){
-      const low=Number(historical.post_o1_min);
-      historicalStatus=low<=level?'hit':low<=level*1.01?'near':'pending';
-    }
-    const css=historicalStatus==='hit'?'level-hit':historicalStatus==='near'?'level-near':'';
-    // The projected weight includes the simulated fill at this Fibonacci tranche.
-    // NO pivot-status or drift dots next to Fibo prices: P1/P2 carry their own semaphore.
+    // Weight is computed after purchases in the selected tranche; show it
+    // regardless of allocation, but color only when THIS token receives USDT.
     const postWeight=sim.snapshots[j]?.postWeights?.[i];
     const weightText=hasLevel&&Number.isFinite(postWeight)?(postWeight*100).toFixed(2)+'%':'N/D';
-    const macroCurrency=source.weekly_context?.[t.token]?.quote_currency||'USDT';
-    const historicalTitle=correctP2&&historical.status==='PROVISIONAL'
-      ? `Mínimo diario cerrado post-P2 (${historical.estimated_o1_date}): ${fibPrice(historical.post_o1_min)} el ${historical.post_o1_min_date}. Moneda macro ${macroCurrency}. Provisional, no certifica toque.`
-      : `Histórico post-P2 no verificable (${historical.status||'N/D'}); no se colorea.`;
-    return `<td class="${css}" title="${historicalTitle}">${fibPrice(level)}</td><td class="${css}" title="Peso cripto post-compra C${j+1} · escenario simulado">${weightText}</td><td class="${css}" title="${historicalTitle}">${dollar(amount)}</td>`;
+    const semaphore=hasLevel
+      ? window.KairosO2Sequential.postBuySemaphore(amount,postWeight,t.target)
+      : {state:'none',driftPP:null};
+    const css=semaphore.state==='none'?'':'buy-weight-'+semaphore.state;
+    const explanation=semaphore.state==='none'
+      ? (amount>0?'Sin valoración post-compra verificable':'Sin USDT asignado en este tramo: no se colorea')
+      : `Compra hipotética ${dollar(amount)} · Peso post-compra ${weightText} · Objetivo ${(100*t.target).toFixed(2)}% · Desviación ${semaphore.driftPP.toFixed(2)} pp · Semáforo ${semaphore.state.toUpperCase()}. No es orden.`;
+    return `<td class="${css}" title="${explanation}">${fibPrice(level)}</td><td class="${css}" title="${explanation}">${weightText}</td><td class="${css}" title="${explanation}">${dollar(amount)}</td>`;
   }).join('');
   const ctx=source.weekly_context?.[t.token]||{};
   const kind=ctx.eligible===true?((ctx.mode==='RETROCESO_ALCISTA'?'RETROCESO ALCISTA':ctx.mode)+(ctx.operational_blocked?' · PROPUESTO':'')):'BLOQUEADO';

@@ -1,0 +1,494 @@
+{
+  "product": "KairosWeb",
+  "version": "2.0.18",
+  "sheet_schema": "5.0.0",
+  "release_type": "complete_github_source",
+  "asset_count_without_manifest": 97,
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 3061,
+      "sha256": "ea97709c33aba03881d248e3ac8ca6a1182040b60ec1a43279528d5f1e60c3eb"
+    },
+    {
+      "path": "RELEASE_NOTES_v2.0.18.md",
+      "bytes": 1939,
+      "sha256": "b0b68d404b938550bffa4f4db267960239fa67ed080a1d631a091cc5892a5777"
+    },
+    {
+      "path": "admin_origin.py",
+      "bytes": 2850,
+      "sha256": "7b7cd0a8bb25f8b0bdf98b7ffbef6a543acb98e3a4e62bb3da3f7badfa8f0f0c"
+    },
+    {
+      "path": "app.py",
+      "bytes": 102741,
+      "sha256": "fdb52497314be2dc96e6a8e93837e20fcf9dcea46ff3f33c7efc31d1636c25c7"
+    },
+    {
+      "path": "buy_weekly_policy.py",
+      "bytes": 18366,
+      "sha256": "38d78935e52943f6f9044e5f010e55ec2f3fb34cebb8d4542438962ac2f86b98"
+    },
+    {
+      "path": "cl_review_history.py",
+      "bytes": 1531,
+      "sha256": "3d21e181382a1d9b98ed001291539a27ef447727e74c1d020fe99d4757a4339f"
+    },
+    {
+      "path": "cl_validation.py",
+      "bytes": 6897,
+      "sha256": "50213c5bdf7b708997bd3e18a9daf488da8c6e5a0ad570e22e45d9a2d48279ad"
+    },
+    {
+      "path": "forecast_fibo_policy.py",
+      "bytes": 3508,
+      "sha256": "daa2ad4e72ca2fb0f884d85aa879288fabda03c7d3b1142dcb27f85c9282ecaa"
+    },
+    {
+      "path": "forecast_math.py",
+      "bytes": 351,
+      "sha256": "cdbf11823e817b207af9ee07dfe2e5b3aeec7bd8b8317b8a85a1803153dca04e"
+    },
+    {
+      "path": "google_sheets_master.py",
+      "bytes": 20979,
+      "sha256": "365a7e3049730a74e6600a9d2e14cc3c073320b48c08201f7099d0b3b2f38b16"
+    },
+    {
+      "path": "hype_weekly.py",
+      "bytes": 2783,
+      "sha256": "be74bc45c7d1a8a8b92caf067794e5e11137cefff7b1dc12900dff97420adc19"
+    },
+    {
+      "path": "kairos_sheets_features.py",
+      "bytes": 45579,
+      "sha256": "d8c961877dada3bf3dc0b7276953dade316966f1552e7cec8f4add838165a058"
+    },
+    {
+      "path": "o2_history.py",
+      "bytes": 1707,
+      "sha256": "f7a6c665243711521b6b894b03c19a33d3533bc7f74657bd5938b5ae9941b49c"
+    },
+    {
+      "path": "orders_inbox.py",
+      "bytes": 17603,
+      "sha256": "70475077c337e9231fe7134e7a314a0ae3ef9c5c601fa282402d49ac5c3e404f"
+    },
+    {
+      "path": "pivot_candidates.py",
+      "bytes": 6444,
+      "sha256": "55d30919ebef6477ee043b185f27668038b760327f99128bd6173f9942974dd6"
+    },
+    {
+      "path": "pivot_preload.py",
+      "bytes": 4383,
+      "sha256": "5710eac01b5b7e4c6e5bb08c36b82903a5d9ac9085e2d0750c491fc909c35349"
+    },
+    {
+      "path": "render.yaml",
+      "bytes": 1026,
+      "sha256": "2fe40dfca557991461cd9e5b7fcd797a48f063028b9bd6d8afb348f2b2dc1da7"
+    },
+    {
+      "path": "requirements.txt",
+      "bytes": 87,
+      "sha256": "e1d3ffa6aba5d67244d389d16dac37a010a08fbd717fd78201f6ea2cc988ab87"
+    },
+    {
+      "path": "static/alert_bell.js",
+      "bytes": 5716,
+      "sha256": "30b4c2975347ea5a9b5979fb2435f6792cb65a04826ea2239acbb35bcf4ad668"
+    },
+    {
+      "path": "static/alerts_settings.css",
+      "bytes": 6918,
+      "sha256": "95c192eb9ecfeffeca9d8037edff6e825cf6356337ffe1a79af61720928a44cd"
+    },
+    {
+      "path": "static/forecast_balance.js",
+      "bytes": 3549,
+      "sha256": "eb3aeaa80b976bc49a4c7635baeb897ff928ad7dccd221ba58211ab3c763c603"
+    },
+    {
+      "path": "static/forecast_fibo_plan.js",
+      "bytes": 3869,
+      "sha256": "b739efd9fff250f25226e7e242aecdc180c610483c4edf7b462cf9801102cb5b"
+    },
+    {
+      "path": "static/forecast_level_status.js",
+      "bytes": 1828,
+      "sha256": "9e0f4f154168de274031c6478c9b48a4ecb4312e3432f41e10f0e58f83993e39"
+    },
+    {
+      "path": "static/forecast_segments.js",
+      "bytes": 3046,
+      "sha256": "9a6b0623fd1d0dac28a8c7ffb095f46f798ddc2177fdff1233fa7475b3196b5f"
+    },
+    {
+      "path": "static/kairos-horizon-horizontal.svg",
+      "bytes": 842,
+      "sha256": "b20ebf5f697c7cedf00e0e998e225e12d35f0f08fd859d38b58397fdbdce8a1a"
+    },
+    {
+      "path": "static/kairos-horizon.svg",
+      "bytes": 501,
+      "sha256": "1a43750619a97825f2a92065e6ee3ef5f3e9f4fadd3780dc407755ae1130081c"
+    },
+    {
+      "path": "static/mcp_settings.js",
+      "bytes": 3611,
+      "sha256": "f6bb504fcaaff5bd346dbb94e885aba9f66299082246748935ed2da282fe03ee"
+    },
+    {
+      "path": "static/o2_sequential.js",
+      "bytes": 7176,
+      "sha256": "b2b05a3427603404058258e55e90af3b10c28100f9a1c8758567a1e187fda0c4"
+    },
+    {
+      "path": "static/orders_inbox.js",
+      "bytes": 1954,
+      "sha256": "c8c675cf3b8528aef79b89546b8dffa0bcf658b31d9fad9eb474f1fab7cd62dc"
+    },
+    {
+      "path": "static/privacy.js",
+      "bytes": 4876,
+      "sha256": "8a7c026109135a43bfb36733d2a348418373beaf1c9abf90d5b961f5d8c3d69a"
+    },
+    {
+      "path": "static/purchase_plan.js",
+      "bytes": 1321,
+      "sha256": "bcf5a1d3f8aec57a771631271efb7910747b8dd527e6fddb4eb020ec7582e08a"
+    },
+    {
+      "path": "static/purchase_weights.js",
+      "bytes": 4325,
+      "sha256": "1377c2261d57a1a78e64bafa13f73fe5d580da6a305d7facd6fcffa068990b26"
+    },
+    {
+      "path": "static/settings_format.js",
+      "bytes": 4182,
+      "sha256": "c1dc9bce4e02fa40ff450adc4e7bf128a6b15cd0488cf51293294cefb2b85868"
+    },
+    {
+      "path": "static/settings_master.js",
+      "bytes": 42840,
+      "sha256": "129a53a03e252e01242a69ec0998282aa26a4a5675888c9d861c06e310927e72"
+    },
+    {
+      "path": "static/table_sort.js",
+      "bytes": 4477,
+      "sha256": "6915cb9d19f9535ed3bdda102094201a9fbae885070cb2cf750d659a3916d7cb"
+    },
+    {
+      "path": "static/theme.css",
+      "bytes": 19266,
+      "sha256": "28db028e52a3f812c7ca0d06a16974f009c6f539c09cf88f28edb4ece4a7e6c1"
+    },
+    {
+      "path": "static/theme.js",
+      "bytes": 1045,
+      "sha256": "065e0a338cbf6e0e819e2b4176953bfcc52f198fc457cbe336fec0c903082a9d"
+    },
+    {
+      "path": "static/tooltips.js",
+      "bytes": 4648,
+      "sha256": "024f5aff8788fa0d153d1ec720d6e9a6f92d712010e8bacca3938b12e34c6944"
+    },
+    {
+      "path": "structural_outliers.py",
+      "bytes": 854,
+      "sha256": "fff4b1976abfd9b46277bedf3f7d9a57d52e59f68e24ef2547014be0ced1bbdb"
+    },
+    {
+      "path": "templates/_wave_confirmed.html",
+      "bytes": 971,
+      "sha256": "5bd3a9e825e92e626745a030ea3c36cb9a8e846f52f69b77eb8e2717b9c53be9"
+    },
+    {
+      "path": "templates/admin_login.html",
+      "bytes": 936,
+      "sha256": "fcc98e4df3b5c22ab18cf705996ea50fd4c2d4d86bab565ae63b45656f3a8186"
+    },
+    {
+      "path": "templates/balancer.html",
+      "bytes": 11687,
+      "sha256": "452d0ea521b91701fa9beee3b0a937dae2d94d771d712e1fe5fa1d730593571a"
+    },
+    {
+      "path": "templates/base.html",
+      "bytes": 17205,
+      "sha256": "37eebe75930b53118a2e529e6cb956a25ffd8f13e39d964d8991a56b2494e533"
+    },
+    {
+      "path": "templates/forecast.html",
+      "bytes": 34966,
+      "sha256": "21e863f5cdbb0038cb6b24ad90cf86ec1cbdfb13fd5dbc5da96bfeb66ac175fd"
+    },
+    {
+      "path": "templates/index.html",
+      "bytes": 17977,
+      "sha256": "e4f418fe6cfc0e758a6e669ac8be1060d8bc49c570701dea08174081e010602a"
+    },
+    {
+      "path": "templates/mode.html",
+      "bytes": 5185,
+      "sha256": "091b93d1278fbb8dbeaf4517d69c76c2877602e3043e9534fc81ef2d961981bf"
+    },
+    {
+      "path": "templates/ordenes.html",
+      "bytes": 14249,
+      "sha256": "973f5e26446ba4bc02162d4f9e04b9d2ea806d8c88f118b00bbbf2fa1916a9f4"
+    },
+    {
+      "path": "templates/portfolio_integral.html",
+      "bytes": 10509,
+      "sha256": "2ea52a244da5a467dd5005a07902fce568cf2a51b503ae3940935b6d4f5e5d90"
+    },
+    {
+      "path": "templates/settings.html",
+      "bytes": 5768,
+      "sha256": "1ef8ef9b4a28b72513347d2cfdbbd9e6da312b66bd4375feebab4756295510e7"
+    },
+    {
+      "path": "templates/sheet_error.html",
+      "bytes": 249,
+      "sha256": "f657b1e816f8f116bedafc6ce1e10c7a6c19276c6c38de419f170914062669f9"
+    },
+    {
+      "path": "templates/trade_sim.html",
+      "bytes": 26015,
+      "sha256": "acfb0e5c3d16e845552a276f4bafb8a5dff2c5afdfee91d8b85d736a1dac992a"
+    },
+    {
+      "path": "templates/tradingbot.html",
+      "bytes": 11258,
+      "sha256": "3357c0f94c8804d1f76955457afe433b2e510d8a6c154f03b5a52e555fe8d933"
+    },
+    {
+      "path": "tests/test_admin_origin.py",
+      "bytes": 2491,
+      "sha256": "b30a74208f5e2f73bab1717e363558707b737b0b03d4ec914a19370602fbf157"
+    },
+    {
+      "path": "tests/test_alerts_emphasis_dev.py",
+      "bytes": 3095,
+      "sha256": "cb1c273369ccb7b8f65e9f35f40b6ebb77c2f0dab33de01ffa6031a6bb47efb9"
+    },
+    {
+      "path": "tests/test_alerts_multiframe_dev.py",
+      "bytes": 8391,
+      "sha256": "73459c51f3217d94059df0fc76816d741d4f0714cf3d73699628d88bff0b25e1"
+    },
+    {
+      "path": "tests/test_buy_p1_confirmed_dev.py",
+      "bytes": 3647,
+      "sha256": "7e16cd6d8fdc656300bdf61bc7226eb80dd2026e2efd026ede28237973c97c9f"
+    },
+    {
+      "path": "tests/test_buy_proposed_wrapper_dev.py",
+      "bytes": 2504,
+      "sha256": "bfefe91d725d6886a4788b4500cb482757a609bc5becbbaf44525809e3ae55ba"
+    },
+    {
+      "path": "tests/test_buy_weekly_policy_v207.py",
+      "bytes": 6256,
+      "sha256": "aa1a071b97e23f3c4ec78cbfe8687ffaa155017569a5f16202faa22f81b1fcd6"
+    },
+    {
+      "path": "tests/test_buy_weekly_ui_v207.js",
+      "bytes": 2386,
+      "sha256": "7695ba81de75fc33830336fbbc52c2114340c4c9a08e8508c178f58687603d44"
+    },
+    {
+      "path": "tests/test_cl_review_bulk_history_dev.py",
+      "bytes": 1647,
+      "sha256": "dcb4fe75cb7da04827a8f45e4f3554fe93b299bdda098d969a3010e027813839"
+    },
+    {
+      "path": "tests/test_cl_review_dev.py",
+      "bytes": 3890,
+      "sha256": "542efb77f03d6eb1353de91721a39b5d521e549329d45a3680e9e3010e9f36c2"
+    },
+    {
+      "path": "tests/test_compras_budget_presentation_v207.py",
+      "bytes": 4040,
+      "sha256": "3626e8657d296fb95ec872eb97a3950afbbd86d0468056baa7c6df3c77460e2d"
+    },
+    {
+      "path": "tests/test_forecast_balance.js",
+      "bytes": 1643,
+      "sha256": "08a161ba7fd3d662c60c54e8ef83745f890f787c494adb3e854406f01fda6254"
+    },
+    {
+      "path": "tests/test_forecast_balance_upgrade.py",
+      "bytes": 1060,
+      "sha256": "c93f6b39656bacb01bf2bf167bfcd8006c2d48adb98edb596ef22b4a2b14ff02"
+    },
+    {
+      "path": "tests/test_forecast_fibo_v14.js",
+      "bytes": 3363,
+      "sha256": "f20cde51bb363e3d52430f6d61f166894bb3020c9016d40451ecdac15103f0a2"
+    },
+    {
+      "path": "tests/test_forecast_level_status_v19.js",
+      "bytes": 1036,
+      "sha256": "6e936c91e46ae6f1a73b3d345fe7e4a62da28386d4d860b9db76f6f9592e6795"
+    },
+    {
+      "path": "tests/test_forecast_segments.js",
+      "bytes": 1531,
+      "sha256": "e2c068c25107d6c4b506c40b2e9d9c0d1a2ff58941a89f2cf8afeb3c8d0f7a8e"
+    },
+    {
+      "path": "tests/test_google_sheets_master.py",
+      "bytes": 10108,
+      "sha256": "47ca0f63cac18ad79a8fe6e60e8ec6004a5b7cf8002e1c6b3c81316c3b7a8dd0"
+    },
+    {
+      "path": "tests/test_health_marker_contract_v207.py",
+      "bytes": 781,
+      "sha256": "6c115d57aae00be46e4e507853e17621371679c0b1deb43a87516d818a84678d"
+    },
+    {
+      "path": "tests/test_hype_weekly.py",
+      "bytes": 2863,
+      "sha256": "0c55ce0aab5e8c4432b6af9b47cd3862c859d2376d594b871db40d3919606fff"
+    },
+    {
+      "path": "tests/test_liquidity_budget_compras_real_v207.py",
+      "bytes": 2007,
+      "sha256": "04bbc72a087fbea635f0047bec72389fdf016b32c0cbb30ab54f9895ec35fb44"
+    },
+    {
+      "path": "tests/test_mcp_preserves_validated_dev.py",
+      "bytes": 1342,
+      "sha256": "59471c289d40fd2e41abdcffd047ca3ba1fe4cfcaf7392a012693284401781f4"
+    },
+    {
+      "path": "tests/test_mode_template.py",
+      "bytes": 441,
+      "sha256": "67fcd34943aeb57c1b39e761553843b80099e007174648f952769d111da6b8a4"
+    },
+    {
+      "path": "tests/test_o2_drift_labels_v203.js",
+      "bytes": 2549,
+      "sha256": "6d26a1a93ba416098ec71d2380422754b4b006a3fcea4a2082e48cd3aca7a25b"
+    },
+    {
+      "path": "tests/test_o2_history_v204.py",
+      "bytes": 1230,
+      "sha256": "a7bac7604d4bbc6d9bb96c07e7ba5d72f9c4677529e05a8b8f6d4b248ed061c0"
+    },
+    {
+      "path": "tests/test_o2_sequential_v202.js",
+      "bytes": 6204,
+      "sha256": "4974e1b05504a38260e686c0361840333a5c8c4f9d108b2867a7c10a2aec309e"
+    },
+    {
+      "path": "tests/test_orders_inbox_phase1_dev.py",
+      "bytes": 11671,
+      "sha256": "2790a3a2a68adfffc0a3f6aa45e169b72e76869c7398a12000263ea4cd858067"
+    },
+    {
+      "path": "tests/test_p1_balance_ui.js",
+      "bytes": 4149,
+      "sha256": "902f31b9a61e3ecef4c9be114eee947c6e026695e151fe4dde8ea0ae7ccb21d7"
+    },
+    {
+      "path": "tests/test_pivot_preload_v12.py",
+      "bytes": 4385,
+      "sha256": "a07d2046a23bfe1566b6ca0b818cc89b5f1db2cc117d5f13c9000ba2c4f5a97f"
+    },
+    {
+      "path": "tests/test_pivot_states_3_steps_dev.py",
+      "bytes": 4198,
+      "sha256": "cc8c8cb4bbe79d1e9bf6d9efc54ce42c0c31f9e44d64175fb772eeb735b10c5e"
+    },
+    {
+      "path": "tests/test_purchase_p1_ui_dev.py",
+      "bytes": 1109,
+      "sha256": "ec11a17d329f635aeae9c49382164ca8a324260d443b57127b7ed8b704941f57"
+    },
+    {
+      "path": "tests/test_purchase_slider_default_v201.py",
+      "bytes": 947,
+      "sha256": "3c5c7e8dcb4a5dfa960a85c32091cd1357cadaf2455f6eac3a11eab081a9b089"
+    },
+    {
+      "path": "tests/test_release_v2012_p1_proposed.py",
+      "bytes": 2688,
+      "sha256": "989e41dfaeaac1e64c0a07e612e06647b073b86883803e83f07176d85e33254a"
+    },
+    {
+      "path": "tests/test_release_v206.py",
+      "bytes": 1884,
+      "sha256": "1525272aed4a0fa4feec3eff9c1a5992448342c8e0f81c547eb2e34e130dfd75"
+    },
+    {
+      "path": "tests/test_release_v209_orders.py",
+      "bytes": 2829,
+      "sha256": "4251749b38c1597b5446750dd1e3dcd3d1d03d2c614f32fe47457cc893f14a11"
+    },
+    {
+      "path": "tests/test_settings_admin_entry_mobile_tooltips_dev.py",
+      "bytes": 1979,
+      "sha256": "28fabbc6ecb7d75c0ac962fd65e8dca7fef14c0b1e1c194c09f6aafdc27e1601"
+    },
+    {
+      "path": "tests/test_settings_format.js",
+      "bytes": 826,
+      "sha256": "93a8e6282b6251b71c19f6c08a100f1afa0fe4d9571cee4207e9f46fbb1b4712"
+    },
+    {
+      "path": "tests/test_settings_token_logos_v208.py",
+      "bytes": 781,
+      "sha256": "c089d323ca6d5bd5bcb360e45affe386d24fc61243ceca797ece8d018e3c2225"
+    },
+    {
+      "path": "tests/test_sheets_features.py",
+      "bytes": 9209,
+      "sha256": "14a248b5ebba2c1e54828b193aa62c067030e38b5f3aa1d3c454f893efaa2664"
+    },
+    {
+      "path": "tests/test_virtual_flash_outlier_dev.py",
+      "bytes": 3258,
+      "sha256": "86210734182727a6699bf78a2d431c12f5671cd674e1b150e570484e362a5376"
+    },
+    {
+      "path": "tests/test_wave_pivots_dev.py",
+      "bytes": 4599,
+      "sha256": "b53f5a6e06b9d529e45693c617d96154153fea7dba61017a0c5b4678958c0ace"
+    },
+    {
+      "path": "tests/test_weekly_fibo_frontend.js",
+      "bytes": 895,
+      "sha256": "e6da84bcd131facf4fb3c576687433c550f31b700c7a67a78bf6d5f0cc3de2a8"
+    },
+    {
+      "path": "tests/test_weekly_fibonacci_contract_dev.py",
+      "bytes": 4168,
+      "sha256": "ce30116f9f3b087109d25d7ab3f066a254f958afc9e71d7180c4994a825a09da"
+    },
+    {
+      "path": "wave_macro_context.py",
+      "bytes": 7129,
+      "sha256": "7cf63aeb9267ed6f5fc1e60f96d668140ef8b4e0eb6f1917c55be95c01101f1f"
+    },
+    {
+      "path": "wave_nomenclature.py",
+      "bytes": 1004,
+      "sha256": "f95e4a834a0e71603ed2ea21f08795df216e48f36bb05882a239505d78d8685a"
+    },
+    {
+      "path": "wave_pivots.py",
+      "bytes": 3369,
+      "sha256": "c89053c3447f1551ec3410878c50206210a3ff6487faae9e72b5398ae1a40dd0"
+    },
+    {
+      "path": "wave_structure.py",
+      "bytes": 9312,
+      "sha256": "3cd6b09786b342b7e025a9384406048f945e8ff07c41edefeaacc8d5324872e1"
+    }
+  ]
+}

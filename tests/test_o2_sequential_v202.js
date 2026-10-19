@@ -75,3 +75,26 @@ assert.ok(staged.consumed.slice(1).every(v=>v===0));
 assert.ok(staged.spent<=2587.80+1e-8);
 assert.throws(()=>calculate(tokens,levels,[25,25,25,25],100,1,{stageBudgets:[100,100,0,0]}),/exceed slider/);
 console.log('Waterfall C1→C4 + fixed percentage draft regression PASS');
+
+// v2.0.18: post-buy coloring uses the target-weight difference in pp,
+// NEVER historical price touches, and NEVER colors zero-USDT rows.
+const {postBuySemaphore:lamp}=require('../static/o2_sequential.js');
+assert.deepStrictEqual(lamp(0,.08,.10),{state:'none',driftPP:null});
+assert.deepStrictEqual(lamp(0,.10,.10),{state:'none',driftPP:null});
+assert.deepStrictEqual(lamp(.004,.10,.10),{state:'none',driftPP:null}); // rounds to $0.00
+assert.strictEqual(lamp(.005,.10,.10).state,'green'); // first cent displayed
+assert.strictEqual(lamp(10,.10,.10).state,'green'); // exact target
+assert.strictEqual(lamp(10,.11,.10).state,'green'); // above target
+assert.strictEqual(lamp(10,.099,.10).state,'amber'); // -0.1 pp
+assert.strictEqual(lamp(10,.09,.10).state,'amber'); // -1.0 pp inclusive
+assert.strictEqual(lamp(10,.08999,.10).state,'red'); // more than 1 pp short
+assert.strictEqual(lamp(10,NaN,.10).state,'none');
+assert.strictEqual(lamp(10,undefined,.10).state,'none');
+const probe=calculate(tokens,levels,[25,25,25,25],200,1);
+for(let j=0;j<4;j++)for(let i=0;i<tokens.length;i++){
+  const selected=probe.amounts[i][j];
+  const classified=lamp(selected,probe.snapshots[j].postWeights[i],tokens[i].target);
+  if(selected<0.005) assert.strictEqual(classified.state,'none');
+  else assert.notStrictEqual(classified.state,'none');
+}
+console.log('Post-buy target drift coloring PASS');
