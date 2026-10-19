@@ -135,8 +135,8 @@ def test_template_separates_two_sources_and_preserves_no_exchange_writes():
     from pathlib import Path
     root=Path(__file__).resolve().parents[1]
     template=(root/'templates/ordenes.html').read_text()
-    assert "('ESTRUCTURA','Estructura de precio" in template
-    assert "('BALANCE','Balance de portafolio" in template
+    assert "item.category=='ESTRUCTURA'" in template
+    assert "item.category=='ESTRUCTURA' else 'BALANCE'" in template
     assert 'Referencia técnica más cercana por token' in template
     assert 'POR DEFINIR' in template
     assert 'data-orders-category' in template

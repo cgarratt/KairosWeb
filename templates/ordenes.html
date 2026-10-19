@@ -28,6 +28,17 @@
 .orders-section p{margin-top:5px}
 .orders-muted{color:var(--muted,#66778c)}
 @media(max-width:620px){.orders-kpi{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.orders-light{display:inline-block;vertical-align:middle;width:10px;height:10px;flex:0 0 auto;border-radius:50%;margin-right:6px;border:1px solid rgba(255,255,255,.5);box-shadow:0 0 0 1px rgba(0,0,0,.08)}
+.light-green{background:#1eb77b}.light-amber{background:#eeab36}.light-red{background:#e34a64}.light-muted{background:#8594aa}
+.orders-distance,.order-state{display:inline-flex;align-items:center;font-weight:750;white-space:nowrap}
+.order-state-green{color:#168c63}.order-state-amber{color:#b68529}.order-state-red{color:#dc526a}.order-state-muted{color:var(--muted,#94a3b8)}
+.orders-source{display:inline-flex;border-radius:7px;padding:3px 7px;font-size:11px;font-weight:750;background:rgba(37,108,202,.12);color:#3577ba}
+.orders-source.source-balance{background:rgba(153,118,207,.16);color:#9b74c2}
+.orders-table td small.orders-origin{display:block;line-height:1.5}
+.orders-tools label{font-weight:650;font-size:12px}
+.orders-tools select{max-width:180px;min-width:100px}
+#orders-list{min-width:1210px}
+[data-theme="dark"] .order-state-green{color:#7ee7bc}[data-theme="dark"] .order-state-amber{color:#ffcf7b}[data-theme="dark"] .orders-source{color:#a2c9fb}[data-theme="dark"] .orders-source.source-balance{color:#dabaff}
 </style>
 {% endblock %}
 {% block content %}
@@ -57,60 +68,70 @@
       {% for c in inbox.coverage %}
       <tr><td><strong>{{ c.token }}</strong></td><td>{{ c.venue }}</td><td>{{ c.origin }}</td>
           <td>{{ '${:,.8f}'.format(c.spot).rstrip('0').rstrip('.') if c.spot is not none else 'N/D' }}</td>
-          <td>{{ c.side or '—' }}</td>
+          <td>{% if c.side %}<span class="order-side {{ 'buy' if c.side=='BUY' else 'sell' }}">{{ c.side }}</span>{% else %}—{% endif %}</td>
           <td>{{ '${:,.8f}'.format(c.limit).rstrip('0').rstrip('.') if c.limit is not none else 'N/D' }}</td>
           <td>{{ c.stage or 'N/D' }}</td>
           <td>{{ '%+.2f%%'|format(c.distance_pct) if c.distance_pct is not none else 'N/D' }}</td>
-          <td>{{ c.status }}</td></tr>
+          <td><span class="order-state order-state-{{ 'green' if c.status=='CERCANO' else 'amber' if c.status=='EN_ESPERA' else 'muted' }}"><i class="orders-light light-{{ 'green' if c.status=='CERCANO' else 'amber' if c.status=='EN_ESPERA' else 'muted' }}" aria-hidden="true"></i>{{ c.status.replace('_',' ') }}</span></td></tr>
       {% endfor %}
       </tbody></table>
     </div>
   </section>
   <section class="panel span-12">
-    <h3>Propuestas por exchange y origen</h3>
+    <h3>Listado de próximas órdenes a ejecutar</h3>
+    <p class="orders-muted">Listado <strong>solo de propuestas hipotéticas, NO colocadas ni autorizadas para ejecución</strong>. Elige una vista tipo KairosGPT y combínala con los selectores; un precio LIMIT es una referencia, no una orden real.</p>
     <div class="orders-tools" aria-label="Filtros de órdenes propuestas">
-      <button type="button" data-venue="Todos" class="active" aria-pressed="true">Todos</button>
-      <button type="button" data-venue="Binance" aria-pressed="false">Binance</button>
-      <button type="button" data-venue="KuCoin" aria-pressed="false">KuCoin</button>
-      <button type="button" data-venue="Hyperliquid" aria-pressed="false">Hyperliquid</button>
-      <label for="orders-category">Origen</label><select id="orders-category"><option value="Todos">Todos</option><option value="ESTRUCTURA">Estructura de precio</option><option value="BALANCE">Balance de portafolio</option></select>
+      <label for="orders-view">Vista rápida</label>
+      <select id="orders-view" aria-label="Vista rápida KairosGPT">
+        <option value="Todas">Todas</option>
+        <option value="O2">Precios O2</option>
+        <option value="Binance">Precios Binance</option>
+        <option value="KuCoin">Precios KuCoin</option>
+        <option value="Hyperliquid">Precios Hyperliquid</option>
+        <option value="T1">Precios T1</option>
+        <option value="T2">Precios T2</option>
+        <option value="T3">Precios T3</option>
+        {% for coin in (tier_by_token|default({})|list|sort) %}<option value="TOKEN:{{ coin }}">Precios {{ coin }}</option>{% endfor %}
+      </select>
+      <label for="orders-venue">Exchange</label>
+      <select id="orders-venue"><option value="Todos">Todos</option><option value="Binance">Binance</option><option value="KuCoin">KuCoin</option><option value="Hyperliquid">Hyperliquid</option></select>
+      <label for="orders-category">Origen</label><select id="orders-category"><option value="Todos">Todos</option><option value="ESTRUCTURA">Estructura</option><option value="BALANCE">Balance</option></select>
+      <label for="orders-group">Grupo</label><select id="orders-group"><option value="Todos">Todos</option><option value="O2">O2</option><option value="O3">O3</option><option value="O5">O5</option><option value="EXTENSION_1W">Extensión 1W</option><option value="REBALANCEO">Rebalanceo</option></select>
+      <label for="orders-tier">Tier</label><select id="orders-tier"><option value="Todos">Todos</option><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select>
       <label for="orders-side">Operación</label><select id="orders-side"><option value="Todos">BUY + SELL</option><option value="BUY">BUY</option><option value="SELL">SELL</option></select>
-      <label for="orders-status">Proximidad</label><select id="orders-status"><option value="Todos">Todos</option><option value="CERCA">Cerca ±1%</option><option value="NIVEL_SUPERADO">Nivel superado</option><option value="EN_ESPERA">En espera</option><option value="PRECIO_PENDIENTE">Sin precio LIMIT</option><option value="SIN_CAJA">Sin caja Balancer</option></select>
+      <label for="orders-status">Proximidad</label><select id="orders-status"><option value="Todos">Todos</option><option value="0-2">Hasta 2%</option><option value="2-5">2–5%</option><option value="5-10">5–10%</option><option value="GT10">Más de 10%</option><option value="NIVEL_SUPERADO">Superado</option><option value="PRECIO_PENDIENTE">Sin LIMIT</option><option value="EN_ESPERA">En espera</option></select>
       <label for="orders-token">Token</label><input id="orders-token" type="search" placeholder="BTC, SOL, SUI…" maxlength="12" autocomplete="off">
+      <button type="button" id="orders-clear-filters">Limpiar filtros</button>
     </div>
-    {% for category,title in [('ESTRUCTURA','Estructura de precio · LIMIT Fibonacci 1W'),('BALANCE','Balance de portafolio · Rebalanceo')] %}
-      <div class="orders-section" data-orders-category="{{ category }}">
-        <h3>{{ title }}</h3>
-        {% if category == 'ESTRUCTURA' %}
-          <p class="orders-muted">BUY: retrocesos de los dos pivotes semanales. SELL: extensiones O3/O5 con anclas publicadas o continuación alcista genérica 1W claramente identificada. Sin tres anclas no se inventa O3/O5. Las extensiones SELL muestran precio, pero su tamaño queda pendiente.</p>
-        {% else %}
-          <p class="orders-muted">BUY/SELL por desvío frente al target; no requieren pivotes semanales. El precio Spot es solo informativo: sin precio técnico NO existe orden LIMIT lista. Ventas limitadas a Exchange libre, BTC NEVER SELL.</p>
-        {% endif %}
-        {% for venue in ('Binance','KuCoin','Hyperliquid') %}
-          {% set x=inbox.venues[venue] %}
-          <div class="orders-exchange"><strong>{{ venue }}</strong><small>USDT declarado: {{ '${:,.2f}'.format(x.available_usdt) }}{% if category == 'ESTRUCTURA' %} · BUY simulado: {{ '${:,.2f}'.format(x.buys_proposed_usdt) }} · Niveles SELL: {{ x.structural_sell_levels }}{% else %} · BUY Balancer: {{ '${:,.2f}'.format(x.balance_buys_usdt) }} · SELL Balancer: {{ '${:,.2f}'.format(x.sells_proposed_usdt) }}{% endif %}</small></div>
-          <div class="orders-table-wrap">
-            <table class="orders-table" data-orders-venue="{{ venue }}" data-orders-category="{{ category }}">
-              <thead><tr><th>Token</th><th>Lado</th><th>Origen / tramo</th><th>Spot (USDT)</th><th>LIMIT (USDT/USDC)</th><th>Distancia</th><th>USDT ref.</th><th>Unidades ref.</th><th>Estado</th></tr></thead><tbody>
-              {% for item in inbox.categories[category] if item.venue == venue %}
-              <tr data-side="{{ item.side }}" data-proximity="{{ item.proximity }}" data-token="{{ item.token }}" data-category="{{ category }}">
-                <td><strong>{{ item.token }}</strong></td>
-                <td><span class="order-side {{ 'buy' if item.side=='BUY' else 'sell' }}">{{ item.side }}</span></td>
-                <td>{{ item.mode }} · {{ item.stage }}<div class="orders-origin">{{ item.wave }}{% if item.fib %} · Fib {{ item.fib }}{% endif %}</div></td>
-                <td>{{ '${:,.8f}'.format(item.spot).rstrip('0').rstrip('.') if item.spot is not none else 'N/D' }}</td>
-                <td>{{ ('${:,.8f}'.format(item.limit).rstrip('0').rstrip('.') ~ ' ' ~ item.quote_currency) if item.limit is not none else 'PENDIENTE' }}</td>
-                <td>{{ '%+.2f%%'|format(item.distance_pct) if item.distance_pct is not none else 'N/D' }}</td>
-                <td>{{ '${:,.2f}'.format(item.usdt) if item.usdt is not none else 'POR DEFINIR' }}</td>
-                <td>{{ '{:,.8f}'.format(item.quantity).rstrip('0').rstrip('.') if item.quantity is not none else 'POR DEFINIR' }}</td>
-                <td><span class="order-state {{ 'near' if item.proximity=='CERCA' else 'hit' if item.proximity=='NIVEL_TOCADO' else 'wait' }}">{{ item.proximity.replace('_',' ') }}</span><div class="orders-origin">No colocada · {{ item.sizing_status }}</div></td>
-              </tr>
-              {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        {% endfor %}
-      </div>
-    {% endfor %}
+    <p class="orders-muted"><span class="orders-light light-green" aria-hidden="true"></span> ≤2% de proximidad · <span class="orders-light light-amber" aria-hidden="true"></span> 2–5% · <span class="orders-light light-muted" aria-hidden="true"></span> Más de 5% o sin cotización homogénea · <span class="orders-light light-red" aria-hidden="true"></span> Nivel superado. Son indicadores de distancia, <strong>no señales de ejecución</strong>.</p>
+    <div class="orders-table-wrap">
+      <table class="orders-table" id="orders-list" data-orders-venue="Todos" data-orders-category="Todos">
+        <thead><tr><th>Token</th><th>Exchange</th><th>Lado</th><th>Origen</th><th>Nivel</th><th>Spot</th><th>LIMIT</th><th>Distancia</th><th>USDT ref.</th><th>Unidades ref.</th><th>Estado</th></tr></thead>
+        <tbody>
+          {% for item in inbox.candidates %}
+          {% set order_tier=(tier_by_token|default({})).get(item.token, 'N/D') %}
+          {% set near=item.distance_pct is not none and item.distance_pct >= 0 and item.distance_pct <= 2 %}
+          {% set mid=item.distance_pct is not none and item.distance_pct > 2 and item.distance_pct <= 5 %}
+          {% set reached=item.proximity in ('NIVEL_SUPERADO','NIVEL_TOCADO') %}
+          {% set tone='red' if reached else 'green' if near else 'amber' if mid else 'muted' %}
+          <tr data-orders-venue="{{ item.venue }}" data-orders-category="{{ item.category }}" data-category="{{ item.category }}" data-tier="{{ order_tier }}" data-orders-tier="{{ order_tier }}" data-side="{{ item.side }}" data-proximity="{{ item.proximity }}" data-token="{{ item.token }}" data-stage="{{ item.stage }}" data-wave="{{ item.wave }}" data-distance="{{ item.distance_pct if item.distance_pct is not none else '' }}">
+            <td><strong>{{ item.token }}</strong><small class="orders-origin">{{ order_tier }}</small></td>
+            <td>{{ item.venue }}</td>
+            <td><span class="order-side {{ 'buy' if item.side=='BUY' else 'sell' }}">{{ item.side }}</span></td>
+            <td><span class="orders-source source-{{ item.category|lower }}">{{ 'ESTRUCTURA' if item.category=='ESTRUCTURA' else 'BALANCE' }}</span></td>
+            <td><strong>{{ item.stage }}</strong><small class="orders-origin">{{ item.wave }}{% if item.fib %} · Fib {{ item.fib }}{% endif %}</small></td>
+            <td>{{ '${:,.8f}'.format(item.spot).rstrip('0').rstrip('.') if item.spot is not none else 'N/D' }}</td>
+            <td>{{ ('${:,.8f}'.format(item.limit).rstrip('0').rstrip('.') ~ ' ' ~ item.quote_currency) if item.limit is not none else 'SIN LIMIT' }}</td>
+            <td><span class="orders-distance">{% if item.distance_pct is not none %}<i class="orders-light light-{{ tone }}" aria-hidden="true"></i>{{ '%+.2f%%'|format(item.distance_pct) }}{% else %}<i class="orders-light light-muted" aria-hidden="true"></i>N/D{% endif %}</span></td>
+            <td>{{ '${:,.2f}'.format(item.usdt) if item.usdt is not none else 'POR DEFINIR' }}</td>
+            <td>{{ '{:,.8f}'.format(item.quantity).rstrip('0').rstrip('.') if item.quantity is not none else 'POR DEFINIR' }}</td>
+            <td><span class="order-state order-state-{{ tone }}"><i class="orders-light light-{{ tone }}" aria-hidden="true"></i>{{ item.proximity.replace('_',' ') }}</span><small class="orders-origin">No colocada · {{ item.sizing_status }}</small></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="orders-muted" id="orders-filter-count" role="status"></p>
     <p id="orders-empty-filter" class="footer-note" hidden>No hay propuestas para estos filtros.</p>
     <p class="orders-readonly"><strong>Regla de proximidad:</strong> precio FUTURO disponible a una distancia de 0 a +{{ '%.1f'|format(inbox.proximity_pct) }}% desde Spot. Niveles ya superados no se confunden con órdenes LIMIT futuras. El objetivo más cercano puede estar lejos; no implica recomendación inmediata.</p>
     <p class="orders-readonly">HYPE se conserva en Hyperliquid y no se reasigna a Binance/KuCoin. Sus niveles macro están expresados en USDC: hasta obtener Spot HYPE/USDC homologado, no calculamos proximidad ni presentamos esa referencia como orden activable. Los importes del portafolio no se mezclan con compromisos hipotéticos de estructura. Cuota QF protegida.</p>

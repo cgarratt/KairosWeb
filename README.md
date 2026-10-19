@@ -1,30 +1,34 @@
-# KairosWeb v2.0.13 — release completo para GitHub
+# KairosWeb v2.0.14 — release GitHub
 
-Este paquete reemplaza v2.0.12 y conserva las funciones existentes: Configuración y autenticación administrativa, Compras, Ventas, Balancer, Forecast, Alertas, Portafolio Integral y Órdenes fase 1 (solo propuestas).
+**Base:** KairosWeb v2.0.13. Este ZIP contiene el proyecto completo; preservar rutas `static/`, `templates/` y `tests/` al reemplazar archivos en GitHub. No instalar o guardar credenciales en el ZIP. Google Sheets sigue siendo la fuente única de saldos, liquidez, custodia, parámetros y estados de pivotes. Spot exclusivamente MCP.
 
-## Novedad v2.0.13 · Forecast / Trayectoria Ciclo por Token
+## Cambios acumulados
 
-- **CL, O1, O2, O3, O4 y O5** con estado `VALIDADO` o `CONFIRMADO` en el Master `07_PIVOTES` se muestran con **precio fijo** en la trayectoria, la tabla de ondas y el modelo de valorización.
-- La gráfica identifica un punto fijo por estado: VALIDADO en ámbar, CONFIRMADO en verde, junto con el estado y candado. Solo las etapas `PROPUESTO` pueden recalcularse con selectores de escenario.
-- Se da prioridad a **precios publicados del Master** frente a candidatos MCP y derivaciones Fibonacci locales. Forecast no escribe pivotes ni certifica nuevas ondas.
-- Un pivote protegido sin precio o una estructura incompatible produce un estado de advertencia, no una corrección silenciosa.
-- El diagnóstico `/health` verifica presencia de los componentes que inmovilizan los pivotes en Forecast, además de los controles anteriores.
+### Modo Compras · Matriz de precios Fibo - Onda 2
+- Título actualizado y cabeceras P1/P2 simplificadas. Se conservan los semáforos de estado exclusivamente junto a **P1/P2**.
+- Cuatro columnas nuevas de **% Peso**, una por tramo: peso en la manga cripto calculado después de las compras hipotéticas acumuladas hasta ese tramo, revalorizando unidades con los precios del escenario. NO representa el peso actual al Spot.
+- Los precios Fibo ya no muestran círculos de desviación. Las celdas verdes solo significan que una vela diaria cerrada posterior a la fecha de P2 tuvo un mínimo <= al nivel. Ámbar = mínimo histórico posterior a P2 a menos del 1%; no indica que el Spot actual esté cerca, ni un fill ni permiso de ejecución.
+- Restricciones existentes de Compras inalteradas: P1 semanal fechado puede ser PROPUESTO/VALIDADO/CONFIRMADO, P2 máximo semanal cerrado posterior, déficit INFRA y QF protegida, sin órdenes automáticas.
 
-## Funciones conservadas de releases previos
+### Modo Ventas
+- Tarjeta **Objetivo USDT** ahora indica **importe monetario objetivo ($) y porcentaje entre paréntesis**, con patrimonio Spot publicado en el escenario. Solo modifica presentación; no altera el motor SELL, Core ni BTC NEVER SELL.
 
-- Compras permite P1 `PROPUESTO`/`VALIDADO`/`CONFIRMADO` para **simulación**, siempre que coincida con mínimo 1W UTC cerrado y fechado. P2 es el máximo semanal cerrado posterior a P1. Semáforos P1/P2: rojo/ámbar/verde.
-- Compras respeta INFRA, déficit frente al target, distribución secuencial y reserva QF. Ventas ordinarias **no exige** pivotes. BTC NEVER SELL.
-- Configuración exige autenticación administrativa una vez por sesión; mantiene autorización de publicación. Tooltips desactivados en móviles, presentes en escritorio.
-- Órdenes continúa **fase 1 / solo propuestas**: no hay endpoint de colocación/cancelación ni inferencia de fills.
+### Modo Forecast
+- Título **Simulación - Ondas Elliott**.
+- Se retira la columna independiente Estado de la tabla Cycle Low a O5; se conservan los candados/estados junto al precio del pivote VALIDADO/CONFIRMADO y la protección efectiva del motor.
 
-## Despliegue
+### Modo Órdenes (FASE 1)
+- Título **Listado de próximas órdenes a ejecutar**, siempre señalado como listado hipotético NO colocado ni autorizado.
+- Tabla consolidada de filas: evita seis tablas extensas organizadas por exchange/origen. Selección rápida: Todas, Precios O2, Binance, KuCoin, Hyperliquid, T1/T2/T3 y tokens individuales como Precios VIRTUAL.
+- Filtros combinables: Exchange, origen, grupo O2/O3/O5/extensión 1W/rebalanceo, Tier, BUY/SELL, distancia y token, más limpiar filtros y contador de resultados.
+- Semáforos de cercanía y badges BUY/SELL, BALANCE/ESTRUCTURA y estado. Colores de distancia **no son señales de ejecución**. Resumen técnico por token se mantiene.
+- Limitaciones de seguridad: sin `place/cancel`, sin fills inventados; BALANCE sin LIMIT; SELL estructural sin tamaño aprobado; HYPE USDC macro no se compara con Binance USDT Spot.
 
-1. Descomprimir este ZIP y sustituir el contenido del repositorio GitHub, preservando las rutas y los directorios `static/`, `templates/` y `tests/`.
-2. No subir credenciales, archivos `.env` ni claves; conservar variables de entorno de Render.
-3. Tras desplegar, verificar `/health`: `status=UP`, `version=2.0.13`, `release_assets.consistent=true` y presencia de los tres nuevos indicadores `forecast_*`.
-4. Probar **Forecast / Trayectoria Ciclo por Token** con al menos una onda publicada como VALIDADO y otra CONFIRMADO: modificar selectores O2–O5; esas ondas deben conservar exactamente su precio, mientras PROPUESTO puede variar. Comprobar tabla, gráfica y valoraciones.
-5. Las pruebas locales están detalladas en `RELEASE_NOTES_v2.0.13.md`; **la integración HTTP real en Render aún requiere comprobación**.
+## Despliegue y comprobaciones
+1. Reemplazar los archivos del repositorio GitHub por el contenido **descomprimido** del ZIP, preservando `templates/`, `static/`, `tests/` y `render.yaml`.
+2. Desplegar Render sin introducir claves en el repositorio.
+3. Abrir `/health`: esperar `version=2.0.14`, `status=UP`, `release_assets.consistent=true`.
+4. Comprobar Compras (semáforos P1/P2, 4 pesos post-compra, histórico post-P2), Ventas (importe objetivo), Forecast (título y tabla) y Órdenes (combinar vistas como O2 + Binance y T1 + KuCoin).
+5. Confirmar visualmente los resultados con el Master/MCP reales en Render; las pruebas locales no certifican esa integración remota.
 
-Fuente de datos operativa: Google Sheets ORIGINAL `KAIROS_V5_MASTER`, snapshot `01_CONTROL` PUBLICADO y `schema_version=5.0.0`, más MCP autorizado. El ZIP no contiene inventarios ni precios operativos y no escribe cambios en Google Sheets.
-
-**Límite de GitHub:** paquete compacto de menos de 100 archivos incluyendo manifiesto y SHA-256.
+**Control de paquete:** menos de 100 archivos incluyendo `RELEASE_MANIFEST_v2.0.14.json` y `SHA256SUMS.txt`. No se modifican automáticamente el Master, las órdenes ni la custodia.

@@ -63,7 +63,10 @@ function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
       consumed[j]+=a;
     }
     cash=Math.max(0,cash-consumed[j]);
-    snapshots.push({values,crypto,weights:preWeights,
+    const postValues=px.map((p,i)=>Number.isFinite(p)&&p>0?units[i]*p:0);
+    const postCrypto=postValues.reduce((a,b)=>a+b,0);
+    const postWeights=postValues.map(v=>postCrypto>0?v/postCrypto:NaN);
+    snapshots.push({values,crypto,weights:preWeights,postValues,postCrypto,postWeights,
       states:drift.map(x=>x.status),driftsPP:drift.map(x=>x.driftPP),
       spent:consumed[j],cash});
   }

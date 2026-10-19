@@ -4,10 +4,10 @@ from xml.etree import ElementTree
 ROOT=Path(__file__).resolve().parents[1]
 def test_release_version_and_asset_diagnostics():
     app=(ROOT/'app.py').read_text()
-    assert "APP_VERSION = '2.0.13'" in app
+    assert "APP_VERSION = '2.0.14'" in app
     assert 'def _deployed_asset_status():' in app
     assert "'release_assets': assets" in app
-    assert 'o2-drift-dot' in (ROOT/'templates/trade_sim.html').read_text()
+    assert '<th>% Peso</th>' in (ROOT/'templates/trade_sim.html').read_text()
 
 def test_donut_ssr_and_accounting():
     env=Environment(loader=FileSystemLoader(ROOT/'templates'))

@@ -69,10 +69,10 @@
 </div><svg id="waves-chart" class="fc-chart" viewBox="0 0 740 310" role="img" aria-label="Precios hipotéticos por onda"></svg><p class="fc-legend" id="chart-info">Selecciona un token con referencias disponibles.</p></section>
 
 <section class="panel span-12">
-<h2>Ondas y precios pivote · Cycle Low a O5</h2><p class="sub">Escenario por token. Cycle Low/O1 proceden de estructura semanal UTC (confirmada o candidata), nunca se infieren de Fibonacci; O2–O5 son niveles hipotéticos según las extensiones y retrocesos elegidos.</p>
+<h2>Simulación - Ondas Elliott</h2><p class="sub">Escenario por token. Cycle Low/O1 proceden de estructura semanal UTC (confirmada o candidata), nunca se infieren de Fibonacci; O2–O5 son niveles hipotéticos según las extensiones y retrocesos elegidos.</p>
 
 <div id="elliott-note" class="fc-warning"></div>
-<div class="fc-tables"><table><thead><tr><th>Token / Métrica</th><th>Cycle Low (S0)</th><th>O1 (SH1)</th><th>O2 (SL1)</th><th>O3 (SH2)</th><th>O4 (SL2)</th><th>O5 (SH3)</th><th>Estado</th></tr></thead><tbody id="waves-body"></tbody></table></div>
+<div class="fc-tables"><table><thead><tr><th>Token / Métrica</th><th>Cycle Low (S0)</th><th>O1 (SH1)</th><th>O2 (SL1)</th><th>O3 (SH2)</th><th>O4 (SL2)</th><th>O5 (SH3)</th></tr></thead><tbody id="waves-body"></tbody></table></div>
 <p class="footer-note">Secuencia de Kairos H4: O3 = O2 + extensión × (O1 − Cycle Low); O4 = O3 − retroceso × (O3 − O2); O5 = O4 + extensión × (O3 − O2). Los candidatos requieren 5L/5R, cierre semanal BOS y confirmación humana; los pivotes CONFIRMADOS publicados se respetan.</p>
 </section>
 
@@ -156,7 +156,7 @@ function renderWaves(){
   const spot=position ? Number(position.price) : NaN;
   const qty=Number.isFinite(units) ? units : 0;
   const valuations=nums.map(v=>Number.isFinite(v)&&v>0 ? qty*v : (Number.isFinite(spot)&&spot>0 ? qty*spot : null));
-  return `<tr><td>${logo(r.token)}<div class="fc-muted">Precio / pivote</div></td>${nums.map((n,i)=>{const key=i===0?'cl':'o'+i;const fixed=r.locked?.includes(key);return `<td>${price(n)}${fixed?`<div class="fc-fixed-pivot" title="Publicado en Configuración · ${r.dates?.[key]||'sin fecha'}">🔒 ${r.statuses[key]}</div>`:''}</td>`}).join('')}<td rowspan="2"><span class="fc-tag">${r.state}</span></td></tr>`+
+  return `<tr><td>${logo(r.token)}<div class="fc-muted">Precio / pivote</div></td>${nums.map((n,i)=>{const key=i===0?'cl':'o'+i;const fixed=r.locked?.includes(key);return `<td>${price(n)}${fixed?`<div class="fc-fixed-pivot" title="Publicado en Configuración · ${r.dates?.[key]||'sin fecha'}">🔒 ${r.statuses[key]}</div>`:''}</td>`}).join('')}</tr>`+
   `<tr class="wave-value-row"><td><b>Unidades / Valor USDT</b><div class="fc-muted">HOLD, sin operaciones</div></td>${valuations.map(v=>`<td><span class="fc-muted">${new Intl.NumberFormat('en-US',{maximumFractionDigits:6}).format(qty)} u.</span><div><b>${v===null?'N/D':money(v)}</b></div></td>`).join('')}</tr>`;
  }).join('');
  const sel=$('chart-token'),active=sel.value;
