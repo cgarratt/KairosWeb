@@ -24,7 +24,7 @@
 .fc-chart{width:100%;height:310px;border:1px solid #dfebf6;border-radius:15px;background:linear-gradient(#fafcff,#f1f7ff)}
 .fc-line{stroke:#3276cc;stroke-width:3;fill:none;stroke-linejoin:round}.fc-dot{fill:#2680d5;stroke:white;stroke-width:2}
 .fc-legend{font-size:12px;color:#536b8a;line-height:1.6}
-.fc-step{color:#2465b5;font-weight:800}
+.fc-step{color:#2465b5;font-weight:800}.fc-fixed-pivot{font-size:11px;font-weight:700;color:var(--muted,#566a83);margin-top:3px}
 .fc-stage-config{margin:16px 0;padding:16px;border:1px solid var(--border,#c9d9eb);border-radius:14px}
 .fc-weight-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
 .fc-stage-weights{min-width:0;border:1px solid var(--border,#c9d9eb);border-radius:10px;padding:12px}
@@ -61,7 +61,7 @@
 <section class="panel span-12"><div class="fc-hero"><div><h2>Forecast · Ondas y retrocesos</h2><p class="sub">Tabla de referencias O2 y simulador Cycle Low → O5. Compras O2 y O4: hasta USDT físico menos ReservaTrading QF; ventas O3/O5: tramos Fibonacci configurables. Datos históricos de referencia + escenarios hipotéticos. No representa pronósticos certificados.</p></div><span class="badge info">SIMULACIÓN · SIN ÓRDENES</span></div>
 
 <p class="footer-note">Referencia de niveles: {{ payload.o2_source }} · Cotizaciones Spot observadas: {{ payload.generated_at }} · Unidades snapshot: {{ payload.snapshot_note }}</p></section>
-<section class="panel span-12"><div class="fc-hero"><div><h2>Trayectoria hipotética por token</h2><p class="sub">Visualización de niveles por etapa, no eje temporal ni probabilidades.</p></div><div class="fc-field" style="flex:0 0 190px"><label for="chart-token">Token</label><select id="chart-token"></select></div></div><div class="fc-controls">
+<section class="panel span-12"><div class="fc-hero"><div><h2>Trayectoria del ciclo por token</h2><p class="sub">Los pivotes VALIDADO y CONFIRMADO conservan el precio publicado; sólo PROPUESTO admite cambios de escenario. Eje por etapas, no temporal.</p></div><div class="fc-field" style="flex:0 0 190px"><label for="chart-token">Token</label><select id="chart-token"></select></div></div><div class="fc-controls">
 <div class="fc-field"><label for="o2-choice">O2 · retroceso CL→O1</label><select id="o2-choice"><option value="0.382">O2C1 · Fib 38.2%</option><option value="0.5">O2C2 · Fib 50%</option><option value="0.618" selected>O2C3 · Fib 61.8%</option><option value="0.786">O2C4 · Fib 78.6%</option></select></div>
 <div class="fc-field"><label for="o3-choice">O3 · extensión desde O2</label><select id="o3-choice"><option value="1.618">O3V1 · Fib 1.618</option><option value="2.618">O3V2 · Fib 2.618</option><option value="3.618">O3V3 · Fib 3.618</option><option value="4.618">O3V4 · Fib 4.618</option></select></div>
 <div class="fc-field"><label for="o4-choice">O4 · retroceso O2→O3</label><select id="o4-choice"><option value="0.382">O4C1 · Fib 38.2%</option><option value="0.5" selected>O4C2 · Fib 50%</option><option value="0.618">O4C3 · Fib 61.8%</option><option value="0.786">O4C4 · Fib 78.6%</option></select></div>
@@ -140,26 +140,15 @@ function verifyWeights(){let errors=[];
  return errors.length===0;
 }
 function calcWaves(){
- const o2f=Number($('o2-choice').value),o3e=Number($('o3-choice').value),o4f=Number($('o4-choice').value),o5e=Number($('o5-choice').value);
- return fc.pivot_rows.map(p=>{
-  const cl=p.cycle_low, o1=p.o1;
-  if(cl==null||o1==null||!(o1>cl))return {token:p.token,values:null,state:'N/D'};
-  const rise=o1-cl;
-  const fixed=wave=>p.waves?.[wave]?.status==='CONFIRMADO'?Number(p.waves[wave].price):null;
-  const o2=fixed('o2')??(o1-o2f*rise);
-  const o3=fixed('o3')??(o2+o3e*rise);
-  const o4=fixed('o4')??(o3-o4f*(o3-o2));
-  const o5=fixed('o5')??(o4+o5e*(o3-o2));
-  const locked=['o1','o2','o3','o4','o5'].filter(w=>fixed(w)!==null);
-  const overlap=o4<=o1;
-  return {token:p.token,values:[cl,o1,o2,o3,o4,o5],locked,
-    state:overlap?'SOLAPAMIENTO O4 / O1':locked.length?'CONFIRMADOS: '+locked.map(w=>w.toUpperCase()).join(', '):'ESCENARIO'};
- });
+ const selectors={o2:Number($('o2-choice').value),o3:Number($('o3-choice').value),
+   o4:Number($('o4-choice').value),o5:Number($('o5-choice').value)};
+ return fc.pivot_rows.map(p=>Fibo.wavePath(p,selectors));
 }
+
 function renderWaves(){
  const result=calcWaves();
- const overlap=result.filter(x=>x.state==='SOLAPAMIENTO O4 / O1').length;
- $('elliott-note').textContent=overlap?`${overlap} activos presentan O4 ≤ O1 en este escenario, incompatible con una onda impulsiva convencional sin diagonal. Ajusta los parámetros o trata los niveles como escenarios no válidos.`:'Los pivotes CONFIRMADOS se fijan desde Configuración. Los demás son escenarios; ningún control local puede modificar una onda confirmada.';
+ const overlap=result.filter(x=>x.state==='SOLAPAMIENTO O4 / O1'||x.state==='ESTRUCTURA_INCOMPATIBLE').length;
+ $('elliott-note').textContent=overlap?`${overlap} activos tienen una estructura incompatible con el recuento impulsivo. Los pivotes VALIDADO/CONFIRMADO no pueden alterarse: revisa sólo las ondas PROPUESTO o corrige el Master con una publicación administrativa.`:'Pivotes VALIDADO y CONFIRMADO: precios fijos desde el Master. Sólo PROPUESTO cambia con los selectores; ningún control modifica pivotes protegidos.';
  $('waves-body').innerHTML=result.map(r=>{
   const nums=r.values||[null,null,null,null,null,null];
   const position=fc.tokens.find(t=>t.token===r.token);
@@ -167,7 +156,7 @@ function renderWaves(){
   const spot=position ? Number(position.price) : NaN;
   const qty=Number.isFinite(units) ? units : 0;
   const valuations=nums.map(v=>Number.isFinite(v)&&v>0 ? qty*v : (Number.isFinite(spot)&&spot>0 ? qty*spot : null));
-  return `<tr><td>${logo(r.token)}<div class="fc-muted">Precio / pivote</div></td>${nums.map((n,i)=>`<td>${price(n)}${i>0&&r.locked?.includes('o'+i)?'<div class="fc-muted">🔒 Confirmado</div>':''}</td>`).join('')}<td rowspan="2"><span class="fc-tag">${r.state}</span></td></tr>`+
+  return `<tr><td>${logo(r.token)}<div class="fc-muted">Precio / pivote</div></td>${nums.map((n,i)=>{const key=i===0?'cl':'o'+i;const fixed=r.locked?.includes(key);return `<td>${price(n)}${fixed?`<div class="fc-fixed-pivot" title="Publicado en Configuración · ${r.dates?.[key]||'sin fecha'}">🔒 ${r.statuses[key]}</div>`:''}</td>`}).join('')}<td rowspan="2"><span class="fc-tag">${r.state}</span></td></tr>`+
   `<tr class="wave-value-row"><td><b>Unidades / Valor USDT</b><div class="fc-muted">HOLD, sin operaciones</div></td>${valuations.map(v=>`<td><span class="fc-muted">${new Intl.NumberFormat('en-US',{maximumFractionDigits:6}).format(qty)} u.</span><div><b>${v===null?'N/D':money(v)}</b></div></td>`).join('')}</tr>`;
  }).join('');
  const sel=$('chart-token'),active=sel.value;
@@ -187,8 +176,19 @@ function drawCurve(waves){
  function node(tag,attrs,text){const e=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,String(v)));if(text!=null)e.textContent=text;svg.appendChild(e);return e}
  for(let i=0;i<4;i++){let y=52+i*62;node('line',{x1:44,y1:y,x2:703,y2:y,stroke:'#e1eaf8','stroke-width':1})}
  node('polyline',{points:points.map(p=>p.join(',')).join(' '),fill:'none',stroke:'#2877c8','stroke-width':3,'stroke-linecap':'round','stroke-linejoin':'round'});
- points.forEach(([x,y],i)=>{const marker=node('circle',{cx:x,cy:y,r:7,fill:'#2877c8',stroke:'white','stroke-width':2,tabindex:0,'aria-label':`${choice.token} · ${names[i]} · ${price(prices[i])} · escenario hipotético no certificado`});const tip=document.createElementNS(ns,'title');tip.textContent=`${choice.token}: ${names[i]} = ${price(prices[i])}; referencia simulada, no pivote certificado`;marker.appendChild(tip);node('text',{x,y:286,class:'wave-stage-label','text-anchor':'middle'},names[i]);node('text',{x,y:Math.max(20,y-17),class:'wave-price-label','text-anchor':'middle'},price(prices[i]))});
- $('chart-info').textContent=`${choice.token} · Precios hipotéticos construidos con referencias O2 no certificadas. Distancia horizontal por etapa, no por fecha.`;
+ points.forEach(([x,y],i)=>{
+  const key=i===0?'cl':'o'+i,locked=choice.locked?.includes(key);
+  const status=locked?choice.statuses[key]:'PROPUESTO';
+  const fill=locked?(status==='CONFIRMADO'?'#168761':'#d29525'):'#2877c8';
+  const label=`${choice.token} · ${names[i]} · ${price(prices[i])} · ${status}${locked?' · FIJO desde Master':''}${choice.dates?.[key]?' · '+choice.dates[key]:''}`;
+  const marker=node('circle',{cx:x,cy:y,r:locked?8:7,fill,stroke:'white','stroke-width':2,tabindex:0,
+    'data-wave-status':status,'data-wave-fixed':locked?'true':'false','aria-label':label});
+  const tip=document.createElementNS(ns,'title');tip.textContent=label;marker.appendChild(tip);
+  node('text',{x,y:286,class:'wave-stage-label','text-anchor':'middle'},names[i]);
+  node('text',{x,y:Math.max(20,y-17),class:'wave-price-label','text-anchor':'middle'},price(prices[i]));
+ });
+ const fixed=choice.locked?.length?' · Fijos del Master: '+choice.locked.map(k=>k.toUpperCase()+' '+choice.statuses[k]).join(', '):'';
+ $('chart-info').textContent=`${choice.token} · Etapas hipotéticas; sólo PROPUESTO es ajustable.${fixed} Sin órdenes ni cambios en pivotes publicados.`;
 }
 
 

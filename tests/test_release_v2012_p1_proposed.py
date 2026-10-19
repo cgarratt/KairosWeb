@@ -3,7 +3,7 @@ ROOT=Path(__file__).resolve().parents[1]
 
 def test_identity_and_health_markers_in_release():
     app=(ROOT/'app.py').read_text(encoding='utf-8')
-    assert "APP_VERSION = '2.0.12'" in app
+    assert "APP_VERSION = '2.0.13'" in app
     assert "'buy_p1p2_anchors':" in app and "'buy_p1p2_policy':" in app
     template=(ROOT/'templates/trade_sim.html').read_text(encoding='utf-8')
     engine=(ROOT/'buy_weekly_policy.py').read_text(encoding='utf-8')

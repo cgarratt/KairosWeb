@@ -67,13 +67,20 @@ def test_bad_status_from_sheet_is_data_error():
     with pytest.raises(Exception,match='estado no permitido'):parse_master(raw)
 
 
-def test_forecast_script_uses_confirmed_over_selectors():
+def test_forecast_pins_validated_and_confirmed_pivots_in_all_views():
     from pathlib import Path
     root=Path(__file__).resolve().parents[1]
     js=(root/'templates/forecast.html').read_text()
-    assert "fixed('o2')??" in js
-    assert "fixed('o3')??" in js
-    assert "fixed('o4')??" in js
-    assert "fixed('o5')??" in js
+    calc=(root/'static/forecast_fibo_plan.js').read_text()
+    app=(root/'app.py').read_text()
+    assert 'Fibo.wavePath(p,selectors)' in js
+    assert "approved=s=>s==='VALIDADO'||s==='CONFIRMADO'" in calc
+    for key in ('cl','o1','o2','o3','o4','o5'):
+        assert key in calc
+    assert "'published_cl':w.get('cycle_low')" in app
+    assert "'cl_status':w.get('cl_status','PROPUESTO')" in app
+    assert "'waves':w.get('waves',{})" in app
+    assert "'data-wave-fixed':locked?'true':'false'" in js
+    assert '🔒 ${r.statuses[key]}' in js
     for page in ['balancer.html','trade_sim.html','forecast.html']:
         assert "'_wave_confirmed.html'" in (root/'templates'/page).read_text()

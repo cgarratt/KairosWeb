@@ -29,7 +29,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.12'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.13'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -728,7 +728,9 @@ def build_mode_payload(slug, d, observed):
             pivot_rows.append({'token':r['token'],'c1':pair.get('c1'),'c2':pair.get('c2'),
                 'ref382':pair.get('ref382'),'ref786':pair.get('ref786'),
                 'cycle_low':anchors.get('CL'),'o1':anchors.get('O1'),
-                'o1_date':anchors.get('O1_date'),'waves':w.get('waves',{}),
+                'o1_date':anchors.get('O1_date'),
+                'published_cl':w.get('cycle_low'),'published_cl_date':w.get('cl_date'),
+                'cl_status':w.get('cl_status','PROPUESTO'),'waves':w.get('waves',{}),
                 'anchor_state':ctx.get('status')})
         # Both O3/O5 allocation pairs come from the currently PUBLICADO Sheet.
         # If either is pending, malformed or no longer totals 100%, fail closed.
@@ -1451,6 +1453,9 @@ def _deployed_asset_status():
         'config_admin_entry': ('app.py', ("@app.route('/settings')", "return redirect(url_for('admin_login'", "@app.route('/api/settings/data')")),
         'config_admin_login': ('templates/admin_login.html', ('login_csrf', 'settings_tab', 'Acceso administrativo')),
         'mobile_no_tooltips': ('static/tooltips.js', ("(hover: none) and (pointer: coarse)", "node.removeAttribute('title')", "node.setAttribute('title',previousTitles.get(node))")),
+        'forecast_published_pivot_locks': ('static/forecast_fibo_plan.js', ("function wavePath(p,selectors)", "const approved=s=>s==='VALIDADO'||s==='CONFIRMADO'", 'fixed[wave]=price;locked.push(wave)')),
+        'forecast_locked_chart': ('templates/forecast.html', ('Fibo.wavePath(p,selectors)', "'data-wave-fixed':locked?'true':'false'", '🔒 ${r.statuses[key]}')),
+        'forecast_master_pivots': ('app.py', ("'published_cl':w.get('cycle_low')", "'cl_status':w.get('cl_status','PROPUESTO')", "'waves':w.get('waves',{})")),
     }
     files = {}
     for key, (filename, markers) in critical.items():

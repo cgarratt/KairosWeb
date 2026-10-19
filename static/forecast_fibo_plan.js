@@ -32,7 +32,37 @@
     if(step==='o5')return SELL_LEVELS.map(f=>o4+f*(o3-o2));
     throw Error('Onda no permitida');
   }
-  const api={BUY_LEVELS,SELL_LEVELS,DEFAULTS,shares,budget,scenarioBuyPrices,scenarioSellPrices};
+  // Shared chart/table/Forecast values. Published VALIDADO and CONFIRMADO
+  // are immutable under local Fibonacci selectors or MCP candidate updates.
+  function wavePath(p,selectors){
+    const labels=['cl','o1','o2','o3','o4','o5'];
+    const positive=x=>x==null||x===''?null:(Number.isFinite(Number(x))&&Number(x)>0?Number(x):null);
+    const approved=s=>s==='VALIDADO'||s==='CONFIRMADO';
+    const fixed={},statuses={},dates={},locked=[];
+    for(const wave of labels){
+      const row=wave==='cl'?{price:p.published_cl,date:p.published_cl_date,status:p.cl_status}:(p.waves?.[wave]||{});
+      const status=String(row.status||'PROPUESTO').toUpperCase();
+      if(approved(status)){
+        const price=positive(row.price);
+        if(price===null)return {token:p.token,values:null,locked,statuses,dates,state:'PIVOTE_PUBLICADO_SIN_PRECIO'};
+        fixed[wave]=price;locked.push(wave);statuses[wave]=status;dates[wave]=row.date||null;
+      }else{statuses[wave]='PROPUESTO';dates[wave]=row.date||null;}
+    }
+    const cl=fixed.cl??positive(p.cycle_low),o1=fixed.o1??positive(p.o1);
+    if(cl===null||o1===null||o1<=cl)return {token:p.token,values:null,locked,statuses,dates,state:cl!==null&&o1!==null?'ANCLAS_INCOMPATIBLES':'N/D'};
+    const f=wave=>{const r=Number(selectors?.[wave]);return Number.isFinite(r)&&r>0?r:null;};
+    if(['o2','o3','o4','o5'].some(w=>fixed[w]===undefined&&f(w)===null))throw Error('FIBONACCI_CONTROL_INVALIDO');
+    const o2=fixed.o2??(o1-f('o2')*(o1-cl));
+    const o3=fixed.o3??(o2+f('o3')*(o1-cl));
+    const o4=fixed.o4??(o3-f('o4')*(o3-o2));
+    const o5=fixed.o5??(o4+f('o5')*(o3-o2));
+    const values=[cl,o1,o2,o3,o4,o5];
+    let state=values.every(x=>Number.isFinite(x)&&x>0)&&cl<o1&&o2<o1&&o3>o2&&o4<o3&&o5>o4?'ESCENARIO':'ESTRUCTURA_INCOMPATIBLE';
+    if(state==='ESCENARIO'&&o4<=o1)state='SOLAPAMIENTO O4 / O1';
+    if(state==='ESCENARIO'&&locked.length)state='FIJOS: '+locked.map(w=>w.toUpperCase()+' '+statuses[w]).join(', ');
+    return {token:p.token,values,locked,statuses,dates,state};
+  }
+  const api={BUY_LEVELS,SELL_LEVELS,DEFAULTS,shares,budget,scenarioBuyPrices,scenarioSellPrices,wavePath};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   root.KairosForecastFibo=api;
 })(typeof window!=='undefined'?window:globalThis);
