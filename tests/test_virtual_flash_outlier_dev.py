@@ -32,3 +32,29 @@ def test_published_virtual_flash_cl_is_never_silently_used():
     data={'status':'OK','source':'Binance Spot','interval':'1d','closed_only':True,'records':[]}
     assert resolve('VIRTUAL',p,{},data)['status']=='VIRTUAL_FLASH_CL_EXCLUDED'
     assert resolve_long_term_buy('VIRTUAL',p,data)['reason']=='VIRTUAL_CL_FLASH_EXCLUIDO_REQUIERE_REVISION'
+
+# Regression: the 19-Oct-2026 published VIRTUAL Elliott structure supersedes
+# the excluded 2025-10-10 flash CL, without rewriting historical MCP archives.
+def test_new_published_virtual_o2_selects_weekly_impulse_not_2025_flash():
+    from datetime import date, timedelta
+    from pytest import approx
+    start=date(2026,6,22); end=date(2026,10,18)
+    candles=[]
+    for n in range((end-start).days+1):
+        d=start+timedelta(days=n)
+        lo=.4977 if d==date(2026,6,25) else .62
+        hi=.8861 if d==date(2026,10,5) else .8
+        candles.append({'open_utc':d.isoformat()+'T00:00:00+00:00',
+            'close_utc':(d+timedelta(days=1)).isoformat()+'T00:00:00+00:00',
+            'high':str(hi),'low':str(lo),'close':'.7'})
+    published={'cycle_low':.4593,'cl_date':'2026-02-06','cl_status':'PROPUESTO',
+        'waves':{'o1':{'price':.9783,'date':'2026-05-07','status':'PROPUESTO'},
+                 'o2':{'price':.4977,'date':'2026-06-25','status':'PROPUESTO'}}}
+    data={'status':'OK','source':'Binance Spot','interval':'1d','closed_only':True,'records':candles}
+    result=resolve_long_term_buy('VIRTUAL',published,data,archived={'cycle_low':.2772,'cl_date':'2025-10-10'})
+    assert result['eligible'], result
+    assert result['anchors']['low']['price']==approx(.4977)
+    assert result['anchors']['low']['pivot']=='O2'
+    assert result['anchors']['high']['price']==approx(.8861)
+    assert result['reason']=='P1_ADMITIDO_P2_MAXIMO_SEMANAL_POSTERIOR'
+    assert result['operational_blocked'] is True

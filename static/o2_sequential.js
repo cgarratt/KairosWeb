@@ -27,7 +27,21 @@ function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
   });
   const units=tokens.map(t=>{const spot=Number(t.price);return spot>0?Math.max(0,Number(t.current_usdt)||0)/spot:0;});
   const target=tokens.map(t=>Math.max(0,Number(t.target)||0));
-  const consumed=[0,0,0,0], snapshots=[];let cash=Math.max(0,Number(budget)||0);
+  // Presupuesto hipotético: 100% repartido entre C1/C2/C3/C4 según pesos
+  // aprobados O2/O4, INDEPENDIENTEMENTE de cuántos tokens sean comprables.
+  // La ejecución simulada posterior respeta INFRA, precios válidos y objetivos.
+  const plannedBudget=Math.max(0,Number(budget)||0);
+  const targetSum=target.reduce((a,b)=>a+b,0);
+  const stageMix=[0,0,0,0];
+  for(let i=0;i<n;i++)for(let j=0;j<4;j++)
+    stageMix[j]+=targetSum>0?(target[i]/targetSum)*stageWeights[i][j]:0;
+  const totalMix=stageMix.reduce((a,b)=>a+b,0);
+  const defaults=sumW>0?w.map(x=>x/sumW):[0,0,0,0];
+  const normalizedMix=totalMix>0?stageMix.map(v=>v/totalMix):defaults;
+  const stageBudgets=normalizedMix.map(v=>plannedBudget*v);
+  // Avoid carrying floating point residue outside the 100% envelope.
+  stageBudgets[3]=Math.max(0,plannedBudget-stageBudgets[0]-stageBudgets[1]-stageBudgets[2]);
+  const consumed=[0,0,0,0], snapshots=[];let cash=plannedBudget;
   for(let j=0;j<4;j++){
     const px=tokens.map((t,i)=>prices[i][j]||Number(t.price));
     const values=px.map((v,i)=>(Number.isFinite(v)&&v>0?units[i]*v:0));
@@ -35,10 +49,10 @@ function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
     // Estado ANTES de comprar en este tramo, con compras previas ya incorporadas.
     const preWeights=values.map(x=>crypto>0?x/crypto:NaN);
     const drift=preWeights.map((v,i)=>classifyDrift(v,target[i],bandPP));
-    // Blocked-token target shares are NOT redistributed.  That cash remains physical USDT.
-    const stageBudget=strict
-      ?Math.min(cash,Math.max(0,Number(budget)||0)*tokens.reduce((s,t,i)=>s+(prices[i][j]>0&&allowed[i]?target[i]*stageWeights[i][j]:0),0))
-      :Math.min(cash,Math.max(0,Number(budget)||0)*(sumW>0?w[j]/sumW:0));
+    // The four theoretical tranches ALWAYS sum to the full slider budget.
+    // A structurally blocked or overweight token cannot diminish the PLAN;
+    // its unspent portion remains physical USDT, not an invented fill.
+    const stageBudget=Math.min(cash,stageBudgets[j]);
     // Missing Fibonacci anchors have no executable hypothetical limit price.
     // They remain in the portfolio valuation but cannot receive a simulated fill.
     // Canonical Balancer buys: INFRA only (DRIFT_BAND_PP from published
@@ -70,7 +84,7 @@ function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
       states:drift.map(x=>x.status),driftsPP:drift.map(x=>x.driftPP),
       spent:consumed[j],cash});
   }
-  return {prices,amounts,consumed,totalByToken:amounts.map(a=>a.reduce((s,x)=>s+x,0)),spent:consumed.reduce((a,b)=>a+b,0),cash,snapshots};
+  return {prices,amounts,stageBudgets,unallocated:Math.max(0,plannedBudget-consumed.reduce((a,b)=>a+b,0)),consumed,totalByToken:amounts.map(a=>a.reduce((s,x)=>s+x,0)),spent:consumed.reduce((a,b)=>a+b,0),cash,snapshots};
 }
 const api={calculate,classifyDrift};if(typeof module!=='undefined'&&module.exports)module.exports=api;
 root.KairosO2Sequential=api;

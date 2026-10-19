@@ -28,25 +28,38 @@ assert.ok(afterC1[1]>sim.snapshots[0].weights[1], 'Comprar ETH aumenta el peso p
 assert.ok(Math.abs(afterC1.reduce((a,b)=>a+b,0)-1)<1e-9, 'Los pesos post-compra suman 100%');
 assert.ok(sim.snapshots.every(step=>Array.isArray(step.postWeights)&&step.postWeights.length===items.length));
 
-// Órdenes: filtros KairosGPT y semáforos.
-const {visible,matchesDistance,matchesGroup}=require('../static/orders_inbox.js');
-const item=(v,token,tier,stage,dist,category='ESTRUCTURA')=>({dataset:{ordersVenue:v,token,tier,category,ordersCategory:category,stage,wave:stage.startsWith('EXT')?'EXTENSION_1W':'O2',side:'BUY',proximity:dist===null?'PRECIO_PENDIENTE':dist<0?'NIVEL_SUPERADO':'EN_ESPERA',distance:dist===null?'':String(dist)},closest:()=>({dataset:{ordersVenue:v}})});
-const a=item('Binance','BTC','T1','O2C2',3.5);
-const b=item('KuCoin','VIRTUAL','T3','C2',null);
-const c=item('Binance','ETH','T1','O2C1',-2);
-assert.equal(visible(a,'Todos','Todos','Todos','','Todos','Todas','Todos','Todos'),true);
-assert.equal(visible(a,'Todos','Todos','Todos','','Todos','O2','Todos','Todos'),true);
-assert.equal(visible(a,'Todos','Todos','Todos','','Todos','T1','Todos','Todos'),true);
-assert.equal(visible(a,'Todos','Todos','Todos','','Todos','Binance','Todos','Todos'),true);
-assert.equal(visible(b,'Todos','Todos','Todos','','Todos','TOKEN:VIRTUAL','Todos','Todos'),true);
-assert.equal(visible(b,'Todos','Todos','Todos','','Todos','O2','Todos','Todos'),false);
-assert.equal(visible(a,'Todos','Todos','Todos','','Todos','O2','T3','Todos'),false);
-assert.equal(visible(a,'KuCoin','Todos','Todos','','Todos','Todas','Todos','Todos'),false);
-assert.equal(visible(a,'Todos','Todos','Todos','BTC','Todos','Todas','Todos','Todos'),true);
-assert.equal(visible(a,'Todos','Todos','Todos','SOL','Todos','Todas','Todos','Todos'),false);
-assert.equal(matchesDistance(a,'2-5'),true);
-assert.equal(matchesDistance(b,'0-2'),false);
-assert.equal(matchesDistance(c,'NIVEL_SUPERADO'),true);
-assert.equal(matchesGroup(a,'O2'),true);
-assert.equal(matchesGroup(b,'O2'),false);
-console.log('Orders v2.0.14 quick views and filters PASS');
+// Órdenes: controles activos Exchange / Tier / Operación / Token.
+const {visible,init}=require('../static/orders_inbox.js');
+const item=(venue,token,tier,side)=>({
+ dataset:{ordersVenue:venue,token,tier,side},
+ closest:()=>({dataset:{ordersVenue:venue}}),hidden:false
+});
+const a=item('Binance','BTC','T1','BUY');
+const b=item('KuCoin','VIRTUAL','T3','BUY');
+const c=item('Binance','ETH','T1','SELL');
+assert.equal(visible(a,'Todos','Todos','Todos','Todos'),true);
+assert.equal(visible(a,'Binance','T1','BUY','BTC'),true);
+assert.equal(visible(a,'KuCoin','T1','BUY','BTC'),false);
+assert.equal(visible(a,'Binance','T2','BUY','BTC'),false);
+assert.equal(visible(a,'Binance','T1','SELL','BTC'),false);
+assert.equal(visible(a,'Binance','T1','BUY','ETH'),false);
+assert.equal(visible(b,'KuCoin','T3','BUY','VIRTUAL'),true);
+assert.equal(visible(c,'Binance','T1','SELL','ETH'),true);
+const controls={};
+for(const id of ['orders-venue','orders-tier','orders-side','orders-token']){
+ const handlers={};controls[id]={value:'Todos',handlers,addEventListener:(type,cb)=>{handlers[type]=cb;}};
+}
+const reset={handlers:{},addEventListener:function(type,cb){this.handlers[type]=cb;}};
+const empty={hidden:false};const count={textContent:''};
+const rows=[a,b,c];
+const doc={getElementById:id=>id==='orders-inbox'?{querySelectorAll:()=>rows}:id==='orders-clear-filters'?reset:id==='orders-empty-filter'?empty:id==='orders-filter-count'?count:controls[id]||null};
+init(doc);
+assert.equal(count.textContent,'3 de 3 propuestas visibles · ninguna colocada');
+controls['orders-token'].value='VIRTUAL';controls['orders-token'].handlers.change();
+assert.deepEqual(rows.map(x=>!x.hidden),[false,true,false]);
+controls['orders-venue'].value='Binance';controls['orders-venue'].handlers.change();
+assert.equal(empty.hidden,false);
+reset.handlers.click();
+assert.deepEqual(rows.map(x=>!x.hidden),[true,true,true]);
+assert.ok(Object.values(controls).every(x=>x.value==='Todos'));
+console.log('Orders simplified Exchange / Tier / Operation / Token filters PASS');

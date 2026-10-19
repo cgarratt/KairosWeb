@@ -1,34 +1,27 @@
-# KairosWeb v2.0.14 — release GitHub
+# KairosWeb v2.0.15 — GitHub release
 
-**Base:** KairosWeb v2.0.13. Este ZIP contiene el proyecto completo; preservar rutas `static/`, `templates/` y `tests/` al reemplazar archivos en GitHub. No instalar o guardar credenciales en el ZIP. Google Sheets sigue siendo la fuente única de saldos, liquidez, custodia, parámetros y estados de pivotes. Spot exclusivamente MCP.
+**Paquete completo** para reemplazar la fuente de KairosWeb desde v2.0.14. Mantener las rutas `templates/`, `static/`, `tests/` y `render.yaml`. La versión de producto es **2.0.15**; el contrato Google Sheets permanece en `schema_version=5.0.0`.
 
-## Cambios acumulados
+## Qué cambia
 
-### Modo Compras · Matriz de precios Fibo - Onda 2
-- Título actualizado y cabeceras P1/P2 simplificadas. Se conservan los semáforos de estado exclusivamente junto a **P1/P2**.
-- Cuatro columnas nuevas de **% Peso**, una por tramo: peso en la manga cripto calculado después de las compras hipotéticas acumuladas hasta ese tramo, revalorizando unidades con los precios del escenario. NO representa el peso actual al Spot.
-- Los precios Fibo ya no muestran círculos de desviación. Las celdas verdes solo significan que una vela diaria cerrada posterior a la fecha de P2 tuvo un mínimo <= al nivel. Ámbar = mínimo histórico posterior a P2 a menos del 1%; no indica que el Spot actual esté cerca, ni un fill ni permiso de ejecución.
-- Restricciones existentes de Compras inalteradas: P1 semanal fechado puede ser PROPUESTO/VALIDADO/CONFIRMADO, P2 máximo semanal cerrado posterior, déficit INFRA y QF protegida, sin órdenes automáticas.
+- **Compras:** título «Maestro de Precios - Retrocesos Fibo». El color histórico post-P2 es uniforme en **Precio, % Peso y USDT** para los cuatro escalones.
+- **Liquidez y presupuesto:** un único máximo disponible `USDT físico − Reserva Trading QF`. El slider elige el presupuesto teórico sin descontar primero los tokens bloqueados; el 100% de ese presupuesto se reparte en Fib 38.2/50/61.8/78.6 según los parámetros **aprobados del Master**. **La ejecución hipotética** se limita a tokens INFRA y a sus déficits; lo que no pueda comprarse se mantiene en USDT, sin forzar exceso de target.
+- **Órdenes, resumen:** título «Próximas órdenes por Token», columna «Nivel» inmediatamente después de «Origen» y descripción Fibonacci de C1/C2/C3/C4 y EXT1W1..4.
+- **Órdenes, listado:** título «Backlog de Ordenes Compra / Venta»; filtros simplificados **Exchange, Tier, Operación y Token** (combo de los 12). Se retiran «Vista rápida», «Origen», «Grupo» y «Proximidad». «Limpiar filtros» restaura los cuatro selectores.
+- **VIRTUAL y HYPE:** se agregan regresiones de la elegibilidad semanal bajo la estructura publicada de VIRTUAL y HYPE/USDC Spot. No modificamos pivotes ni suplimos información ausente del MCP. Cualquier fallo real de red o proveedor en Render requiere diagnóstico posterior a instalar este paquete.
 
-### Modo Ventas
-- Tarjeta **Objetivo USDT** ahora indica **importe monetario objetivo ($) y porcentaje entre paréntesis**, con patrimonio Spot publicado en el escenario. Solo modifica presentación; no altera el motor SELL, Core ni BTC NEVER SELL.
+## Restricciones que se mantienen
 
-### Modo Forecast
-- Título **Simulación - Ondas Elliott**.
-- Se retira la columna independiente Estado de la tabla Cycle Low a O5; se conservan los candados/estados junto al precio del pivote VALIDADO/CONFIRMADO y la protección efectiva del motor.
+Compras usa P1 mínimo semanal fechado (PROPUESTO, VALIDADO o CONFIRMADO) y P2 máximo de las semanas completas posteriores; PROPUESTO habilita **solo simulación**, no LIMIT real. Solo INFRA, límite por déficit y QF protegida. No mezclar HYPE/USDC Spot macro con el precio Binance HYPEUSDT para medir distancia. BTC NEVER SELL, HODL/Core protegidos, Ventas ordinarias sin filtro pivotes. Toda la sección Órdenes sigue siendo **solo propuestas, sin ejecución**.
 
-### Modo Órdenes (FASE 1)
-- Título **Listado de próximas órdenes a ejecutar**, siempre señalado como listado hipotético NO colocado ni autorizado.
-- Tabla consolidada de filas: evita seis tablas extensas organizadas por exchange/origen. Selección rápida: Todas, Precios O2, Binance, KuCoin, Hyperliquid, T1/T2/T3 y tokens individuales como Precios VIRTUAL.
-- Filtros combinables: Exchange, origen, grupo O2/O3/O5/extensión 1W/rebalanceo, Tier, BUY/SELL, distancia y token, más limpiar filtros y contador de resultados.
-- Semáforos de cercanía y badges BUY/SELL, BALANCE/ESTRUCTURA y estado. Colores de distancia **no son señales de ejecución**. Resumen técnico por token se mantiene.
-- Limitaciones de seguridad: sin `place/cancel`, sin fills inventados; BALANCE sin LIMIT; SELL estructural sin tamaño aprobado; HYPE USDC macro no se compara con Binance USDT Spot.
+Google Sheets ORIGINAL `KAIROS_V5_MASTER`, `01_CONTROL` PUBLICADO, hojas de inventario y parámetros, y MCP actuales siguen siendo la única fuente de datos financieros. Los ZIP y capturas **no son datos de mercado ni de saldos**. El ZIP no modifica Sheets, GitHub o Render por sí solo.
 
-## Despliegue y comprobaciones
-1. Reemplazar los archivos del repositorio GitHub por el contenido **descomprimido** del ZIP, preservando `templates/`, `static/`, `tests/` y `render.yaml`.
-2. Desplegar Render sin introducir claves en el repositorio.
-3. Abrir `/health`: esperar `version=2.0.14`, `status=UP`, `release_assets.consistent=true`.
-4. Comprobar Compras (semáforos P1/P2, 4 pesos post-compra, histórico post-P2), Ventas (importe objetivo), Forecast (título y tabla) y Órdenes (combinar vistas como O2 + Binance y T1 + KuCoin).
-5. Confirmar visualmente los resultados con el Master/MCP reales en Render; las pruebas locales no certifican esa integración remota.
+## Instalación y comprobación
 
-**Control de paquete:** menos de 100 archivos incluyendo `RELEASE_MANIFEST_v2.0.14.json` y `SHA256SUMS.txt`. No se modifican automáticamente el Master, las órdenes ni la custodia.
+1. **Descomprimir** el ZIP y reemplazar los archivos del repositorio respetando la estructura. No subir un ZIP cerrado como sustituto de los archivos fuente.
+2. Commit/Push y esperar el despliegue de Render. No incorporar credenciales al repositorio.
+3. En `/health` verificar `version=2.0.15`, `status=UP` y `release_assets.consistent=true`.
+4. Comprobar Compras (presupuesto teórico vs USDT asignable por INFRA), VIRTUAL (CL/O1/O2 nuevos del Master) y HYPE (Hyperliquid Spot HYPE/USDC); en Órdenes, comprobar combos de cuatro filtros y resumen por token. Revisar consola/logs y el mensaje de bloqueo en N/D si persistiera un fallo MCP.
+5. No se ha realizado verificación HTTP de producción desde este entorno. No dar por certificados el despliegue ni la conexión privada MCP antes de hacerla.
+
+**Control de paquete:** GitHub ZIP de 99 archivos (máximo autorizado: menos de 100) con `RELEASE_MANIFEST_v2.0.15.json` y `SHA256SUMS.txt`.

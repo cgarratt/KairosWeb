@@ -3,7 +3,7 @@ ROOT=Path(__file__).resolve().parents[1]
 
 def test_identity_and_health_markers_in_release():
     app=(ROOT/'app.py').read_text(encoding='utf-8')
-    assert "APP_VERSION = '2.0.14'" in app
+    assert "APP_VERSION = '2.0.15'" in app
     assert "'buy_p1p2_anchors':" in app and "'buy_p1p2_policy':" in app
     template=(ROOT/'templates/trade_sim.html').read_text(encoding='utf-8')
     engine=(ROOT/'buy_weekly_policy.py').read_text(encoding='utf-8')
@@ -28,7 +28,7 @@ def test_release_2014_matrix_ventas_forecast_and_orders_views():
     html=(ROOT/'templates/trade_sim.html').read_text(encoding='utf-8')
     forecast=(ROOT/'templates/forecast.html').read_text(encoding='utf-8')
     orders=(ROOT/'templates/ordenes.html').read_text(encoding='utf-8')
-    assert 'Matriz de precios Fibo - Onda 2' in html
+    assert 'Maestro de Precios - Retrocesos Fibo' in html
     assert '<th>P1</th><th>P2</th>' in html
     assert html.count('<th>% Peso</th>') == 4
     assert 'o2-drift-dot drift-' not in html  # los precios Fibo ya no llevan indicador
@@ -37,8 +37,11 @@ def test_release_2014_matrix_ventas_forecast_and_orders_views():
     assert 'Simulación - Ondas Elliott' in forecast
     assert '<th>O5 (SH3)</th><th>Estado</th>' not in forecast
     assert 'rowspan="2"' not in forecast.split("$('waves-body').innerHTML=")[1].split(');',1)[0]
-    for marker in ['Listado de próximas órdenes a ejecutar','Precios O2','Precios Binance',
-                   'Precios T1','id="orders-group"','id="orders-tier"','data-orders-tier']:
+    for marker in ['Backlog de Ordenes Compra / Venta','id="orders-venue"',
+                   'id="orders-tier"','id="orders-side"','id="orders-token"','data-orders-tier']:
         assert marker in orders
+    for retired in ('id="orders-view"','id="orders-category"','id="orders-group"','id="orders-status"','<input id="orders-token"'):
+        assert retired not in orders
+    assert '<select id="orders-token"' in orders
     assert 'FASE 1 · SOLO PROPUESTAS' in orders
     assert 'No colocada' in orders

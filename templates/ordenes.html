@@ -61,16 +61,20 @@
     <p class="footer-note">Snapshot {{ snapshot }} · MCP Spot observado {{ observed }}. Balance y Estructura son escenarios INDEPENDIENTES: no sumar desembolsos, no inferir reservas ni fills.</p>
   </section>
   <section class="panel span-12">
-    <h3>Referencia técnica más cercana por token</h3>
+    <h3>Próximas órdenes por Token</h3>
     <p class="orders-muted">Preferimos el objetivo Fibonacci FUTURO más cercano al Spot. Si no existe, mostramos la propuesta de Balance disponible sin precio LIMIT. N/D indica que ninguna fuente aporta una propuesta fundada; nunca se inventa una orden. BTC NEVER SELL.</p>
     <div class="orders-table-wrap">
-      <table class="orders-table" id="orders-nearest" style="min-width:780px"><thead><tr><th>Token</th><th>Exchange</th><th>Origen</th><th>Spot</th><th>Dirección</th><th>Objetivo cercano</th><th>Nivel</th><th>Distancia</th><th>Estado</th></tr></thead><tbody>
+      <table class="orders-table" id="orders-nearest" style="min-width:780px"><thead><tr><th>Token</th><th>Exchange</th><th>Origen</th><th>Nivel</th><th>Spot</th><th>Dirección</th><th>Objetivo cercano</th><th>Distancia</th><th>Estado</th></tr></thead><tbody>
       {% for c in inbox.coverage %}
       <tr><td><strong>{{ c.token }}</strong></td><td>{{ c.venue }}</td><td>{{ c.origin }}</td>
+          <td><strong>{{ c.stage or 'N/D' }}</strong>{% if c.stage is string and c.stage.startswith('C') and c.stage[1:] in ('1','2','3','4') %}
+            <small class="orders-origin">Fib {{ {'C1':'38.2%', 'C2':'50%', 'C3':'61.8%', 'C4':'78.6%'}[c.stage] }} · retroceso alcista</small>
+          {% elif c.stage is string and c.stage.startswith('EXT1W') and c.stage[5:] in ('1','2','3','4') %}
+            <small class="orders-origin">Fib {{ {'EXT1W1':'1.618', 'EXT1W2':'2.618', 'EXT1W3':'3.618', 'EXT1W4':'4.618'}[c.stage] }} · extensión 1W</small>
+          {% endif %}</td>
           <td>{{ '${:,.8f}'.format(c.spot).rstrip('0').rstrip('.') if c.spot is not none else 'N/D' }}</td>
           <td>{% if c.side %}<span class="order-side {{ 'buy' if c.side=='BUY' else 'sell' }}">{{ c.side }}</span>{% else %}—{% endif %}</td>
           <td>{{ '${:,.8f}'.format(c.limit).rstrip('0').rstrip('.') if c.limit is not none else 'N/D' }}</td>
-          <td>{{ c.stage or 'N/D' }}</td>
           <td>{{ '%+.2f%%'|format(c.distance_pct) if c.distance_pct is not none else 'N/D' }}</td>
           <td><span class="order-state order-state-{{ 'green' if c.status=='CERCANO' else 'amber' if c.status=='EN_ESPERA' else 'muted' }}"><i class="orders-light light-{{ 'green' if c.status=='CERCANO' else 'amber' if c.status=='EN_ESPERA' else 'muted' }}" aria-hidden="true"></i>{{ c.status.replace('_',' ') }}</span></td></tr>
       {% endfor %}
@@ -78,29 +82,20 @@
     </div>
   </section>
   <section class="panel span-12">
-    <h3>Listado de próximas órdenes a ejecutar</h3>
-    <p class="orders-muted">Listado <strong>solo de propuestas hipotéticas, NO colocadas ni autorizadas para ejecución</strong>. Elige una vista tipo KairosGPT y combínala con los selectores; un precio LIMIT es una referencia, no una orden real.</p>
+    <h3>Backlog de Ordenes Compra / Venta</h3>
+    <p class="orders-muted">Listado <strong>solo de propuestas hipotéticas, NO colocadas ni autorizadas para ejecución</strong>. Filtra por Exchange, Tier, Operación y Token; un precio LIMIT es una referencia, no una orden real.</p>
     <div class="orders-tools" aria-label="Filtros de órdenes propuestas">
-      <label for="orders-view">Vista rápida</label>
-      <select id="orders-view" aria-label="Vista rápida KairosGPT">
-        <option value="Todas">Todas</option>
-        <option value="O2">Precios O2</option>
-        <option value="Binance">Precios Binance</option>
-        <option value="KuCoin">Precios KuCoin</option>
-        <option value="Hyperliquid">Precios Hyperliquid</option>
-        <option value="T1">Precios T1</option>
-        <option value="T2">Precios T2</option>
-        <option value="T3">Precios T3</option>
-        {% for coin in (tier_by_token|default({})|list|sort) %}<option value="TOKEN:{{ coin }}">Precios {{ coin }}</option>{% endfor %}
-      </select>
       <label for="orders-venue">Exchange</label>
-      <select id="orders-venue"><option value="Todos">Todos</option><option value="Binance">Binance</option><option value="KuCoin">KuCoin</option><option value="Hyperliquid">Hyperliquid</option></select>
-      <label for="orders-category">Origen</label><select id="orders-category"><option value="Todos">Todos</option><option value="ESTRUCTURA">Estructura</option><option value="BALANCE">Balance</option></select>
-      <label for="orders-group">Grupo</label><select id="orders-group"><option value="Todos">Todos</option><option value="O2">O2</option><option value="O3">O3</option><option value="O5">O5</option><option value="EXTENSION_1W">Extensión 1W</option><option value="REBALANCEO">Rebalanceo</option></select>
-      <label for="orders-tier">Tier</label><select id="orders-tier"><option value="Todos">Todos</option><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select>
-      <label for="orders-side">Operación</label><select id="orders-side"><option value="Todos">BUY + SELL</option><option value="BUY">BUY</option><option value="SELL">SELL</option></select>
-      <label for="orders-status">Proximidad</label><select id="orders-status"><option value="Todos">Todos</option><option value="0-2">Hasta 2%</option><option value="2-5">2–5%</option><option value="5-10">5–10%</option><option value="GT10">Más de 10%</option><option value="NIVEL_SUPERADO">Superado</option><option value="PRECIO_PENDIENTE">Sin LIMIT</option><option value="EN_ESPERA">En espera</option></select>
-      <label for="orders-token">Token</label><input id="orders-token" type="search" placeholder="BTC, SOL, SUI…" maxlength="12" autocomplete="off">
+      <select id="orders-venue" aria-label="Filtrar órdenes por Exchange"><option value="Todos">Todos</option><option value="Binance">Binance</option><option value="KuCoin">KuCoin</option><option value="Hyperliquid">Hyperliquid</option></select>
+      <label for="orders-tier">Tier</label>
+      <select id="orders-tier" aria-label="Filtrar órdenes por Tier"><option value="Todos">Todos</option><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select>
+      <label for="orders-side">Operación</label>
+      <select id="orders-side" aria-label="Filtrar órdenes por Operación"><option value="Todos">BUY + SELL</option><option value="BUY">BUY</option><option value="SELL">SELL</option></select>
+      <label for="orders-token">Token</label>
+      <select id="orders-token" aria-label="Filtrar órdenes por Token">
+        <option value="Todos">Todos</option>
+        {% for coin in (tier_by_token|default({})|list|sort) %}<option value="{{ coin }}">{{ coin }}</option>{% endfor %}
+      </select>
       <button type="button" id="orders-clear-filters">Limpiar filtros</button>
     </div>
     <p class="orders-muted"><span class="orders-light light-green" aria-hidden="true"></span> ≤2% de proximidad · <span class="orders-light light-amber" aria-hidden="true"></span> 2–5% · <span class="orders-light light-muted" aria-hidden="true"></span> Más de 5% o sin cotización homogénea · <span class="orders-light light-red" aria-hidden="true"></span> Nivel superado. Son indicadores de distancia, <strong>no señales de ejecución</strong>.</p>
