@@ -84,30 +84,51 @@ def staged_buy_candidates(buy, budget, proximity_pct=1.0):
         weights.append([float(x)/100 for x in v])
         ref=levels.get(token) or {}
         prices=[_finite_pos(ref.get(k)) for k in LEVEL_FIELDS]
-        px_all.append(prices if eligible.get(token) is True else [None]*4)
-    units=[max(0.,float(t.get('units') or 0)) for t in tokens]
-    remaining=max(0.,float(budget));candidates=[]
+        # Parity with o2_sequential.js: an incomplete P1/P2 grid is N/D
+        # for all stages, not a partially executable simulated schedule.
+        px_all.append(prices if eligible.get(token) is True and all(prices) else [None]*4)
+    units=[]; targets=[]
+    for t in tokens:
+        spot=_finite_pos(t.get('price'))
+        current=max(0.,float(t.get('current_usdt') or 0))
+        units.append(current/spot if spot else max(0.,float(t.get('units') or 0)))
+        targets.append(max(0.,float(t['target'])))
+
+    # All four theoretical budgets total 100% of the slider maximum.
+    # This plan does NOT change when a token is blocked or over target.
+    budget=max(0.,float(budget))
+    target_sum=sum(targets)
+    if target_sum<=0:
+        return [],budget
+    stage_mix=[sum((targets[i]/target_sum)*weights[i][j]
+                   for i in range(len(tokens))) for j in range(4)]
+    mix_total=sum(stage_mix)
+    if abs(mix_total-1)>1e-8:
+        raise ValueError('Published tranche weights do not sum to 100%')
+    stage_budgets=[budget*stage_mix[j] for j in range(4)]
+    stage_budgets[3]=max(0.,budget-sum(stage_budgets[:3]))
+
+    remaining=budget;candidates=[]
     for j in range(4):
-        sim_prices=[px_all[i][j] or float(t['price']) for i,t in enumerate(tokens)]
+        sim_prices=[px_all[i][j] or _finite_pos(t.get('price')) or 0.
+                    for i,t in enumerate(tokens)]
         values=[units[i]*sim_prices[i] for i in range(len(tokens))]
         crypto=sum(values)
-        planned=min(remaining,budget*sum(max(0.,float(t['target']))*weights[i][j]
-                       for i,t in enumerate(tokens) if px_all[i][j] is not None))
-        items=[{'target':t['target'] if px_all[i][j] is not None else 0,
-                'current_usdt':values[i]} for i,t in enumerate(tokens)]
+        planned=min(remaining,stage_budgets[j])
+        items=[{'target':targets[i] if px_all[i][j] is not None else 0.,
+                'current_usdt':values[i]} for i in range(len(tokens))]
         spends=_buy_allocation(items,planned,crypto,buy.get('drift_band_pp',1.0))
         actually_spent=0.
         for i,t in enumerate(tokens):
             price=px_all[i][j];a=max(0.,spends[i]) if price else 0.
             if not price or a<.005:continue
-            token=t['token'];spot=_finite_pos(t['price'])
+            token=t['token'];spot=_finite_pos(t.get('price'))
             ctx=buy.get('weekly_context',{}).get(token,{})
             phase=ctx.get('mode') or 'RETROCESO_ALCISTA'
             stage=f"O4C{j+1}" if phase=='O4' else f"O2C{j+1}" if phase=='O2' else f"C{j+1}"
             delta,proximity=_proximity('BUY',spot,price,proximity_pct)
             if token=='HYPE':
-                # Binance HYPE/USDT Spot and Hyperliquid HYPE/USDC macro must
-                # not be treated as one homogeneous quote for proximity.
+                # Never compare Binance HYPE/USDT and Hyperliquid HYPE/USDC.
                 delta,proximity=None,'COTIZACION_NO_HOMOLOGADA'
             candidates.append({
                 'token':token,'venue':VENUES.get(token,'Sin asignar'),
@@ -183,9 +204,13 @@ def structural_sell_candidates(d, buy, wave_levels=None, proximity_pct=1.0):
     return candidates
 
 
-def portfolio_candidates(d, bal):
+def portfolio_candidates(d, bal, drift_band_pp=1.0):
     """Spot-valued rebalancing suggestions; never fabricate LIMIT levels."""
     by_token={r['token']:r for r in d['rows']};candidates=[]
+    # Portfolio Balance is an independent scenario from staged Fibonacci BUYs.
+    # Sizing must nevertheless honor each approved target and INFRA band.
+    holdings={token:max(0.,float(row.get('value') or 0)) for token,row in by_token.items()}
+    crypto=sum(holdings.values())
     for side,items in (('BUY',bal.get('buys',[])),('SELL',bal.get('sells',[]))):
         for suggestion in items:
             token=suggestion['token']
@@ -199,7 +224,20 @@ def portfolio_candidates(d, bal):
                 amount=min(amount,units*spot)
                 if amount<.005:continue
             else:
-                units=amount/spot if amount>0 else 0
+                # Fail closed on missing numeric inventory/targets. Balancer
+                # previews are not permission to spend past a token's target.
+                target=_finite_pos(row.get('target'))
+                value=holdings[token]
+                if target is None or target>=1 or crypto<=0:
+                    continue
+                if (value/crypto-target)*100 >= -float(drift_band_pp)-1e-9:
+                    continue  # Only INFRA at THIS step may receive BUY.
+                headroom=max(0.,(target*crypto-value)/(1-target))
+                amount=min(amount,headroom)
+                if amount<.005:continue
+                units=amount/spot
+                holdings[token]+=amount
+                crypto+=amount
             candidates.append({
                 'token':token,'venue':VENUES.get(token,'Sin asignar'),
                 'category':'BALANCE','side':side,'mode':'Balancer',
@@ -223,7 +261,7 @@ def build_order_inbox(d, buy_payload, balancer_payload, proximity_pct=1.0, wave_
     budget=min(float(d['usdt_operating']),max(0.,float(d['usdt_total'])-float(d['trading_reserve'])))
     buys,unassigned=staged_buy_candidates(buy_payload,budget,threshold)
     technical_sells=structural_sell_candidates(d,buy_payload,wave_levels,threshold)
-    portfolio=portfolio_candidates(d,balancer_payload)
+    portfolio=portfolio_candidates(d,balancer_payload,buy_payload.get('drift_band_pp',1.0))
     combined=buys+technical_sells+portfolio
     for c in combined:
         c['near_reference']=(c['category']=='ESTRUCTURA' and c['proximity']=='CERCA')
@@ -246,6 +284,14 @@ def build_order_inbox(d, buy_payload, balancer_payload, proximity_pct=1.0, wave_
                          'limit':picked['limit'] if picked else None,
                          'distance_pct':picked['distance_pct'] if picked else None,
                          'stage':picked['stage'] if picked else None,
+                         # The amount/units MUST come from the same proposal as
+                         # the selected level. Never attach Balancer SELL units
+                         # to an independently sized Fibonacci extension.
+                         'buy_usdt':(picked['usdt'] if picked and picked['side']=='BUY' and
+                                     picked['usdt'] is not None and picked['usdt']>.005 else None),
+                         'sell_units':(picked['quantity'] if picked and picked['side']=='SELL' and
+                                        picked['quantity'] is not None and picked['quantity']>0 else None),
+                         'sizing_status':picked['sizing_status'] if picked else 'N/D',
                          'origin':picked['category'] if picked else 'N/D',
                          'status':('CERCANO' if nearest['distance_pct']<=threshold+1e-9 else 'EN_ESPERA') if nearest
                                   else 'SIN_LIMIT' if balance_fallback else 'N/D',

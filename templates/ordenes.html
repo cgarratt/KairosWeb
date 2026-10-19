@@ -64,7 +64,7 @@
     <h3>Próximas órdenes por Token</h3>
     <p class="orders-muted">Preferimos el objetivo Fibonacci FUTURO más cercano al Spot. Si no existe, mostramos la propuesta de Balance disponible sin precio LIMIT. N/D indica que ninguna fuente aporta una propuesta fundada; nunca se inventa una orden. BTC NEVER SELL.</p>
     <div class="orders-table-wrap">
-      <table class="orders-table" id="orders-nearest" style="min-width:780px"><thead><tr><th>Token</th><th>Exchange</th><th>Origen</th><th>Nivel</th><th>Spot</th><th>Dirección</th><th>Objetivo cercano</th><th>Distancia</th><th>Estado</th></tr></thead><tbody>
+      <table class="orders-table" id="orders-nearest" style="min-width:1120px"><thead><tr><th>Token</th><th>Exchange</th><th>Origen</th><th>Nivel</th><th>Spot</th><th>Dirección</th><th>Objetivo cercano</th><th>Distancia</th><th>USDT compra</th><th>Unidades venta</th><th>Estado</th></tr></thead><tbody>
       {% for c in inbox.coverage %}
       <tr><td><strong>{{ c.token }}</strong></td><td>{{ c.venue }}</td><td>{{ c.origin }}</td>
           <td><strong>{{ c.stage or 'N/D' }}</strong>{% if c.stage is string and c.stage.startswith('C') and c.stage[1:] in ('1','2','3','4') %}
@@ -76,6 +76,8 @@
           <td>{% if c.side %}<span class="order-side {{ 'buy' if c.side=='BUY' else 'sell' }}">{{ c.side }}</span>{% else %}—{% endif %}</td>
           <td>{{ '${:,.8f}'.format(c.limit).rstrip('0').rstrip('.') if c.limit is not none else 'N/D' }}</td>
           <td>{{ '%+.2f%%'|format(c.distance_pct) if c.distance_pct is not none else 'N/D' }}</td>
+          <td>{% if c.side=='BUY' %}{{ '${:,.2f}'.format(c.buy_usdt) if c.buy_usdt is not none else 'N/D' }}{% else %}—{% endif %}</td>
+          <td>{% if c.side=='SELL' %}{{ '{:,.8f}'.format(c.sell_units).rstrip('0').rstrip('.') if c.sell_units is not none else 'POR DEFINIR' }}{% else %}—{% endif %}</td>
           <td><span class="order-state order-state-{{ 'green' if c.status=='CERCANO' else 'amber' if c.status=='EN_ESPERA' else 'muted' }}"><i class="orders-light light-{{ 'green' if c.status=='CERCANO' else 'amber' if c.status=='EN_ESPERA' else 'muted' }}" aria-hidden="true"></i>{{ c.status.replace('_',' ') }}</span></td></tr>
       {% endfor %}
       </tbody></table>
@@ -83,7 +85,7 @@
   </section>
   <section class="panel span-12">
     <h3>Backlog de Ordenes Compra / Venta</h3>
-    <p class="orders-muted">Listado <strong>solo de propuestas hipotéticas, NO colocadas ni autorizadas para ejecución</strong>. Filtra por Exchange, Tier, Operación y Token; un precio LIMIT es una referencia, no una orden real.</p>
+    <p class="orders-muted">Listado <strong>solo de propuestas hipotéticas, NO colocadas ni autorizadas para ejecución</strong>. Filtra por Exchange, Tier, Operación, Token y Nivel; un precio LIMIT es una referencia, no una orden real.</p>
     <div class="orders-tools" aria-label="Filtros de órdenes propuestas">
       <label for="orders-venue">Exchange</label>
       <select id="orders-venue" aria-label="Filtrar órdenes por Exchange"><option value="Todos">Todos</option><option value="Binance">Binance</option><option value="KuCoin">KuCoin</option><option value="Hyperliquid">Hyperliquid</option></select>
@@ -95,6 +97,11 @@
       <select id="orders-token" aria-label="Filtrar órdenes por Token">
         <option value="Todos">Todos</option>
         {% for coin in (tier_by_token|default({})|list|sort) %}<option value="{{ coin }}">{{ coin }}</option>{% endfor %}
+      </select>
+      <label for="orders-level">Nivel</label>
+      <select id="orders-level" aria-label="Filtrar órdenes por Nivel">
+        <option value="Todos">Todos</option>
+        {% for level in inbox.candidates|map(attribute='stage')|unique|sort %}<option value="{{ level }}">{{ level }}</option>{% endfor %}
       </select>
       <button type="button" id="orders-clear-filters">Limpiar filtros</button>
     </div>
@@ -126,6 +133,7 @@
         </tbody>
       </table>
     </div>
+    <p class="orders-muted">Los importes BUY respetan INFRA, déficit máximo, compra secuencial y QF. Las extensiones SELL sin tamaño aprobado indican «POR DEFINIR»; no se equiparan a las ventas por Balance.</p>
     <p class="orders-muted" id="orders-filter-count" role="status"></p>
     <p id="orders-empty-filter" class="footer-note" hidden>No hay propuestas para estos filtros.</p>
     <p class="orders-readonly"><strong>Regla de proximidad:</strong> precio FUTURO disponible a una distancia de 0 a +{{ '%.1f'|format(inbox.proximity_pct) }}% desde Spot. Niveles ya superados no se confunden con órdenes LIMIT futuras. El objetivo más cercano puede estar lejos; no implica recomendación inmediata.</p>

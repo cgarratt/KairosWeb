@@ -16,7 +16,7 @@ def test_compras_single_maximum_and_slider_budget_independent_of_eligibility():
     assert 'maxBuyCash=Math.max(0,Number(source.current.reference_cap ?? (cash-trading)))' in html
     assert 'const referenceCapacity=Math.max(0,Math.min(desired,maxBuyCash));' in html
     assert "el('selected-buy-budget').textContent=dollar(referenceCapacity)" in html
-    assert 'sim.stageBudgets[i]' in html
+    assert 'sim.stageBudgets.forEach' in html
     assert 'sim.unallocated' in html
     assert 'purchase-metrics' in html
 
@@ -37,3 +37,17 @@ def test_fibonacci_title_and_all_three_cells_same_historical_color():
     assert html.count('<th>% Peso</th>') == 4
     assert '<td class="${css}" title="${historicalTitle}">${fibPrice(level)}</td>' in html
     assert '<td class="${css}" title="${historicalTitle}">${dollar(amount)}</td>' in html
+
+
+def test_fibo_percentages_editable_and_local_only():
+    root = Path(__file__).resolve().parents[1]
+    html = (root / 'templates/trade_sim.html').read_text(encoding='utf-8')
+    assert 'id="fibo-split-{{ loop.index0 }}"' in html
+    assert 'id="fibo-split-reset"' in html
+    assert 'id="fibo-split-total"' in html
+    assert 'window.KairosPurchaseWeights.rebalance(fiboPercentages,i,value)' in html
+    assert 'fiboCustom?window.KairosPurchaseWeights.asFractions(fiboPercentages):null' in html
+    assert 'weightsByToken:appliedByToken' in html
+    assert 'showFiboControls();paint();' in html
+    assert "url_for('static', filename='purchase_weights.js')" in html
+    assert (root / 'static/purchase_weights.js').is_file()

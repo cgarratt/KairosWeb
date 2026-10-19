@@ -29,7 +29,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.15'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.16'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1446,9 +1446,9 @@ def _deployed_asset_status():
         'buy_weekly_ui': ('templates/trade_sim.html', ('buy_eligibility', 'requireEligibility')),
         'buy_p1p2_anchors': ('templates/trade_sim.html', ('Maestro de Precios - Retrocesos Fibo', '<th>P1</th><th>P2</th>', 'pivot-anchor-dot')),
         'buy_p1p2_policy': ('buy_weekly_policy.py', ('def select_p1_p2_buy_impulse(', 'P1_ADMITIDO_P2_MAXIMO_SEMANAL_POSTERIOR')),
-        'orders_page': ('templates/ordenes.html', ('Backlog de Ordenes Compra / Venta', 'Próximas órdenes por Token', 'FASE 1 · SOLO PROPUESTAS')),
-        'orders_engine': ('orders_inbox.py', ('def build_order_inbox(', 'def structural_sell_candidates(', 'def portfolio_candidates(')),
-        'orders_filters': ('static/orders_inbox.js', ('function visible(', 'orders-venue', 'orders-tier', 'orders-side', 'orders-token')), 
+        'orders_page': ('templates/ordenes.html', ('Backlog de Ordenes Compra / Venta', 'Próximas órdenes por Token', 'USDT compra', 'Unidades venta', 'id="orders-level"', 'FASE 1 · SOLO PROPUESTAS')),
+        'orders_engine': ('orders_inbox.py', ('def build_order_inbox(', 'def structural_sell_candidates(', 'def portfolio_candidates(', "'buy_usdt':", "'sell_units':")),
+        'orders_filters': ('static/orders_inbox.js', ('function visible(', 'orders-venue', 'orders-tier', 'orders-side', 'orders-token', 'orders-level')), 
         'pivot_mcp_status_protection': ('static/settings_master.js', ("current.cl_status!=='PROPUESTO'", "statusInput?.value!=='PROPUESTO'", "if(rec[field]!=='PROPUESTO')continue")),
         'virtual_flash_exclusion': ('structural_outliers.py', ('VIRTUAL_FLASH_WEEK_START', 'virtual_flash_cl')), 
         'config_admin_entry': ('app.py', ("@app.route('/settings')", "return redirect(url_for('admin_login'", "@app.route('/api/settings/data')")),
@@ -1457,6 +1457,8 @@ def _deployed_asset_status():
         'forecast_published_pivot_locks': ('static/forecast_fibo_plan.js', ("function wavePath(p,selectors)", "const approved=s=>s==='VALIDADO'||s==='CONFIRMADO'", 'fixed[wave]=price;locked.push(wave)')),
         'forecast_locked_chart': ('templates/forecast.html', ('Fibo.wavePath(p,selectors)', "'data-wave-fixed':locked?'true':'false'", '🔒 ${r.statuses[key]}')),
         'buy_post_fibo_weights': ('static/o2_sequential.js', ('postWeights','postCrypto','stageBudgets','unallocated')),
+        'buy_custom_fibo_weights': ('static/purchase_weights.js', ('function rebalance(', 'function normalize(', 'function asFractions(')),
+        'buy_custom_fibo_ui': ('templates/trade_sim.html', ('id="fibo-split-reset"', 'window.KairosPurchaseWeights.rebalance(', 'showFiboControls();paint();')),
         'forecast_elliott_table': ('templates/forecast.html', ('Simulación - Ondas Elliott', '<th>O5 (SH3)</th>')),
         'orders_simple_filters': ('templates/ordenes.html', ('Backlog de Ordenes Compra / Venta','id="orders-venue"','id="orders-tier"','id="orders-side"','id="orders-token"')),
         'forecast_master_pivots': ('app.py', ("'published_cl':w.get('cycle_low')", "'cl_status':w.get('cl_status','PROPUESTO')", "'waves':w.get('waves',{})")),

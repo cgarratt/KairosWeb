@@ -8,6 +8,8 @@
 .pivot-anchor-line{display:inline-flex;align-items:center;gap:6px;justify-content:flex-end;white-space:nowrap}
 .pivot-anchor-dot{display:inline-block;width:11px;height:11px;min-width:11px;border-radius:50%;border:1px solid rgba(255,255,255,.65);box-shadow:0 0 0 1px rgba(0,0,0,.14)}
 .pivot-anchor-dot.pivot-propuesto{background:#e54357}.pivot-anchor-dot.pivot-validado{background:#f0a92b}.pivot-anchor-dot.pivot-confirmado{background:#20bb73}
+/* Four editable Fibonacci percentages: local-only, always 100%. */
+.fibo-split-control{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:12px}.fibo-split-control label{font-size:12px;color:var(--muted,#8ca3c2);font-weight:700}.fibo-split-control input{width:92px;max-width:100%;padding:7px 8px;border:1px solid var(--border,#70849b);border-radius:8px;background:var(--surface,#172b47);color:var(--text,#f4f8ff);font:inherit;font-size:15px;text-align:right}.fibo-split-control .fibo-pct{font-weight:700}.fibo-split-reset{border:1px solid var(--border,#70849b);background:transparent;color:inherit;padding:7px 12px;border-radius:8px;cursor:pointer}.fibo-split-reset:hover{background:rgba(54,111,199,.15)}.fibo-split-status{font-size:12px;font-weight:700;color:var(--muted,#8ca3c2)}.fibo-split-status.custom{color:#2aba90}
 
 
 </style>{% endblock %}
@@ -32,7 +34,16 @@
 </div>
 </section>
 {% if mode.slug=='compras' %}
-<section class="panel span-12"><div class="hero" style="align-items:flex-start"><div><h2>Resumen de compras</h2><p class="sub">Distribución orientativa en los cuatro tramos Fibonacci.</p></div><a id="forecast-detail-link" class="btn primary" href="/mode/forecast">Ver niveles y ondas en Forecast ↗</a></div><div class="sim-layout" style="margin-top:18px"><div class="sim-metric"><small>C1 · Fib 38.2%</small><b id="buy-tranche-0">—</b></div><div class="sim-metric"><small>C2 · Fib 50%</small><b id="buy-tranche-1">—</b></div><div class="sim-metric"><small>C3 · Fib 61.8%</small><b id="buy-tranche-2">—</b></div><div class="sim-metric"><small>C4 · Fib 78.6%</small><b id="buy-tranche-3">—</b></div></div><p class="footer-note">Compra efectivamente distribuida: <strong id="actual-buy-spend">—</strong> · Presupuesto no asignado por restricciones: <strong id="unallocated-buy-budget">—</strong>. No son órdenes. </p><p class="footer-note">Presupuesto teórico por tramo: suma siempre el 100% elegido en el slider, según pesos O2/O4 publicados. Las compras efectivas siguen limitadas por INFRA, precios semanales válidos y targets; el remanente permanece en USDT.</p></section>
+<section class="panel span-12"><div class="hero" style="align-items:flex-start"><div><h2>Resumen de compras</h2><p class="sub">Ajusta la proporción de cada retroceso Fibonacci para esta simulación. Los cuatro porcentajes siempre suman 100%.</p></div><a id="forecast-detail-link" class="btn primary" href="/mode/forecast">Ver niveles y ondas en Forecast ↗</a></div>
+<div class="sim-layout" style="margin-top:18px">
+{% for level in ['38.2%', '50%', '61.8%', '78.6%'] %}
+<div class="sim-metric"><small>C{{ loop.index }} · Fib {{ level }}</small><b id="buy-tranche-{{ loop.index0 }}">—</b>
+<div class="fibo-split-control"><label for="fibo-split-{{ loop.index0 }}">Asignación</label><input id="fibo-split-{{ loop.index0 }}" type="number" inputmode="decimal" min="0" max="100" step="0.01" aria-label="Porcentaje para Fibonacci {{ level }}"><span class="fibo-pct">%</span></div></div>
+{% endfor %}
+</div>
+<div class="fibo-split-control"><span class="fibo-split-status" id="fibo-split-total" role="status" aria-live="polite">Total: 100.00% · Master</span><button id="fibo-split-reset" class="fibo-split-reset" type="button">Restaurar porcentajes del Master</button></div>
+<p class="footer-note">Compra efectivamente distribuida: <strong id="actual-buy-spend">—</strong> · Presupuesto no asignado por restricciones: <strong id="unallocated-buy-budget">—</strong>. No son órdenes.</p>
+<p class="footer-note">Los porcentajes del Master son el punto de partida. Cualquier ajuste se aplica <strong>solo a esta simulación</strong>, sin guardar cambios en el Master ni modificar Órdenes. Los cuatro tramos suman el 100% del slider; las compras efectivas siguen limitadas por INFRA, precios semanales válidos y targets, y el remanente permanece en USDT.</p></section>
 {% endif %}
 
 <section class="panel span-6"><h2>Distribución del escenario</h2><p class="sub">Asignación USDT referencial por token.</p><div id="alloc-chart" class="bar-list"></div></section>
@@ -51,6 +62,7 @@
 </div>
 <script src="{{ url_for('static', filename='purchase_plan.js') }}?v={{ master }}"></script>
 <script src="{{ url_for('static', filename='o2_sequential.js') }}?v={{ master }}"></script>
+<script src="{{ url_for('static', filename='purchase_weights.js') }}?v={{ master }}"></script>
 <script src="{{ url_for('static', filename='forecast_level_status.js') }}?v={{ master }}"></script>
 <script>
 const mode={{ payload.kind|tojson }};
@@ -58,6 +70,24 @@ const o2Weights={{ payload.forecast_o2_allocation|default([0,60,40,0])|tojson }}
 const source={{ payload|tojson }};
 const P=source.current.P, cash=source.current.cash, trading=source.current.trading||0;
 const maxBuyCash=Math.max(0,Number(source.current.reference_cap ?? (cash-trading)));
+// Start from the effective published Master O2/O4 mix. This is a local UI
+// override only: nothing here writes Google Sheets or changes the Orders mode.
+const fiboMasterMix=mode==='compras'
+ ? window.KairosO2Sequential.calculate(source.tokens,source.o2_levels,o2Weights,100,source.drift_band_pp,{
+    requireEligibility:true,eligibility:source.buy_eligibility,weightsByToken:source.buy_stage_weights
+   }).stageBudgets
+ : null;
+const fiboMasterPercentages=mode==='compras'?window.KairosPurchaseWeights.normalize(fiboMasterMix):null;
+let fiboPercentages=fiboMasterPercentages?fiboMasterPercentages.slice():null;
+let fiboCustom=false;
+function showFiboControls(){
+ if(mode!=='compras')return;
+ fiboPercentages.forEach((pct,i)=>{el('fibo-split-'+i).value=pct.toFixed(2)});
+ const total=fiboPercentages.reduce((a,b)=>a+b,0);
+ el('fibo-split-total').textContent='Total: '+total.toFixed(2)+'% · '+(fiboCustom?'Personalizado':'Master');
+ el('fibo-split-total').classList.toggle('custom',fiboCustom);
+}
+
 const symbols={BTC:'bitcoin-btc',ETH:'ethereum-eth',SOL:'solana-sol',LINK:'chainlink-link',HYPE:'hyperliquid-hype',HBAR:'hedera-hbar',SUI:'sui-sui',ONDO:'ondo-finance-ondo',PUMP:'pump-fun-pump',PLUME:'plume-plume',PEPE:'pepe-pepe',VIRTUAL:'virtual-protocol-virtual'};
 const dollar=x=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(x);
 const quantity=x=>new Intl.NumberFormat('en-US',{maximumFractionDigits:x>=100?2:6}).format(x);
@@ -116,8 +146,13 @@ if(mode==='compras'){
   const referenceCapacity=Math.max(0,Math.min(desired,maxBuyCash));
   el('max-buy-metric').textContent=dollar(maxBuyCash);
   el('max-buy-slider').textContent=dollar(maxBuyCash)+' · '+(100*maxBuyCash/P).toFixed(1)+'% de P';
-  const sim=window.KairosO2Sequential.calculate(source.tokens,source.o2_levels,o2Weights,referenceCapacity,source.drift_band_pp,{
-    requireEligibility:true,eligibility:source.buy_eligibility,weightsByToken:source.buy_stage_weights});
+  const customFractions=fiboCustom?window.KairosPurchaseWeights.asFractions(fiboPercentages):null;
+  const appliedWeights=customFractions||o2Weights;
+  const appliedByToken=customFractions
+    ? Object.fromEntries(source.tokens.map(t=>[t.token,customFractions]))
+    : source.buy_stage_weights;
+  const sim=window.KairosO2Sequential.calculate(source.tokens,source.o2_levels,appliedWeights,referenceCapacity,source.drift_band_pp,{
+    requireEligibility:true,eligibility:source.buy_eligibility,weightsByToken:appliedByToken});
   allocated=sim.totalByToken;
   const sum=sim.spent;after=cash-sum;
    el('third-metric').textContent=dollar(trading);
@@ -127,7 +162,7 @@ if(mode==='compras'){
    el('unallocated-buy-budget').textContent=dollar(sim.unallocated);
   // Conciliación y restricciones conservadas en la lógica; no mostrar nota amarilla.
   renderO2Fibonacci(sim);
-  o2Weights.forEach((weight,i)=>{el('buy-tranche-'+i).textContent=dollar(sim.stageBudgets[i]);});
+  sim.stageBudgets.forEach((amount,i)=>{el('buy-tranche-'+i).textContent=dollar(amount);});
   el('forecast-detail-link').href='/mode/forecast?deploy='+encodeURIComponent(target.toFixed(4));
 }else{
   const desired=Math.max(0,P*target/100-cash);
@@ -168,6 +203,23 @@ if(mode==='compras'){
 }
 let max=Math.max(1,...allocated);el('alloc-chart').innerHTML=source.tokens.map((x,i)=>`<div class="bar-row"><div class="bar-label">${token(x.token)}</div><div class="bar-track"><div class="bar-fill ${mode==='ventas'?'danger':'ok'}" style="width:${100*allocated[i]/max}%"></div></div><div class="bar-value">${dollar(allocated[i])}</div></div>`).join('')||'<span class="muted">Sin candidatos</span>';
 el('before-cash').textContent=dollar(cash)+' ('+(100*cash/P).toFixed(1)+'%)';el('after-cash').textContent=dollar(after)+' ('+(100*after/P).toFixed(1)+'%)';el('before-bar').style.width=cap(100*cash/P,0,100)+'%';el('after-bar').style.width=cap(100*after/P,0,100)+'%';}
+if(mode==='compras'){
+ showFiboControls();
+ for(let i=0;i<4;i++){
+  el('fibo-split-'+i).addEventListener('change',event=>{
+   const value=event.target.value;
+   if(String(value).trim()==='' || !Number.isFinite(Number(value))){showFiboControls();return;}
+   fiboPercentages=window.KairosPurchaseWeights.rebalance(fiboPercentages,i,value);
+   fiboCustom=true;
+   showFiboControls();
+   paint(); // Recalculate tranche cards, weight/USDT matrix, bars and remaining cash.
+  });
+ }
+ el('fibo-split-reset').addEventListener('click',()=>{
+   fiboPercentages=fiboMasterPercentages.slice();fiboCustom=false;
+   showFiboControls();paint();
+ });
+}
 el('allocation-slider').addEventListener('input',paint);paint();
 </script>
 {% endblock %}

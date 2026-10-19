@@ -28,10 +28,10 @@ assert.ok(afterC1[1]>sim.snapshots[0].weights[1], 'Comprar ETH aumenta el peso p
 assert.ok(Math.abs(afterC1.reduce((a,b)=>a+b,0)-1)<1e-9, 'Los pesos post-compra suman 100%');
 assert.ok(sim.snapshots.every(step=>Array.isArray(step.postWeights)&&step.postWeights.length===items.length));
 
-// Órdenes: controles activos Exchange / Tier / Operación / Token.
+// Órdenes: controles activos Exchange / Tier / Operación / Token / Nivel.
 const {visible,init}=require('../static/orders_inbox.js');
 const item=(venue,token,tier,side)=>({
- dataset:{ordersVenue:venue,token,tier,side},
+ dataset:{ordersVenue:venue,token,tier,side,stage:token==='BTC'?'O2C1':token==='VIRTUAL'?'C2':'REBALANCEO'},
  closest:()=>({dataset:{ordersVenue:venue}}),hidden:false
 });
 const a=item('Binance','BTC','T1','BUY');
@@ -45,8 +45,11 @@ assert.equal(visible(a,'Binance','T1','SELL','BTC'),false);
 assert.equal(visible(a,'Binance','T1','BUY','ETH'),false);
 assert.equal(visible(b,'KuCoin','T3','BUY','VIRTUAL'),true);
 assert.equal(visible(c,'Binance','T1','SELL','ETH'),true);
+assert.equal(visible(a,'Binance','T1','BUY','BTC','O2C1'),true);
+assert.equal(visible(a,'Binance','T1','BUY','BTC','O2C2'),false);
+assert.equal(visible(b,'KuCoin','T3','BUY','VIRTUAL','C2'),true);
 const controls={};
-for(const id of ['orders-venue','orders-tier','orders-side','orders-token']){
+for(const id of ['orders-venue','orders-tier','orders-side','orders-token','orders-level']){
  const handlers={};controls[id]={value:'Todos',handlers,addEventListener:(type,cb)=>{handlers[type]=cb;}};
 }
 const reset={handlers:{},addEventListener:function(type,cb){this.handlers[type]=cb;}};
@@ -56,10 +59,11 @@ const doc={getElementById:id=>id==='orders-inbox'?{querySelectorAll:()=>rows}:id
 init(doc);
 assert.equal(count.textContent,'3 de 3 propuestas visibles · ninguna colocada');
 controls['orders-token'].value='VIRTUAL';controls['orders-token'].handlers.change();
+controls['orders-level'].value='C2';controls['orders-level'].handlers.change();
 assert.deepEqual(rows.map(x=>!x.hidden),[false,true,false]);
 controls['orders-venue'].value='Binance';controls['orders-venue'].handlers.change();
 assert.equal(empty.hidden,false);
 reset.handlers.click();
 assert.deepEqual(rows.map(x=>!x.hidden),[true,true,true]);
 assert.ok(Object.values(controls).every(x=>x.value==='Todos'));
-console.log('Orders simplified Exchange / Tier / Operation / Token filters PASS');
+console.log('Orders simplified Exchange / Tier / Operation / Token / Level filters PASS');

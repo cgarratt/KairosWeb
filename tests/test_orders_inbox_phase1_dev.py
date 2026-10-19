@@ -17,9 +17,9 @@ def _inputs():
                            'HYPE':{'mode':'RETROCESO_ALCISTA','provisional':True}}}
     d={'usdt_operating':400.,'usdt_total':500.,'trading_reserve':100.,
        'liquidity_venues':{'Binance':300.,'KuCoin':100.,'Hyperliquid':0.},
-       'rows':[{'token':'BTC','price':101,'exchange_units':0.5},
-               {'token':'SUI','price':5,'exchange_units':12},
-               {'token':'HYPE','price':20,'exchange_units':2}]}
+       'rows':[{'token':'BTC','price':101,'exchange_units':0.5,'target':.50,'value':101},
+               {'token':'SUI','price':5,'exchange_units':12,'target':.25,'value':100},
+               {'token':'HYPE','price':20,'exchange_units':2,'target':.25,'value':100}]}
     bal={'sells':[{'token':'BTC','value':500,'units':10},
                   {'token':'SUI','value':25,'units':5},
                   {'token':'HYPE','value':30,'units':2}]}
@@ -100,10 +100,10 @@ def test_generic_weekly_extension_not_labeled_o3_o5():
 
 def test_balance_proposals_have_no_fibonacci_prices_and_nd_is_not_order():
     d,b,bal=_inputs()
-    bal['buys']=[{'token':'SUI','value':10}]
+    bal['buys']=[{'token':'BTC','value':10}]
     inbox=build_order_inbox(d,b,bal)
     s=inbox['categories']['BALANCE']
-    assert {(x['token'],x['side']) for x in s}=={('SUI','BUY'),('SUI','SELL'),('HYPE','SELL')}
+    assert {(x['token'],x['side']) for x in s}=={('BTC','BUY'),('SUI','SELL'),('HYPE','SELL')}
     assert all(x['limit'] is None and x['distance_pct'] is None for x in s)
     assert inbox['coverage'][1]['origin']=='BALANCE'
     assert inbox['coverage'][1]['limit'] is None
@@ -150,3 +150,87 @@ def test_hype_does_not_compare_binance_usdt_spot_to_hyperliquid_usdc():
     assert h and all(x['quote_currency']=='USDC' for x in h)
     assert all(x['distance_pct'] is None for x in h)
     assert all(x['actionable_alert'] is False for x in h)
+
+# Next iteration: BUY amount/Sell units, and parity with the four Master tranches.
+def test_nearest_table_uses_same_ticket_for_amount_and_sells_size():
+    d,b,bal=_inputs()
+    inbox=build_order_inbox(d,b,bal)
+    chosen=inbox['coverage'][0]  # BTC has a sized Fibonacci BUY
+    assert chosen['token']=='BTC' and chosen['side']=='BUY'
+    assert chosen['buy_usdt']>0 and chosen['sell_units'] is None
+    assert any(x['token']=='BTC' and x['stage']==chosen['stage']
+               and abs(x['usdt']-chosen['buy_usdt'])<1e-9 for x in inbox['candidates'])
+    hype=next(x for x in inbox['coverage'] if x['token']=='HYPE')
+    assert hype['side']=='SELL' and hype['origin']=='BALANCE'
+    # Never exceed the declared Exchange-free units (2 in this fixture).
+    assert hype['sell_units']<=2 and hype['buy_usdt'] is None
+    assert all(x['side']!='SELL' or x['token']!='BTC' for x in inbox['candidates'])
+
+
+def test_unsized_structural_sell_does_not_borrow_balance_quantities():
+    d,b,bal=_inputs()
+    published={'SUI':{'levels':{'O3':{'O3V1':6.0}}}}
+    result=build_order_inbox(d,b,bal,wave_levels=published)
+    chosen=result['coverage'][1]
+    assert chosen['side']=='SELL' and chosen['origin']=='ESTRUCTURA'
+    assert chosen['stage']=='O3V1' and chosen['sell_units'] is None
+    assert chosen['buy_usdt'] is None
+    # A separate Balance SELL can have a quantity, but not at this price.
+    bal_sells=[x for x in result['candidates'] if x['token']=='SUI'
+               and x['category']=='BALANCE' and x['side']=='SELL']
+    assert bal_sells and bal_sells[0]['quantity']==5.0
+
+
+def test_all_four_theoretical_stages_follow_master_20_30_40_10_and_infra_gate():
+    d,b,bal=_inputs()
+    b['buy_stage_weights']={x['token']:[20,30,40,10] for x in b['tokens']}
+    b['forecast_o2_allocation']=[20,30,40,10]
+    # Make BTC overweight at every stage, and leave HYPE underweight.
+    b['tokens']=[{'token':'BTC','price':1,'target':.5,'units':80,'current_usdt':80},
+                 {'token':'HYPE','price':1,'target':.25,'units':10,'current_usdt':10},
+                 {'token':'SUI','price':1,'target':.25,'units':10,'current_usdt':10}]
+    b['o2_levels']={x['token']:{'ref382':1,'c1':1,'c2':1,'ref786':1}
+                    for x in b['tokens']}
+    b['buy_eligibility']={'BTC':True,'HYPE':True,'SUI':False}
+    from orders_inbox import staged_buy_candidates
+    tickets,remainder=staged_buy_candidates(b,100.)
+    assert tickets
+    assert all(x['token']=='HYPE' for x in tickets), 'overweight and blocked tokens must receive zero'
+    assert 0 <= sum(x['usdt'] for x in tickets)<=100+1e-6
+    assert abs(sum(x['usdt'] for x in tickets)+remainder-100)<1e-6
+    # The tranche amounts cannot exceed the four theoretically funded envelopes.
+    for j,cap in enumerate((20.,30.,40.,10.),1):
+        assert sum(x['usdt'] for x in tickets if x['stage']==f'C{j}')<=cap+1e-6
+    # Target .25 cannot be exceeded for the final crypto sleeve.
+    final=sum(x['usdt'] for x in tickets)
+    assert (10+final)/(100+final)<=.25+1e-9
+
+
+def test_nearest_table_nd_does_not_fabricate_amount_or_sell_units():
+    d,b,bal=_inputs()
+    b['buy_eligibility']={key:False for key in b['buy_eligibility']}
+    bal['sells']=[]
+    result=build_order_inbox(d,b,bal)
+    assert all(x['side'] is None and x['buy_usdt'] is None and x['sell_units'] is None
+               for x in result['coverage'])
+
+
+def test_balance_buy_proposals_are_capped_sequentially_to_infra_and_targets():
+    d,b,bal=_inputs()
+    bal['sells']=[]
+    # BTC is over target; SUI begins very under target. Both BUY previews must
+    # respect crypto-sleeve weights as the independent Balancer buys accrue.
+    d['rows']=[{'token':'BTC','price':1,'value':80,'target':.2,'exchange_units':0},
+               {'token':'SUI','price':1,'value':10,'target':.4,'exchange_units':0},
+               {'token':'HYPE','price':1,'value':10,'target':.4,'exchange_units':0}]
+    bal['buys']=[{'token':'BTC','value':1000},{'token':'SUI','value':1000},
+                 {'token':'HYPE','value':1000}]
+    inbox=build_order_inbox(d,b,bal)
+    arr=[x for x in inbox['candidates'] if x['category']=='BALANCE' and x['side']=='BUY']
+    assert {x['token'] for x in arr}=={'SUI','HYPE'}
+    assert all(x['usdt']<1000 and x['usdt']>0 for x in arr)
+    cash_by={x['token']:x['usdt'] for x in arr}
+    crypto=100+sum(cash_by.values())
+    assert (10+cash_by['SUI'])/crypto<=.4+1e-9
+    assert (10+cash_by['HYPE'])/crypto<=.4+1e-9
+    assert not any(x['token']=='BTC' for x in arr)
