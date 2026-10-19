@@ -29,7 +29,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.11'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.12'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -62,7 +62,7 @@ def policy_numeric(key, allowed):
 MODE_DEFS = [
     {'slug':'portafolio','name':'Portafolio','subtitle':'Capital integral y rentabilidad histórica','description':'Seguimiento estratégico del capital y la liquidez del portafolio.'},
     {'slug':'balancer','name':'Balancer','subtitle':'Rebalanceo y liquidez','description':'Propuestas de rebalanceo, control de piso de liquidez y protección de Core.'},
-    {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Retrocesos de impulsos alcistas semanales con dos pivotes válidos; sin pivotes, compras bloqueadas.'},
+    {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Retrocesos desde P1 semanal PROPUESTO/VALIDADO/CONFIRMADO y P2 máximo posterior; solo simulaciones INFRA.'},
     {'slug':'ventas','name':'Ventas','subtitle':'Objetivo USDT','description':'Propuestas solo SELL para acercarse a la meta de liquidez y reducir sobrepeso.'},
     {'slug':'forecast','name':'Forecast','subtitle':'Cycle Low → O5','description':'Tabla de niveles O2C1–O2C4 y ondas/pivotes proyectados; todo es simulación.'},
     {'slug':'ordenes','name':'Órdenes','subtitle':'Bandeja de propuestas','description':'Balance de portafolio y objetivos LIMIT Fibonacci 1W, por exchange y token; fase 1 solo lectura.'},
@@ -564,9 +564,9 @@ def build_mode_payload(slug, d, observed):
             'weekly_context':weekly_context,
             'drift_band_pp':approved_numeric('DRIFT_BAND_PP'),
             'structural_liquidity_target':approved_numeric('STRUCTURAL_USDT_TARGET'),
-            'notes':['Compras: solo retrocesos de los dos últimos pivotes semanales alcistas técnicamente válidos (5L/5R + BOS).',
+            'notes':['Compras: P1 es el último mínimo semanal fechado (PROPUESTO/VALIDADO/CONFIRMADO); P2 es el mayor máximo semanal cerrado posterior.',
              'O2 aplica sus pesos; O4 sus pesos; retroceso alcista genérico utiliza pesos O2 publicados.',
-             'Tokens sin pareja semanal válida reciben USDT 0; su proporción no se redistribuye: permanece en USDT.',
+             'Sin P1 con fecha/precio válidos o sin máximo semanal posterior P2: USDT 0. PROPUESTO permite simulación, nunca ejecución real; compra solo INFRA y fondo no gastado queda en USDT.',
              'Ventas ordinarias y Forecast hipotético no heredan este bloqueo. Simulación no genera órdenes.']}
         buy_rows=[]
         for r in under:
@@ -1441,6 +1441,8 @@ def _deployed_asset_status():
         'weekly_fibonacci': ('wave_structure.py', ('def full_utc_weeks(', 'def fib_grid(')),
         'buy_weekly_gate': ('buy_weekly_policy.py', ('def select_buy_impulse(', 'BOS_ALCISTA_SEMANAL_PENDIENTE')),
         'buy_weekly_ui': ('templates/trade_sim.html', ('buy_eligibility', 'requireEligibility')),
+        'buy_p1p2_anchors': ('templates/trade_sim.html', ('P1 · mínimo semanal', 'P2 · máximo semanal', 'pivot-anchor-dot')),
+        'buy_p1p2_policy': ('buy_weekly_policy.py', ('def select_p1_p2_buy_impulse(', 'P1_ADMITIDO_P2_MAXIMO_SEMANAL_POSTERIOR')),
         'orders_page': ('templates/ordenes.html', ('data-orders-category', 'Referencia técnica más cercana por token', 'FASE 1 · SOLO PROPUESTAS')),
         'orders_engine': ('orders_inbox.py', ('def build_order_inbox(', 'def structural_sell_candidates(', 'def portfolio_candidates(')),
         'orders_filters': ('static/orders_inbox.js', ('function visible(', 'orders-category', 'data-orders-category')), 

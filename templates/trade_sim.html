@@ -4,17 +4,21 @@
 <style>
 .sim-layout{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.sim-layout.purchase-metrics{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}.sim-metric{border:1px solid #dce6f4;background:#f7fbff;padding:15px;border-radius:16px}.sim-metric b{font-size:23px;color:#164c94;display:block;margin:9px 0}.sim-metric small{color:#536984}.control-panel{padding:22px;border:1px solid #c7dbf6;border-radius:18px;background:#eef5ff}input[type=range]{width:100%;accent-color:#266ac6;cursor:pointer;height:25px}.sim-rows td{font-variant-numeric:tabular-nums}.sim-actions{display:inline-flex;padding:5px 10px;border-radius:20px;font-size:12px;font-weight:800;background:#e7f8f0;color:#16825d}.sim-actions.watch{background:#fff3d8;color:#8f6900}.sim-actions.sell{background:#ffedf0;color:#af334a}.sim-warn{padding:12px 16px;background:#fff8e9;border-radius:12px;color:#966200;border:1px solid #f0dda9;font-size:13px}.sim-bar{height:15px;border-radius:20px;overflow:hidden;background:#e4eaf3}.sim-bar>div{height:100%;background:linear-gradient(90deg,#1c61b9,#43abe5);transition:width .15s}.sim-panel-title{display:flex;justify-content:space-between;align-items:center;gap:12px}@media(max-width:800px){.sim-layout{grid-template-columns:repeat(2,1fr)}}@media(max-width:530px){.sim-layout{grid-template-columns:1fr}}
 
-.o2-table-scroll{width:100%;overflow-x:auto}.o2-table{min-width:1150px}.o2-table td,.o2-table th{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}.o2-table td:first-child,.o2-table th:first-child{text-align:left}.o2-table td.level-hit{background:rgba(23,163,115,.25)!important;color:#087451;font-weight:800}.o2-table td.level-near{background:rgba(240,169,55,.25)!important;color:#80520b;font-weight:800}.o2-table td.level-blocked{background:rgba(222,58,73,.22)!important;color:#b3213a;font-weight:800}[data-theme="dark"] .o2-table td.level-hit{color:#93fbd0;background:rgba(23,163,115,.3)!important}[data-theme="dark"] .o2-table td.level-near{color:#ffe5a2;background:rgba(240,169,55,.29)!important}[data-theme="dark"] .o2-table td.level-blocked{color:#ffb2bd;background:rgba(222,58,73,.34)!important}
+.o2-table-scroll{width:100%;overflow-x:auto}.o2-table{min-width:1420px}.o2-table td,.o2-table th{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}.o2-table td:first-child,.o2-table th:first-child{text-align:left}.o2-table td.level-hit{background:rgba(23,163,115,.25)!important;color:#087451;font-weight:800}.o2-table td.level-near{background:rgba(240,169,55,.25)!important;color:#80520b;font-weight:800}.o2-table td.level-blocked{background:rgba(222,58,73,.22)!important;color:#b3213a;font-weight:800}[data-theme="dark"] .o2-table td.level-hit{color:#93fbd0;background:rgba(23,163,115,.3)!important}[data-theme="dark"] .o2-table td.level-near{color:#ffe5a2;background:rgba(240,169,55,.29)!important}[data-theme="dark"] .o2-table td.level-blocked{color:#ffb2bd;background:rgba(222,58,73,.34)!important}
 .o2-fib-inline{display:inline-flex;align-items:center;justify-content:flex-end;gap:6px;white-space:nowrap}
 .o2-drift-dot{display:inline-block;vertical-align:middle;flex:0 0 auto;width:11px;height:11px;border-radius:50%;border:1px solid rgba(255,255,255,.45);box-shadow:0 0 0 1px rgba(0,0,0,.14)}
 .o2-drift-dot.drift-sobre{background:#e54357}.o2-drift-dot.drift-infra{background:#20bb73}.o2-drift-dot.drift-neutral{background:#f0a92b}
+.pivot-anchor-line{display:inline-flex;align-items:center;gap:6px;justify-content:flex-end;white-space:nowrap}
+.pivot-anchor-dot{display:inline-block;width:11px;height:11px;min-width:11px;border-radius:50%;border:1px solid rgba(255,255,255,.65);box-shadow:0 0 0 1px rgba(0,0,0,.14)}
+.pivot-anchor-dot.pivot-propuesto{background:#e54357}.pivot-anchor-dot.pivot-validado{background:#f0a92b}.pivot-anchor-dot.pivot-confirmado{background:#20bb73}
+
 
 </style>{% endblock %}
 {% block content %}
 <div class="grid">
 <section class="panel span-12 hero"><div><h2>{{ mode.name }}</h2><p>{{ mode.description }}</p></div><div class="badge info">SIMULACIÓN · SIN ÓRDENES</div></section>
 {% include '_wave_confirmed.html' %}
-<section class="panel span-12"><h2>{{ 'Despliegue USDT · retrocesos semanales' if mode.slug=='compras' else 'Objetivo de liquidez USDT' }}</h2><p class="sub">{{ 'Simulación: admite dos extremos semanales PROPUESTO / VALIDADO / CONFIRMADO; N/D bloquea. PROPUESTO no certifica órdenes. Caja no asignada permanece en USDT.' if mode.slug=='compras' else 'Mover el slider vende primero activos sobreponderados y luego distribuye proporcionalmente entre los demás, hasta el límite de Exchange.' }}</p>
+<section class="panel span-12"><h2>{{ 'Despliegue USDT · retrocesos semanales' if mode.slug=='compras' else 'Objetivo de liquidez USDT' }}</h2><p class="sub">{{ 'P1 admite PROPUESTO, VALIDADO y CONFIRMADO para simular; P2 es el máximo semanal cerrado posterior. Solo compras a INFRA; USDT no asignado permanece en caja.' if mode.slug=='compras' else 'Mover el slider vende primero activos sobreponderados y luego distribuye proporcionalmente entre los demás, hasta el límite de Exchange.' }}</p>
 <div class="sim-layout{{ ' purchase-metrics' if mode.slug=='compras' else '' }}" style="margin:18px 0">
 <div class="sim-metric"><small>◉ Patrimonio estimado</small><b id="portfolio-metric">—</b><small>Spot MCP + snapshot</small></div>
 <div class="sim-metric"><small>◈ USDT físico</small><b id="cash-metric">—</b><small id="cash-pct">—</small></div>
@@ -38,7 +42,7 @@
 {% if mode.slug=='compras' %}
 <section class="panel span-12" id="o2-fibonacci-panel" data-o2-ui-version="{{ master }}"><h2>Asignación USDT para retrocesos Fibonacci</h2>
 <p class="sub">Verde = nivel alcanzado <strong>alguna vez después del O1 seleccionado</strong>, aunque el Spot actual esté por encima. Consulta la fecha del mínimo histórico pasando el cursor. No indica una orden reciente ni un fill.</p>
-<div class="o2-table-scroll"><table class="o2-table"><thead><tr><th>Token</th><th>Spot</th><th>Precio 38.2%</th><th>USDT</th><th>Precio 50%</th><th>USDT</th><th>Precio 61.8%</th><th>USDT</th><th>Precio 78.6%</th><th>USDT</th><th>Total USDT</th></tr></thead><tbody id="fib-body"></tbody><tfoot id="fib-total"></tfoot></table></div>
+<div class="o2-table-scroll"><table class="o2-table"><thead><tr><th>Token</th><th>Spot</th><th>P1 · mínimo semanal</th><th>P2 · máximo semanal</th><th>Precio 38.2%</th><th>USDT</th><th>Precio 50%</th><th>USDT</th><th>Precio 61.8%</th><th>USDT</th><th>Precio 78.6%</th><th>USDT</th><th>Total USDT</th></tr></thead><tbody id="fib-body"></tbody><tfoot id="fib-total"></tfoot></table></div>
 </section>
 {% endif %}
 {% if mode.slug=='ventas' %}
@@ -99,10 +103,18 @@ function renderO2Fibonacci(sim){
   }).join('');
   const ctx=source.weekly_context?.[t.token]||{};
   const kind=ctx.eligible===true?((ctx.mode==='RETROCESO_ALCISTA'?'RETROCESO ALCISTA':ctx.mode)+(ctx.operational_blocked?' · PROPUESTO':'')):'BLOQUEADO';
-  const reason=ctx.eligible===true?(ctx.operational_blocked?'Simulación provisional · extremos PROPUESTO/no certificados; sin órdenes':'Pareja 1W 5L/5R + BOS, simulación'):'Sin dos extremos semanales disponibles · '+(ctx.reason||ctx.status||'N/D');
-  return `<tr><td title="${reason}">${token(t.token)}<small style="display:block;color:var(--muted);font-size:10px">${kind}</small></td><td>${fibPrice(t.price)}</td>${pairs}<td><b>${dollar(total)}</b></td></tr>`;
+  const reason=ctx.eligible===true?'P1/P2 semanales · simulación sin órdenes':'Compra bloqueada · '+(ctx.reason||ctx.status||'N/D');
+  const p1=ctx.anchors?.low||ctx.p1;
+  const p2=ctx.anchors?.high||ctx.p2;
+  const anchorCell=(p)=>{
+    if(!p||!(Number(p.price)>0))return '<td>N/D</td>';
+    const state=String(p.status||'PROPUESTO').toUpperCase();
+    const safeState=['PROPUESTO','VALIDADO','CONFIRMADO'].includes(state)?state:'PROPUESTO';
+    return `<td><span class="pivot-anchor-line"><b>${fibPrice(p.price)}</b><span class="pivot-anchor-dot pivot-${safeState.toLowerCase()}" role="img" aria-label="Pivote ${safeState}" title="Pivote ${safeState}"></span></span><small style="display:block;color:var(--muted);font-size:10px">${p.date||'N/D'}</small></td>`;
+  };
+  return `<tr><td title="${reason}">${token(t.token)}<small style="display:block;color:var(--muted);font-size:10px">${kind}</small></td><td>${fibPrice(t.price)}</td>${anchorCell(p1)}${anchorCell(p2)}${pairs}<td><b>${dollar(total)}</b></td></tr>`;
  }).join('');
- el('fib-total').innerHTML=`<tr><td>TOTAL USDT</td><td>—</td>${sim.consumed.map(v=>`<td>—</td><td>${dollar(v)}</td>`).join('')}<td><b>${dollar(sim.spent)}</b></td></tr>`;
+ el('fib-total').innerHTML=`<tr><td>TOTAL USDT</td><td>—</td><td>—</td><td>—</td>${sim.consumed.map(v=>`<td>—</td><td>${dollar(v)}</td>`).join('')}<td><b>${dollar(sim.spent)}</b></td></tr>`;
 }
 function paint(){let target=Number(el('allocation-slider').value);el('slider-value').textContent=target.toFixed(1)+'%';el('portfolio-metric').textContent=dollar(P);el('cash-metric').textContent=dollar(cash);el('cash-pct').textContent=(100*cash/P).toFixed(1)+'% de P';let allocated=[],after=cash;
 if(mode==='compras'){

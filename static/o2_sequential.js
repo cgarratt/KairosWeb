@@ -11,6 +11,7 @@ function classifyDrift(weight,target,bandPP){
 }
 function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
   const levels=levelRows||{}, n=tokens.length, w=weights.map(x=>Math.max(0,Number(x)||0)), sumW=w.reduce((a,b)=>a+b,0);
+  const bandPP=(driftBandPP===undefined||driftBandPP===null)?1:driftBandPP;
   const strict=policy.requireEligibility===true;
   const allowed=tokens.map(t=>!strict || policy.eligibility?.[t.token]===true);
   const stageWeights=tokens.map(t=>{const v=policy.weightsByToken?.[t.token]||weights;
@@ -33,17 +34,30 @@ function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
     const crypto=values.reduce((a,b)=>a+b,0);
     // Estado ANTES de comprar en este tramo, con compras previas ya incorporadas.
     const preWeights=values.map(x=>crypto>0?x/crypto:NaN);
-    const drift=preWeights.map((v,i)=>classifyDrift(v,target[i],driftBandPP));
+    const drift=preWeights.map((v,i)=>classifyDrift(v,target[i],bandPP));
     // Blocked-token target shares are NOT redistributed.  That cash remains physical USDT.
     const stageBudget=strict
       ?Math.min(cash,Math.max(0,Number(budget)||0)*tokens.reduce((s,t,i)=>s+(prices[i][j]>0&&allowed[i]?target[i]*stageWeights[i][j]:0),0))
       :Math.min(cash,Math.max(0,Number(budget)||0)*(sumW>0?w[j]/sumW:0));
     // Missing Fibonacci anchors have no executable hypothetical limit price.
     // They remain in the portfolio valuation but cannot receive a simulated fill.
-    const items=tokens.map((t,i)=>({target:prices[i][j]>0?target[i]:0,current_usdt:values[i]}));
-    const plan=root.purchasePlan(stageBudget,items,crypto);
+    // Canonical Balancer buys: INFRA only (DRIFT_BAND_PP from published
+    // 12_PARAMETROS_KAIROS), with maximum fill capped at the target weight.
+    // Includes units bought in earlier steps and values all positions at this
+    // step's prices. Tokens missing Fib anchors never receive liquidity.
+    const permitted=tokens.map((_,i)=>prices[i][j]>0 && allowed[i] && drift[i].status==='INFRA');
+    const gap0=permitted.map((yes,i)=>yes?Math.max(0,target[i]*crypto-values[i]):0);
+    const g0=gap0.reduce((a,b)=>a+b,0);
+    const targetShare=permitted.reduce((a,yes,i)=>a+(yes?target[i]:0),0);
+    // Buying changes the crypto sleeve denominator. Solve for the spend
+    // that reaches targets without moving an asset from INFRA to SOBRE.
+    const maxBalancedSpend=targetShare>=1-1e-10?stageBudget:g0/(1-targetShare);
+    const stageSpend=Math.min(stageBudget,Math.max(0,maxBalancedSpend));
+    const headroom=gap0.map((gap,i)=>permitted[i]?Math.max(0,gap+target[i]*stageSpend):0);
+    const headroomTotal=headroom.reduce((a,b)=>a+b,0);
     for(let i=0;i<n;i++){
-      const a=prices[i][j]>0?Math.max(0,plan.balance[i]+plan.extra[i]):0;
+      const a=permitted[i]&&headroomTotal>1e-10
+        ?Math.min(headroom[i],stageSpend*headroom[i]/headroomTotal):0;
       amounts[i][j]=a;
       if(a>0)units[i]+=a/prices[i][j];
       consumed[j]+=a;

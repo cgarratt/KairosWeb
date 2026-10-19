@@ -153,6 +153,99 @@ def select_buy_impulse(weeks, published=None, *, left=5, right=5):
 
 
 
+def select_p1_p2_buy_impulse(weeks, published=None, archived=None):
+    """Simulación: último P1 semanal documentado, incluso PROPUESTO;
+    P2 es el mayor HIGH de semanas UTC completas posteriores a P1.
+
+    Nunca inferir un P1 a partir de precios Fibo ni de Spot. Un CL/MIN
+    archivado solo es PROPUESTO, sin certificación implícita. No escribe Master
+    ni hace operativa una compra. Los pivotes CONFIRMADO son inmutables.
+    """
+    def deny(reason, **details):
+        return {'eligible':False,'status':'BLOQUEADO','reason':reason,
+                'anchors':None,'levels':None,'mode':None,**details}
+    published=published or {};archived=archived or {}
+    if not weeks:return deny('HISTORICO_SEMANAL_INSUFICIENTE')
+    try:
+        if any(iso_date(w['week_start'],'week')>=iso_date(w['week_end'],'end') for w in weeks):
+            return deny('SEMANA_INVALIDA')
+        if any(weeks[i]['week_start']>=weeks[i+1]['week_start'] for i in range(len(weeks)-1)):
+            return deny('SECUENCIA_SEMANAL_INVALIDA')
+        possible=[]
+        states={'ESTIMADO':'PROPUESTO','CANDIDATO':'PROPUESTO',
+                'VALIDADO_TECNICAMENTE':'VALIDADO'}
+        def add_p1(name, price, day, status, source):
+            if price is None or not day:return
+            try:
+                st=states.get(str(status or 'PROPUESTO').upper(),str(status or 'PROPUESTO').upper())
+                if st not in ('PROPUESTO','VALIDADO','CONFIRMADO'):return
+                possible.append({'pivot':name,'price':positive(price,name),
+                    'date':iso_date(day,name).isoformat(),'status':st,'source':source})
+            except (ValueError,TypeError):pass
+        # The published CL takes priority; a dated MCP archive CL is proposed
+        # only if the published record does not already contain that CL.
+        if published.get('cycle_low') is not None or published.get('cl_date'):
+            add_p1('CL',published.get('cycle_low'),published.get('cl_date'),
+                   published.get('cl_status','PROPUESTO'),'07_PIVOTES_PUBLICADO')
+        else:
+            add_p1('CL',archived.get('cycle_low'),archived.get('cl_date'),
+                   'PROPUESTO','MCP_ARCHIVE_PROPUESTO')
+        for key in ('o2','o4'):
+            rec=(published.get('waves') or {}).get(key) or {}
+            add_p1(key.upper(),rec.get('price'),rec.get('date'),rec.get('status'),
+                   '07_PIVOTES_PUBLICADO')
+        if not possible:return deny('P1_ND')
+        p1=max(possible,key=lambda x:x['date'])
+        located=next((i for i,w in enumerate(weeks)
+            if w['week_start']<=p1['date']<=w['week_end']),None)
+        if located is None:return deny('P1_FUERA_DE_HISTORICO_1W',p1=p1)
+        w1=weeks[located]
+        if not isclose(float(w1['low']),p1['price'],rel_tol=1e-5,abs_tol=1e-12):
+            return deny('P1_NO_COINCIDE_MINIMO_SEMANAL',p1=p1,observed_weekly_low=w1['low'])
+        later=[w for w in weeks[located+1:] if float(w['high'])>p1['price']]
+        if not later:return deny('P2_MAXIMO_POSTERIOR_ND',p1=p1)
+        best=max(later,key=lambda w:(float(w['high']),w['week_start']))
+        p2={'pivot':'P2','price':positive(best['high'],'P2'),
+            'date':iso_date(best['high_date'],'P2').isoformat(),
+            'week_start':best['week_start'],'status':'PROPUESTO',
+            'source':'MCP_SEMANAL_CERRADO'}
+        if p2['date']<=p1['date']:return deny('P2_NO_POSTERIOR_A_P1')
+        for key in ('o1','o3','o5'):
+            rec=(published.get('waves') or {}).get(key) or {}
+            if not rec.get('date') or rec.get('price') is None:continue
+            if str(rec['date'])[:10]!=p2['date']:continue
+            if str(rec.get('status')).upper()=='CONFIRMADO' and not isclose(float(rec['price']),p2['price'],rel_tol=1e-5):
+                return deny('P2_CONFLICTO_CON_CONFIRMADO',p1=p1,p2=p2)
+            if isclose(float(rec['price']),p2['price'],rel_tol=1e-5):
+                st=str(rec.get('status') or 'PROPUESTO').upper()
+                p2.update({'pivot':key.upper(), 'status':states.get(st,st),
+                           'source':'07_PIVOTES_PUBLICADO'})
+                break
+        low={'price':p1['price'],'date':p1['date'],
+             'week_start':w1['week_start'],'status':p1['status'],
+             'pivot':p1['pivot'],'source':p1['source']}
+        high=p2
+        mode=_anchor_match(published,low,high)
+        grid=fib_grid('O2',{'CL':low['price'],'O1':high['price']})
+        provisional=any(x['status']=='PROPUESTO' for x in (low,high))
+        return {'eligible':True,
+                'status':'PROPUESTO_SIMULACION' if provisional else 'SIMULACION_ESTRUCTURA_PUBLICADA',
+                'simulation_only':True,'operational_blocked':True,
+                'reason':'P1_ADMITIDO_P2_MAXIMO_SEMANAL_POSTERIOR','mode':mode,
+                'anchors':{'low':low,'high':high},
+                'pivot_authority':{'low':{'pivot':p1['pivot'],'status':p1['status']},
+                                   'high':{'pivot':p2['pivot'],'status':p2['status']}},
+                'levels':dict(zip(('ref382','c1','c2','ref786'),grid.values())),
+                'requires_explicit_user_trade_approval':True}
+    except (KeyError,ValueError,TypeError,OverflowError) as exc:
+        return deny('ESTRUCTURA_INVALIDA',detail=str(exc)[:160])
+
+
+def confirmed_p1_buy_impulse(weeks, published=None, archived=None):
+    """Backward-compatible name; P1 accepts PROPUESTO for SIMULATION only."""
+    return select_p1_p2_buy_impulse(weeks,published,archived)
+
+
 def proposed_simulation_impulse(weeks, published=None, archived=None):
     """Non-actionable Compras preview when the most recent anchor is PROPUESTO.
 

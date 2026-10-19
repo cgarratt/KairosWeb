@@ -41,25 +41,28 @@ def _proximity(side, spot, target, threshold):
     return distance, 'EN_ESPERA'
 
 
-def _buy_allocation(items, budget, crypto):
-    """Same two-stage balance + proportional surplus as purchase_plan.js."""
-    t=[max(0.,float(x['target'])) for x in items]
-    v=[max(0.,float(x['current_usdt'])) for x in items]
-    total=sum(t)
+def _buy_allocation(items, budget, crypto, drift_band_pp=1.0):
+    """Balancer parity: buy INFRA only, never overshoot per-token targets.
+
+    One stage at a time, with the portfolio already marked to the simulated
+    stage prices. Unused stage capital remains in USDT, never forced across
+    over/neutral assets or structurally blocked tokens.
+    """
     n=len(items)
-    if total<=0 or budget<=0:return [0.]*n
-    weights=[x/total for x in t]
-    required=max([0.]+[v[i]/weights[i]-crypto for i in range(n) if weights[i]>0])
-    first=min(budget,max(0.,required))
-    if first<=1e-9: balance=[0.]*n
-    elif budget>=required-1e-7:
-        balance=[max(0.,weights[i]*(crypto+required)-v[i]) for i in range(n)]
-    else:
-        gaps=[max(0.,weights[i]*(crypto+first)-v[i]) for i in range(n)]
-        denom=sum(gaps)
-        balance=[first*x/denom for x in gaps] if denom>0 else [0.]*n
-    extra=max(0.,budget-first)
-    return [balance[i]+extra*weights[i] for i in range(n)]
+    values=[max(0.,float(x['current_usdt'])) for x in items]
+    targets=[max(0.,float(x['target'])) for x in items]
+    if crypto<=0 or budget<=0:return [0.]*n
+    permitted=[i for i in range(n) if
+               targets[i]>0 and (values[i]/crypto-targets[i])*100 < -float(drift_band_pp)-1e-9]
+    if not permitted:return [0.]*n
+    gaps=[max(0.,targets[i]*crypto-values[i]) if i in permitted else 0. for i in range(n)]
+    target_share=sum(targets[i] for i in permitted)
+    gap_total=sum(gaps)
+    cap=budget if target_share>=1-1e-10 else gap_total/max(1e-12,1-target_share)
+    total=min(budget,max(0.,cap))
+    rooms=[(gaps[i]+targets[i]*total) if i in permitted else 0. for i in range(n)]
+    divisor=sum(rooms)
+    return [min(rooms[i],total*rooms[i]/divisor) if divisor>1e-10 else 0. for i in range(n)]
 
 
 def staged_buy_candidates(buy, budget, proximity_pct=1.0):
@@ -92,7 +95,7 @@ def staged_buy_candidates(buy, budget, proximity_pct=1.0):
                        for i,t in enumerate(tokens) if px_all[i][j] is not None))
         items=[{'target':t['target'] if px_all[i][j] is not None else 0,
                 'current_usdt':values[i]} for i,t in enumerate(tokens)]
-        spends=_buy_allocation(items,planned,crypto)
+        spends=_buy_allocation(items,planned,crypto,buy.get('drift_band_pp',1.0))
         actually_spent=0.
         for i,t in enumerate(tokens):
             price=px_all[i][j];a=max(0.,spends[i]) if price else 0.

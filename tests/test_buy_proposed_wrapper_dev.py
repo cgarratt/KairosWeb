@@ -21,29 +21,32 @@ def daily_payload():
             'closed_only':True,'records':records}
 
 
-def test_web_allows_proposed_for_simulation_and_blocks_nd():
+def test_web_accepts_proposed_p1_and_proposed_p2_as_simulation():
     data=daily_payload();w=full_utc_weeks(data['records'])
     lo=next(x for x in w if x['low']==50)
     hi=next(x for x in w if x['high']==200)
-    proposal={'cycle_low':lo['low'],'cl_date':lo['low_date'],'cl_status':'PROPUESTO',
+    proposed={'cycle_low':lo['low'],'cl_date':lo['low_date'],'cl_status':'PROPUESTO',
        'waves':{'o1':{'price':hi['high'],'date':hi['high_date'],'status':'PROPUESTO'}}}
-    result=resolve_long_term_buy('BTC',proposal,data)
-    assert result['eligible'] and result['simulation_only']
-    assert result['operational_blocked'] and result['levels']['c1']==125
-    assert result['mode']=='O2'
-    no_high_in_master=resolve_long_term_buy('BTC',{'cycle_low':lo['low'],
-                            'cl_date':lo['low_date'],'cl_status':'PROPUESTO'},data)
-    assert no_high_in_master['eligible'] and no_high_in_master['simulation_only']
-    assert no_high_in_master['pivot_authority']['high']['status']=='PROPUESTO'
+    blocked=resolve_long_term_buy('BTC',proposed,data)
+    assert blocked['eligible'] is True and blocked['status']=='PROPUESTO_SIMULACION'
+    assert blocked['anchors']['low']['status']=='PROPUESTO'
+    proposed['cl_status']='VALIDADO'
+    assert resolve_long_term_buy('BTC',proposed,data)['eligible'] is True
+    proposed['cl_status']='CONFIRMADO'
+    yes=resolve_long_term_buy('BTC',proposed,data)
+    assert yes['eligible'] and yes['simulation_only']
+    assert yes['anchors']['low']['price']==50
+    assert yes['anchors']['high']['price']==200
+    assert yes['levels']['c1']==125
     no_low=resolve_long_term_buy('BTC',{},data)
     assert not no_low['eligible'] and no_low['levels'] is None
 
 
-def test_web_accepts_historical_mcp_proposal_as_provisional_only():
+def test_archive_proposes_p1_without_certifying():
     data=daily_payload();w=full_utc_weeks(data['records'])
     lo=next(x for x in w if x['low']==50);hi=next(x for x in w if x['high']==200)
     archive={'cycle_low':lo['low'],'cl_date':lo['low_date'],
              'o1':hi['high'],'o1_date':hi['high_date']}
     result=resolve_long_term_buy('BTC',{},data,archive)
-    assert result['eligible'] and result['status']=='PROPUESTO_SIMULACION'
-    assert result['operational_blocked'] and result['simulation_only']
+    assert result['eligible'] and result['anchors']['low']['status']=='PROPUESTO'
+    assert result['operational_blocked']

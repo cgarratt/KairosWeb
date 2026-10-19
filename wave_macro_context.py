@@ -5,7 +5,7 @@ from 07 are never recertified. Archived cycle data is exploratory only.
 """
 from wave_structure import (full_utc_weeks, weekly_o1_candidate, fib_grid,
                             post_o1_daily_low, weekly_wave_candidates, WaveStructureError)
-from buy_weekly_policy import select_buy_impulse, proposed_simulation_impulse
+from buy_weekly_policy import select_p1_p2_buy_impulse
 from structural_outliers import virtual_flash_cl
 
 def resolve(token, published, archived, data):
@@ -55,9 +55,9 @@ def resolve(token, published, archived, data):
 
 
 def resolve_long_term_buy(token, published, data, archived=None):
-    """Strict mode Compras only: latest 1W LOW->HIGH, 5L/5R and bullish BOS.
+    """Compras simulation: dated P1 of any recognized state and weekly-max P2.
 
-    No fallthrough to archived candidate prices or daily approximate highs.
+    P2 can be proposed; no other 5L/5R/BOS gate is applied to simulations.
     Other modes (including ordinary Ventas and Forecast) remain unrestricted.
     """
     deny={'status':'MCP_DATA_ERROR','eligible':False,'levels':None,
@@ -70,11 +70,8 @@ def resolve_long_term_buy(token, published, data, archived=None):
         return {**deny,'status':'BLOQUEADO','reason':'VIRTUAL_CL_FLASH_EXCLUIDO_REQUIERE_REVISION'}
     try:
         weeks=full_utc_weeks(data.get('records') or [])
-        decision=select_buy_impulse(weeks,published)
-        if not decision['eligible'] and decision.get('reason')!='ANCLA_CONFIRMADA_EN_CONFLICTO':
-            proposed=proposed_simulation_impulse(weeks,published,archived)
-            if proposed['eligible']:
-                decision=proposed
+        # P1 may be PROPUESTO for simulation; P2 is highest later FULL weekly high.
+        decision=select_p1_p2_buy_impulse(weeks,published,archived)
         if not decision['eligible']:
             return {**decision,'history':{'status':'N/D'},'quote_currency':'USDC' if token=='HYPE' else 'USDT'}
         high=decision['anchors']['high']
