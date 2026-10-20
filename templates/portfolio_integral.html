@@ -2,6 +2,30 @@
 {% block title %}Kairos · Portafolio integral{% endblock %}
 {% block head %}<style>
 .integral-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}.integral-stat{padding:20px;background:#f3f7ff;border:1px solid #dce6f5;border-radius:16px}.integral-stat span{display:block;font-size:13px;color:#617089}.integral-stat strong{display:block;margin-top:9px;font-size:25px;color:#184885}.integral-stat.loss strong{color:#c4465a}.integral-stat.good strong{color:#16876b}.integral-tracks{display:flex;flex-direction:column;gap:14px;margin-top:14px}.integral-track{display:grid;grid-template-columns:125px 1fr 110px;align-items:center;gap:10px}.integral-bars{display:flex;flex-direction:column;gap:3px}.integral-bar-row{display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:8px;align-items:center}.integral-amount{font-size:12px;color:#435b79;white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}.integral-bar{height:12px;border-radius:4px;min-width:0}.integral-bar.target{background:#b5c8df}.integral-bar.actual{background:#3179cc}.integral-bar.loss{background:#cc526a}.integral-legend{display:flex;gap:18px;align-items:center;font-size:12px;color:#617089}.integral-legend i{width:12px;height:12px;display:inline-block;border-radius:3px;margin-right:4px}.integral-warning{background:#fff8e9;border:1px solid #f1ddb2;padding:14px;border-radius:12px;margin-top:20px;color:#755919;font-size:13px}.integral-grid{display:grid;grid-template-columns:7fr 5fr;gap:18px}.integral-donut-layout{display:grid;grid-template-columns:minmax(170px,220px) minmax(0,1fr);gap:18px;align-items:center;margin:18px auto 10px}.integral-donut{display:block;width:min(100%,220px);height:auto;margin:auto;overflow:visible}.integral-donut .integral-donut-base{fill:none;stroke:#d9e4f1;stroke-width:34}.integral-donut .integral-donut-sector{fill:none;stroke-width:34;stroke-linecap:butt;transition:stroke-width .15s}.integral-donut .integral-donut-sector:hover{stroke-width:40}.integral-donut-center{fill:#184885;font-size:20px;font-weight:800;text-anchor:middle;dominant-baseline:middle}.integral-donut-caption{fill:#617089;font-size:11px;text-anchor:middle;dominant-baseline:middle}.integral-donut-zero{font-size:12px;color:#617089}.integral-donut-layout .integral-breakdown{grid-template-columns:1fr}.integral-donut-layout .integral-breakdown-item{display:flex;align-items:center;justify-content:space-between;gap:8px}.integral-donut-layout .integral-breakdown-item strong{white-space:nowrap;font-variant-numeric:tabular-nums}.integral-donut-layout .integral-dot{flex:0 0 11px;margin-right:3px}:root[data-theme="dark"] .integral-donut-center{fill:#f2f6ff}:root[data-theme="dark"] .integral-donut-caption{fill:#b7c9e3}:root[data-theme="dark"] .integral-donut-base{stroke:#2b3e59}:root[data-theme="dark"] .integral-donut-layout .integral-breakdown-item{color:#e1ecff}.integral-breakdown{display:grid;grid-template-columns:1fr 1fr;gap:10px}.integral-breakdown-item{font-size:13px;color:#334257}.integral-dot{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:8px}.integral-table .num{text-align:right;font-variant-numeric:tabular-nums}.integral-table tfoot{background:#ebf3fd;font-weight:800}.integral-note{font-size:12px;color:#66768e;margin-top:12px}@media(max-width:900px){.integral-kpis{grid-template-columns:repeat(2,1fr)}.integral-grid{grid-template-columns:1fr}}@media(max-width:580px){.integral-donut-layout{grid-template-columns:1fr;gap:8px}.integral-donut{width:205px}.integral-kpis{grid-template-columns:1fr}.integral-track{grid-template-columns:95px 1fr 78px}}
+
+/* Live, read-only portfolio P&L: diverging horizontal bars, same order as Master. */
+.integral-pnl-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.integral-pnl-total{text-align:right;font-size:clamp(23px,2.5vw,34px);font-weight:800;font-variant-numeric:tabular-nums}
+.integral-pnl-total small{display:block;font-size:13px;font-weight:500;color:var(--muted);margin-top:3px}
+.integral-pnl-positive{color:#128468}.integral-pnl-negative{color:#ce425c}.integral-pnl-zero{color:var(--muted)}
+.integral-pnl-scroller{overflow-x:auto;max-width:100%;margin-top:18px}
+.integral-pnl-plot{min-width:525px;display:grid;gap:5px}
+.integral-pnl-row{display:grid;grid-template-columns:100px minmax(0,1fr) 105px;gap:12px;align-items:center;min-height:31px}
+.integral-pnl-token{font-size:13px;font-weight:750;color:var(--text)}
+.integral-pnl-track{position:relative;display:grid;grid-template-columns:1fr 1fr;align-items:center;height:24px;background:linear-gradient(90deg,transparent 49.85%,var(--line) 49.85%,var(--line) 50.15%,transparent 50.15%)}
+.integral-pnl-half{display:flex;align-items:center;height:21px}
+.integral-pnl-half.loss{justify-content:flex-end}
+.integral-pnl-half.gain{justify-content:flex-start}
+.integral-pnl-bar{height:20px;min-width:2px;border-radius:3px;display:block}
+.integral-pnl-bar.loss{background:#d24962}
+.integral-pnl-bar.gain{background:#16876d}
+.integral-pnl-number{font-size:13px;font-weight:750;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.integral-pnl-legend{display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:12px;margin-top:16px}
+.integral-pnl-legend i{width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:5px;vertical-align:middle}
+.integral-pnl-info{color:var(--muted);font-size:12px;line-height:1.55;margin-top:16px}
+:root[data-theme="dark"] .integral-pnl-positive{color:#41d9ad}
+:root[data-theme="dark"] .integral-pnl-negative{color:#ff8294}
+@media(max-width:640px){.integral-pnl-total{text-align:left}.integral-pnl-row{grid-template-columns:70px minmax(0,1fr) 100px;gap:6px}}
 </style>{% endblock %}
 {% block content %}
 <div class="grid">
@@ -11,6 +35,42 @@
 <div class="integral-stat good"><span>Capital vivo declarado</span><strong>{{ '${:,.0f}'.format(alive) }}</strong></div>
 <div class="integral-stat loss"><span>Pérdidas realizadas acumuladas</span><strong>{{ '${:,.0f}'.format(lost) }}</strong></div>
 <div class="integral-stat"><span>Patrimonio Spot estimado</span><strong>{{ '${:,.0f}'.format(spot.total) if spot else 'Sin datos MCP' }}</strong><span>Cripto + USDT, sin pérdidas realizadas</span></div><div class="integral-stat"><span>Recuperación necesaria</span><strong>{{ '%.1f%%'|format(gain_to_recover) if gain_to_recover is not none else 'N/D' }}</strong><span>Ganancia sobre capital vivo hasta base histórica</span></div></div></section>
+<section class="panel span-12" data-portfolio-chart="unrealized">
+  <div class="integral-pnl-head">
+    <div>
+      <h3>Resultado no realizado por token</h3>
+      <p class="sub">Valor Spot menos costo abierto · posiciones vigentes · USDT</p>
+    </div>
+    {% if pnl_report and pnl_report.total_usdt is not none %}
+    <div class="integral-pnl-total {{ 'integral-pnl-positive' if pnl_report.total_usdt > 0 else 'integral-pnl-negative' if pnl_report.total_usdt < 0 else 'integral-pnl-zero' }}" data-private="money">
+      {{ '{:+,.2f}'.format(pnl_report.total_usdt) }} USDT
+      <small>{{ '{:+.2f}%'.format(pnl_report.total_pct) if pnl_report.total_pct is not none else 'N/D' }} sobre costo abierto</small>
+    </div>
+    {% else %}
+    <div class="integral-pnl-total integral-pnl-zero">N/D<small>{{ 'Spot MCP no disponible' if not pnl_report else 'Costos incompletos: total no verificable' }}</small></div>
+    {% endif %}
+  </div>
+  {% if pnl_report %}
+    <div class="integral-pnl-scroller">
+      <div class="integral-pnl-plot" aria-label="Resultados no realizados por token">
+        {% for item in pnl_report["items"] %}
+        <div class="integral-pnl-row" data-pnl-token="{{ item.token }}">
+          <span class="integral-pnl-token">{{ item.token }}</span>
+          <div class="integral-pnl-track" aria-label="{{ item.token }}: {{ '{:+,.2f}'.format(item.pnl_usdt) if item.pnl_usdt is not none else 'N/D' }} USDT">
+            <div class="integral-pnl-half loss">{% if item.pnl_usdt is not none and item.pnl_usdt < 0 %}<span class="integral-pnl-bar loss" style="width:{{ item.bar_pct }}%"></span>{% endif %}</div>
+            <div class="integral-pnl-half gain">{% if item.pnl_usdt is not none and item.pnl_usdt > 0 %}<span class="integral-pnl-bar gain" style="width:{{ item.bar_pct }}%"></span>{% endif %}</div>
+          </div>
+          <span class="integral-pnl-number {{ 'integral-pnl-positive' if item.pnl_usdt is not none and item.pnl_usdt > 0 else 'integral-pnl-negative' if item.pnl_usdt is not none and item.pnl_usdt < 0 else 'integral-pnl-zero' }}" data-private="money">{{ ('{:+,.0f}'.format(item.pnl_usdt)) if item.pnl_usdt is not none else 'N/D' }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="integral-pnl-legend"><span><i style="background:#16876d"></i>Ganancia no realizada</span><span><i style="background:#d24962"></i>Pérdida no realizada</span><span>Línea central = 0 USDT</span></div>
+    <p class="integral-pnl-info">Fuente: 02_POSICIONES del Master PUBLICADO + Spot Binance MCP{{ ' · Observación: ' ~ spot_observed if spot_observed else '' }}. Suma sobre costo promedio × unidades actuales; no incluye USDT físico ni pérdidas realizadas históricas. No acredita ventas, fills ni rentabilidad realizada.{% if pnl_report.missing_tokens %} Sin costo/precio verificable: {{ pnl_report.missing_tokens|join(', ') }}; no se imputa USDT $0.{% endif %}</p>
+  {% else %}
+    <p class="integral-pnl-info">Datos MCP no disponibles. No se calcula P&L con precios de capturas o archivos históricos.</p>
+  {% endif %}
+</section>
 <section class="span-12"><div class="integral-grid">
 <article class="panel"><h3>Objetivo vs. distribución registrada</h3><p class="sub">Comparación en USD; las pérdidas realizadas no constituyen un activo.</p><div class="integral-legend"><span><i style="background:#b5c8df"></i>Objetivo</span><span><i style="background:#3179cc"></i>Actual</span></div><div class="integral-tracks">{% for s in segments %}<div class="integral-track"><strong style="font-size:13px">{{ s.name }}</strong><div class="integral-bars"><div class="integral-bar-row"><div class="integral-bar target" style="width:{{ s.target_usdt/base*100 }}%"></div><span class="integral-amount">{{ '${:,.0f}'.format(s.target_usdt) }}</span></div><div class="integral-bar-row"><div class="integral-bar {{ 'loss' if s.key=='lost' else 'actual' }}" style="width:{{ s.actual_usdt/base*100 }}%"></div><span class="integral-amount">{{ '${:,.0f}'.format(s.actual_usdt) }}</span></div></div><div style="text-align:right;font-weight:700;font-size:13px">{{ '%.1f%%'|format(s.actual_usdt/base*100) }}</div></div>{% endfor %}</div><p class="integral-note">Longitud de barra basada en el capital histórico total; porcentaje a la derecha sobre US$150,000.</p></article>
 <article class="panel"><h3>Composición del capital histórico</h3><p class="sub">Capital vigente y pérdidas realizadas, sin doble contabilización.</p>

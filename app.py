@@ -23,6 +23,7 @@ from forecast_fibo_policy import defaults_from_master
 from werkzeug.local import LocalProxy
 from google_sheets_master import get_state, SheetDataError, public_failure_code, cache_status as sheet_cache_status
 from hype_weekly import aggregate_weeks, HypeHistoryError
+from portfolio_unrealized import summarize_unrealized
 from kairos_sheets_features import (
     unread_alerts, mark_alert_read, mark_all_alerts_read, settings_data, prepare_changes,
     save_changes, SettingsError, _remote_data as _unused_remote_marker
@@ -943,9 +944,10 @@ def integral_portfolio_page():
     # Spot figures are optional; historical reconciliation must remain available during MCP outages.
     spot_breakdown = None
     spot_observed = None
+    pnl_report = None
     try:
         spot_observed, live = load_live_dashboard()
-        by_name = {r['token']:r for r in live['rows']}
+        pnl_report = summarize_unrealized(live['rows'])
         core_value = sum((r['hodl_units']+r['core_units'])*r['price'] for r in live['rows'])
         exchange_value = sum(r['exchange_units']*r['price'] for r in live['rows'])
         cash_total = live['usdt_total']
@@ -957,7 +959,7 @@ def integral_portfolio_page():
         app.logger.info('Integral portfolio using historical ledger; live pricing unavailable: %s',type(exc).__name__)
     return render_template('portfolio_integral.html', master=APP_VERSION, segments=segments,
                            base=base, alive=alive, lost=lost, gain_to_recover=gain_to_recover,
-                           spot=spot_breakdown, spot_observed=spot_observed,
+                           spot=spot_breakdown, spot_observed=spot_observed, pnl_report=pnl_report,
                            source_note=values['source_note'], total_recorded=sum(x['actual_usdt'] for x in segments),
                            total_target=sum(x['target_usdt'] for x in segments))
 
@@ -1439,6 +1441,8 @@ def _deployed_asset_status():
         'o2_simulator': ('static/o2_sequential.js', ('classifyDrift', 'snapshots')),
         'alerts_bell': ('static/alert_bell.js', ('alert-timeframe', '/api/alerts/read', 'event-bull', 'event-bear')),
         'integral_donut': ('templates/portfolio_integral.html', ('data-capital-chart="donut"', 'integral-donut-sector')),
+        'portfolio_unrealized_chart': ('templates/portfolio_integral.html', ('data-portfolio-chart="unrealized"', 'integral-pnl-bar gain', 'integral-pnl-bar loss')),
+        'portfolio_unrealized_calc': ('portfolio_unrealized.py', ('def summarize_unrealized(', "'missing_tokens': missing")),
         'pivots_cl_editor': ('static/settings_master.js', ('reviewUnconfirmedToken', 'waveReviewProofs', 'cl_status')),
         'cl_review_gate': ('cl_validation.py', ('def review_cl(', 'BOS', 'sign_review')),
         'weekly_fibonacci': ('wave_structure.py', ('def full_utc_weeks(', 'def fib_grid(')),

@@ -30,3 +30,13 @@ La desviación se calcula en **puntos porcentuales**: `100 × (peso post-compra 
 5. Para HYPE verificar conectividad independiente con Hyperliquid Spot HYPE/USDC en Render. Los tests locales no certifican endpoints de producción.
 
 **Seguridad:** no se publican pivotes ni cambia el Master desde este ZIP; sin fills ni órdenes reales. El release tiene menos de 100 archivos e incluye manifiesto de integridad SHA-256.
+
+
+## DESARROLLO ACUMULATIVO (NO RELEASE) · Resultado no realizado en Portafolio
+- La pestaña Portafolio muestra un gráfico divergente por los 12 tokens: ganancias en verde y pérdidas en rojo.
+- Resultado no realizado = unidades actuales de 02_POSICIONES × (Spot Binance MCP - costo medio registrado).
+- Total en USDT y porcentaje sobre costo abierto; no suma las pérdidas realizadas, el efectivo USDT ni posiciones históricas cerradas.
+- Si no hay Spot MCP, la página histórica sigue accesible y el gráfico presenta N/D, nunca datos de un ZIP/captura.
+- Si falta costo verificable en un token con unidades, el total es N/D (no se inventa cero).
+- Código nuevo: portfolio_unrealized.py y tests/test_portfolio_unrealized.py; /health verifica ambos.
+- Basado en KairosWeb v2.0.18; NO cambia la versión productiva, el Master o las órdenes.
