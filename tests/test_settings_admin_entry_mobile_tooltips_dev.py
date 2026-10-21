@@ -19,7 +19,7 @@ def test_entire_configuration_requires_one_administrator_login():
     assert "window.location.replace('/admin/login?tab='+encodeURIComponent(tab))" in js
     assert "window.location.assign('/admin/login')" in js
     assert 'name="login_csrf"' in html
-    assert 'Volver al Dashboard' in html
+    assert 'Volver a Portafolio' in html
     assert "url_for('admin_login', tab=settings_tab)" in html
 
 

@@ -57,7 +57,17 @@ def compare_custody(positions: Mapping[str, Mapping[str, Any]],
         tier = str(row.get('tier',''))
         if tier not in custody_policy:
             raise CustodyError(f'{token}: Tier sin configuración publicada')
-        policy=custody_policy[tier]
+        policy = custody_policy[tier]
+        # The PUBLICADO Master adapter (google_sheets_master.parse_master) returns
+        # custody ratios as a three-element [HODL, Core, Exchange] list. Earlier
+        # standalone tests supplied a dict, which hid a production MODE_RENDER.
+        # Accept both published list shape and named mapping; reject everything else.
+        if isinstance(policy, (list, tuple)):
+            if len(policy) != len(LABELS):
+                raise CustodyError(f'{tier}: se requieren HODL/Core/Exchange')
+            policy = dict(zip(LABELS, policy))
+        elif not isinstance(policy, Mapping):
+            raise CustodyError(f'{tier}: distribución no reconocida')
         ratios={key:_decimal(policy.get(key),f'{tier}.{key}') for key in LABELS}
         if sum(ratios.values()) != 1:
             raise CustodyError(f'{tier}: distribución publicada debe sumar 100%')

@@ -18,6 +18,157 @@ FIB_NAMES = ('38.2%', '50%', '61.8%', '78.6%')
 LEVEL_FIELDS = ('ref382','c1','c2','ref786')
 
 
+# A single read-only portfolio capacity policy for Balancer and Orders.
+# The browser's Sales Optimizer keeps a JS parity implementation verified by tests.
+TIER_SELL_FRACTIONS={'T1':.30,'T2':.70,'T3':1.0}
+_EPS=1e-8
+
+
+def drift_tone(drift_pp, band_pp):
+    """One drift classification for all report colors, including edge values."""
+    import math
+    band=float(band_pp); d=float(drift_pp)
+    if not math.isfinite(band) or band<0 or not math.isfinite(d):
+        raise ValueError('DATA ERROR: invalid drift/band')
+    return 'danger' if d>band else 'warn' if d< -band else 'ok'
+
+
+def tradingbot_tokens(value,tiers):
+    """Pure validation of approved TradingBot universe; cannot admit Tier 2."""
+    if not isinstance(value,str) or not value.startswith('T1_ONLY:'):
+        raise ValueError('DATA ERROR: invalid TradingBot universe')
+    result=tuple(x.strip().upper() for x in value.split(':',1)[1].split(','))
+    if (len(result)!=5 or len(set(result))!=5 or
+        set(result)!={'BTC','ETH','SOL','LINK','HYPE'} or
+        any(tiers.get(token)!='T1' for token in result)):
+        raise ValueError('DATA ERROR: unapproved TradingBot tokens')
+    return result
+
+
+def _checked(value, label):
+    try:
+        number=float(value)
+    except (TypeError,ValueError) as exc:
+        raise ValueError(f'DATA ERROR: {label} is not numeric') from exc
+    if not isfinite(number) or number < 0:
+        raise ValueError(f'DATA ERROR: {label} is negative/non-finite')
+    return number
+
+
+def sell_capacity_usdt(row):
+    """Maximum incremental SELL based on snapshot + SELL reservations.
+
+    Reserved SELL quantities must come from reconciled ledger data. A proposal
+    or an unconfirmed LIMIT never creates a reservation or a fill. The Sheets
+    reader fails closed for OPEN orders; an omitted reservation defaults to 0
+    only while the validated published state declares no active orders.
+    """
+    token=str(row['token']).upper()
+    tier=row.get('tier')
+    if tier not in TIER_SELL_FRACTIONS:
+        raise ValueError('DATA ERROR: unapproved Tier')
+    total=_checked(row['units'],f'{token} total units')
+    exchange=_checked(row['exchange_units'],f'{token} Exchange')
+    reserved=_checked(row.get('reserved_sell_units',0),f'{token} SELL reserved')
+    price=_checked(row['price'],f'{token} Spot price')
+    if price <= 0 or exchange > total+_EPS or reserved > exchange+_EPS:
+        raise ValueError(f'DATA ERROR: {token} custodias/Spot inconsistentes')
+    return (0. if token=='BTC' else
+            price*max(0.,min(exchange-reserved,total*TIER_SELL_FRACTIONS[tier]-reserved)))
+
+
+def overweight_sell_plan(rows, band_pp):
+    """Stage-1 proportional target convergence; most OVER first, reevaluate.
+
+    Completely independent of Fibonacci and of a target USDT percentage.
+    The output is a *simulation*, NEVER an executable order.
+    """
+    band=_checked(band_pp,'banda de desviación')
+    values=[_checked(r['value'],f"{r['token']} valuation") for r in rows]
+    targets=[_checked(r['target'],f"{r['token']} target") for r in rows]
+    if abs(sum(targets)-1)>1e-7:
+        raise ValueError('DATA ERROR: targets cripto != 100%')
+    limits=[sell_capacity_usdt(r) for r in rows]
+    used=[0.]*len(rows)
+    for _ in range(max(12, len(rows)*8)):
+        crypto=sum(values)
+        if crypto<=_EPS:break
+        candidates=[(100*(values[i]/crypto-targets[i]),i)
+                    for i,r in enumerate(rows) if r['token']!='BTC'
+                    and targets[i] < 1 and limits[i]-used[i]>_EPS]
+        candidates.sort(key=lambda x:(-x[0],x[1]))
+        if not candidates or candidates[0][0]<=band+1e-8:break
+        _,i=candidates[0]
+        amount=min(limits[i]-used[i],
+                   max(0.,(values[i]-targets[i]*crypto)/(1-targets[i])))
+        if amount<=_EPS:break
+        used[i]+=amount
+        values[i]-=amount
+    return [{'token':r['token'], 'value':used[i],
+             'units':used[i]/float(r['price']) if used[i] else 0.,
+             'cap_usdt':limits[i], 'weight':r['weight'],
+             'target':r['target'],'drift':r['drift_pp']}
+            for i,r in enumerate(rows) if r['token']!='BTC'
+            and r['drift_pp']>band]
+
+
+def allocate_infra_buys(rows, budget, band_pp):
+    """Balance BUY-only, capped by final token target after *all* simulated BUYs.
+
+    Total allowable B solves B <= sum_i(gap_i + target_i * B), where i
+    ranges only over initial INFRA tokens. Unspent budget stays as USDT.
+    No prices/pivots are inferred, no orders/fills recorded.
+    """
+    budget=_checked(budget,'Balancer buy budget')
+    band=_checked(band_pp,'banda de desviación')
+    crypto=sum(_checked(r['value'],f"{r['token']} valuation") for r in rows)
+    if abs(sum(_checked(r['target'],f"{r['token']} target") for r in rows)-1)>1e-7:
+        raise ValueError('DATA ERROR: targets cripto != 100%')
+    if crypto<=_EPS or budget<=_EPS:return []
+    candidates=[]
+    for row in rows:
+        value=_checked(row['value'],f"{row['token']} valuation")
+        target=_checked(row['target'],f"{row['token']} target")
+        if target>1 or target<=0:continue
+        if 100*(value/crypto-target)<-band-1e-8:
+            gap=max(0.,target*crypto-value)
+            candidates.append((row,gap,target))
+    if not candidates:return []
+    total_gap=sum(g for _,g,_ in candidates)
+    target_share=sum(t for _,_,t in candidates)
+    if total_gap<=_EPS:return []
+    maximum=(total_gap/(1-target_share)) if target_share<1-1e-10 else budget
+    spend=min(budget,max(0.,maximum))
+    # Waterfill while preserving relative initial deficits, cap every asset at
+    # its final target calculated on crypto + spend (not the old crypto value).
+    allocation=[0.]*len(candidates)
+    capacities=[gap+target*spend for _,gap,target in candidates]
+    left=spend
+    active=list(range(len(candidates)))
+    for _ in range(len(candidates)+2):
+        if left<=_EPS or not active:break
+        weights=sum(candidates[i][1] for i in active)
+        if weights<=_EPS:break
+        increments={i:left*candidates[i][1]/weights for i in active}
+        saturated=[i for i in active if increments[i]>=capacities[i]-allocation[i]-1e-10]
+        if not saturated:
+            for i in active:allocation[i]+=increments[i]
+            left=0.;break
+        for i in saturated:
+            move=max(0.,capacities[i]-allocation[i])
+            allocation[i]+=move;left-=move
+        active=[i for i in active if i not in saturated]
+    if left>1e-5:
+        raise ValueError('DATA ERROR: buy capacity could not be allocated')
+    if any(x>capacities[i]+1e-6 for i,x in enumerate(allocation)):
+        raise ValueError('DATA ERROR: BUY exceeds target deficit')
+    return [{'token':r['token'],'value':allocation[i],
+             'reference':0.,'weight':r['weight'],
+             'target':r['target'],'drift':r['drift_pp'],
+             'final_cap_usdt':capacities[i]}
+            for i,(r,_,_) in enumerate(candidates)]
+
+
 def _finite_pos(value):
     try:
         n=float(value)
@@ -219,9 +370,9 @@ def portfolio_candidates(d, bal, drift_band_pp=1.0):
             if not spot:continue
             amount=max(0.,float(suggestion.get('value') or 0))
             if side=='SELL':
-                free=max(0.,float(row.get('exchange_units') or 0))
-                units=min(max(0.,float(suggestion.get('units') or 0)),free)
-                amount=min(amount,units*spot)
+                cap_usdt=sell_capacity_usdt(row)
+                amount=min(amount,cap_usdt)
+                units=amount/spot
                 if amount<.005:continue
             else:
                 # Fail closed on missing numeric inventory/targets. Balancer

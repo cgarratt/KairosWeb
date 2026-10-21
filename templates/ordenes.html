@@ -48,8 +48,9 @@
     <div class="badge info">FASE 1 · SOLO PROPUESTAS</div>
   </section>
 {% if error %}
-  <section class="panel span-12"><h3>DATA ERROR</h3><p>{{ error }}</p><p>No se generan ni se envían órdenes.</p></section>
+  <section class="panel span-12"><h3>DATA ERROR</h3><p>{{ error }}</p><p>Etapa: {{ error_stage or 'N/D' }} · Código: {{ error_id or 'N/D' }}</p><p>No se generan ni se envían órdenes. Consultar los logs de Render con el código anterior.</p></section>
 {% else %}
+  {% if structural_note %}<section class="panel span-12"><h3>Estructura semanal incompleta</h3><p>{{ structural_note }}</p><p>Las propuestas de Balance no dependen de pivotes semanales. Fase 1: no ejecutables.</p></section>{% endif %}
   <section class="panel span-12">
     <div class="orders-kpi">
       <div><small>USDT máximo para Compras</small><strong>{{ '${:,.2f}'.format(inbox.buy_budget) }}</strong></div>

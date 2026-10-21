@@ -151,7 +151,9 @@ def test_portfolio_approved_four_row_layout():
     assert second.index('data-history-chart="returns"')<second.index('data-portfolio-chart="unrealized"')
     third=html[rows[2]:rows[3]]
     assert third.index('data-category-chart="tier"')<third.index('data-composition-chart="tokens"')
-    assert 'data-tracking-chart="portfolio"' in html[rows[3]:]
+    assert 'data-portfolio-executive="12"' in html[rows[3]:]
+    assert 'data-tracking-chart="portfolio"' not in html
+    assert 'data-history-display="percent"' in html
     assert 'history_points|tojson' in html
     assert 'Historial insuficiente' in html
 
@@ -160,14 +162,15 @@ def test_template_full_render_with_certified_sample_and_missing_values():
     from types import SimpleNamespace
     tokens='BTC ETH SOL LINK HYPE HBAR SUI ONDO PUMP PLUME VIRTUAL PEPE'.split()
     rows=[{'token':t,'units':1.0,'price':i+1.0,'avg_cost':i+.5,
-           'value':i+1.0,'weight':(i+1)/78,'target':.05,'tier':('T1' if i<5 else 'T2' if i<10 else 'T3')} for i,t in enumerate(tokens)]
+           'value':i+1.0,'weight':(i+1)/78,'target':.05,'tier':('T1' if i<5 else 'T2' if i<10 else 'T3'),
+           'hodl_units':0.,'core_units':0.,'exchange_units':1.,'drift_pp':0.} for i,t in enumerate(tokens)]
     ctx={'g':SimpleNamespace(kairos_state={'control':{'fecha_corte':'2026-10-19'}}),
          'base':150000.0,'segments':[{'key':'hodl_core','actual_usdt':100000.0,'target_usdt':100000.0,'name':'HODL + Core'},
                                     {'key':'lost','actual_usdt':50000.0,'target_usdt':50000.0,'name':'Lost'}],
          'spot':{'total':sum(r['value'] for r in rows)+200,'liquidity':100,'trading':100},
          'spot_observed':'2026-10-21T11:00:00Z','pnl_report':summarize_unrealized(rows),
          'allocation':portfolio_allocation(rows,200),'categories':category_allocation(rows),
-         'portfolio_rows':rows,'o2c2_reference':100,'history_points':[],
+         'portfolio_rows':rows,'btc_total':278.,'btc_reference_price':1.,'bsi_archive':None,'history_points':[],
          'history_note':'Sin historia', 'source_note':'Master publicado'}
     env=Environment(loader=FileSystemLoader(ROOT/'templates'))
     template=(ROOT/'templates/portfolio_integral.html').read_text()
@@ -177,4 +180,55 @@ def test_template_full_render_with_certified_sample_and_missing_values():
     assert markup.count('data-allocation-token=')==13
     assert markup.count('data-pnl-token=')==12
     assert 'Seguimiento del portafolio' in markup
-    assert 'N/D' in markup
+    assert 'id="btc-portfolio-total"' in markup
+    assert '₿ 278.00000000' in markup
+    assert markup.count('<td data-private="money">') >= 12
+
+# Daily Binance Spot repricing with the published CURRENT basket, NOT its
+# actual historical holdings or a certified PRI equity curve.
+from portfolio_unrealized import build_fixed_basket_history, RepricingError, EXPECTED
+from datetime import date,timedelta
+import pytest
+
+
+def fixed_basket_fixture():
+    days=[(date(2026,10,1)+timedelta(days=i)) for i in range(3)]
+    holdings=[{'token':x,'units':1.0} for x in EXPECTED]
+    prices={token:{'status':'OK','symbol':token+'USDT','closed_only':True,'interval':'1d',
+                   'records':[{'close_utc':(day+timedelta(days=1)).isoformat()+'T00:00:00+00:00',
+                               'close':str(1+i)} for i,day in enumerate(days)]}
+            for token in EXPECTED}
+    return holdings,prices
+
+
+def test_fixed_basket_reprices_all_twelve_plus_cash_exactly_once():
+    holdings,prices=fixed_basket_fixture()
+    result=build_fixed_basket_history(holdings,100,prices)
+    assert result['status']=='OK' and result['mode']=='SIMULACION_CARTERA_FIJA'
+    assert [p['total'] for p in result['points']]==[112,124,136]
+    assert [p['cash'] for p in result['points']]==[100,100,100]
+    assert result['points'][0]['change_pct']==0
+    assert result['points'][-1]['change_pct']==round((136/112-1)*100,4)
+    assert result['last_closed_day']=='2026-10-03'
+
+
+def test_fixed_basket_does_not_fabricate_missing_or_incoherent_candles():
+    holdings,prices=fixed_basket_fixture()
+    prices['SOL']['records'].pop(1)
+    with pytest.raises(RepricingError,match='Brecha'):
+        build_fixed_basket_history(holdings,100,prices)
+    holdings,prices=fixed_basket_fixture()
+    prices['HYPE']['status']='DATA_ERROR'
+    with pytest.raises(RepricingError,match='HYPE'):
+        build_fixed_basket_history(holdings,100,prices)
+
+
+def test_historical_scenario_not_written_to_pri_and_orders_source_separated():
+    source=(ROOT/'app.py').read_text()
+    assert "@app.route('/api/portfolio-repricing')" in source
+    assert "'_REPRICING_CACHE'" not in source  # no disk cache or synthetic database
+    assert "snapshot_id']==snapshot_id" in source
+    assert "stage='Estructura semanal MCP'" in source
+    assert 'structural_note=' in source
+    assert "stage='Balance de portafolio'" in source
+    assert 'No se pudo verificar '+'' in 'No se pudo verificar '

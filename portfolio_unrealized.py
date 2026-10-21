@@ -136,3 +136,103 @@ def pri_valuation_history(table):
         except (IndexError,TypeError,ValueError,OverflowError):
             continue
     return [result[day][1] for day in sorted(result)]
+"""Historical *fixed-basket* repricing with actual CLOSED Binance Spot 1D prices.
+
+Does not claim historical units, realized returns, flows, or certified PRI data.
+No writing to Google Sheets or to the order/fill book.
+"""
+from datetime import date, datetime, timedelta, timezone
+from math import isfinite
+
+EXPECTED = ('BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO',
+            'PUMP','PLUME','VIRTUAL','PEPE')
+
+class RepricingError(ValueError):
+    pass
+
+
+def _positive(x, where, allow_zero=False):
+    if isinstance(x, bool):
+        raise RepricingError(f'{where}: valor no numérico')
+    try:
+        f=float(x)
+    except (TypeError, ValueError) as exc:
+        raise RepricingError(f'{where}: valor no numérico') from exc
+    if not isfinite(f) or (f<0 if allow_zero else f<=0):
+        raise RepricingError(f'{where}: valor inválido')
+    return f
+
+
+def build_fixed_basket_history(rows, physical_usdt, candle_data, *, max_days=100):
+    """Closed 1D close aligned across every token, holdings held constant.
+
+    candle_data: {token: Binance MCP get_kairos_ohlcv response}.  Never fill
+    missing days or prices and never replace absent quotes with current spot.
+    """
+    cash=_positive(physical_usdt, 'USDT físico', allow_zero=True)
+    if len(rows)!=12 or {r.get('token') for r in rows}!=set(EXPECTED):
+        raise RepricingError('02_POSICIONES: falta inventario de 12 tokens')
+    seen={}
+    for row in rows:
+        t=row['token']; units=_positive(row.get('units'),f'{t} unidades',allow_zero=True)
+        raw=candle_data.get(t)
+        if not isinstance(raw,dict) or raw.get('status')!='OK' or not raw.get('closed_only') or raw.get('interval')!='1d':
+            raise RepricingError(f'{t}: MCP OHLCV 1D cerrado indisponible')
+        if str(raw.get('symbol'))!=f'{t}USDT':
+            raise RepricingError(f'{t}: par distinto a {t}USDT')
+        rows1=raw.get('records') or []
+        indexed={}
+        for candle in rows1:
+            try:
+                close_dt=datetime.fromisoformat(str(candle['close_utc']).replace('Z','+00:00'))
+                if close_dt.tzinfo is None or close_dt.astimezone(timezone.utc).hour!=0:
+                    continue
+                candle_day=(close_dt.astimezone(timezone.utc)-timedelta(days=1)).date().isoformat()
+                price=_positive(candle.get('close'),f'{t} precio {candle_day}')
+                if candle_day in indexed:
+                    raise RepricingError(f'{t}: vela diaria duplicada')
+                indexed[candle_day]=price
+            except (KeyError,ValueError,TypeError) as exc:
+                raise RepricingError(f'{t}: datos de vela diaria inválidos') from exc
+        if len(indexed)<2:
+            raise RepricingError(f'{t}: menos de dos cierres diarios verificables')
+        seen[t]=(units,indexed)
+    common=set.intersection(*(set(d) for _,d in seen.values()))
+    dates=sorted(common)[-max_days:]
+    if len(dates)<2:
+        raise RepricingError('Las 12 series MCP no tienen dos cierres diarios en común')
+    # No invisible gaps between daily candle observations.
+    for a,b in zip(dates,dates[1:]):
+        if (date.fromisoformat(b)-date.fromisoformat(a)).days!=1:
+            raise RepricingError('Brecha en cierres diarios comunes; no se interpola')
+    points=[]
+    for day in dates:
+        crypto=sum(q*series[day] for q,series in seen.values())
+        total=crypto+cash
+        if not (isfinite(total) and total>0):
+            raise RepricingError('Valorización retrospectiva inválida')
+        points.append({'day':day,'timestamp':day+'T23:59:59+00:00',
+                       'total':round(total,2),'crypto':round(crypto,2),'cash':round(cash,2)})
+    basis=points[0]['total']
+    for p in points:
+        p['change_pct']=round((p['total']/basis-1)*100,4)
+    return {'status':'OK','mode':'SIMULACION_CARTERA_FIJA','points':points,
+            'days':len(points), 'last_closed_day':points[-1]['day'],
+            'source':'BINANCE_SPOT_MCP_1D_CERRADO',
+            'disclaimer':'Unidades actuales y USDT físico actual congelados retrospectivamente. No es rentabilidad real histórica, no refleja fills/aportes/retiros ni modifica PRI.'}
+
+
+def btc_equivalent(total_usdt, btc_spot_usdt):
+    """Whole portfolio BTC denomination using the *same* observed Binance Spot quote.
+
+    total_usdt must already contain crypto market value + physical USDT once
+    (including the Quantfury trading reserve as a component of physical USDT).
+    No conversion from historic pricing or a separately observed BTC price.
+    """
+    if (not isinstance(total_usdt,(int,float)) or isinstance(total_usdt,bool)
+            or not _math.isfinite(total_usdt) or total_usdt<0):
+        raise ValueError('Valor total USDT inválido para conversión BTC')
+    if (not isinstance(btc_spot_usdt,(int,float)) or isinstance(btc_spot_usdt,bool)
+            or not _math.isfinite(btc_spot_usdt) or btc_spot_usdt<=0):
+        raise ValueError('BTCUSDT Spot no válido; no puede calcularse equivalencia BTC')
+    return float(total_usdt)/float(btc_spot_usdt)

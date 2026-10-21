@@ -17,9 +17,9 @@ def _inputs():
                            'HYPE':{'mode':'RETROCESO_ALCISTA','provisional':True}}}
     d={'usdt_operating':400.,'usdt_total':500.,'trading_reserve':100.,
        'liquidity_venues':{'Binance':300.,'KuCoin':100.,'Hyperliquid':0.},
-       'rows':[{'token':'BTC','price':101,'exchange_units':0.5,'target':.50,'value':101},
-               {'token':'SUI','price':5,'exchange_units':12,'target':.25,'value':100},
-               {'token':'HYPE','price':20,'exchange_units':2,'target':.25,'value':100}]}
+       'rows':[{'token':'BTC','tier':'T1','units':1,'price':101,'exchange_units':0.5,'target':.50,'value':101},
+               {'token':'SUI','tier':'T2','units':20,'price':5,'exchange_units':12,'target':.25,'value':100},
+               {'token':'HYPE','tier':'T1','units':5,'price':20,'exchange_units':2,'target':.25,'value':100}]}
     bal={'sells':[{'token':'BTC','value':500,'units':10},
                   {'token':'SUI','value':25,'units':5},
                   {'token':'HYPE','value':30,'units':2}]}
@@ -234,3 +234,17 @@ def test_balance_buy_proposals_are_capped_sequentially_to_infra_and_targets():
     assert (10+cash_by['SUI'])/crypto<=.4+1e-9
     assert (10+cash_by['HYPE'])/crypto<=.4+1e-9
     assert not any(x['token']=='BTC' for x in arr)
+
+
+def test_orders_balancer_only_when_weekly_mcp_unavailable():
+    d,b,bal=_inputs()
+    unavailable={'tokens':b['tokens'],'o2_levels':{},'buy_eligibility':{},
+                 'buy_stage_weights':{},'forecast_o2_allocation':[25,25,25,25],
+                 'weekly_context':{},'drift_band_pp':.5}
+    inbox=build_order_inbox(d,unavailable,bal,wave_levels={})
+    assert inbox['buy_planned']==0
+    assert inbox['buy_unassigned']==400
+    assert all(x['category']=='BALANCE' for x in inbox['candidates'])
+    assert any(x['token']=='SUI' and x['side']=='SELL' for x in inbox['candidates'])
+    assert not any(x['side']=='SELL' and x['token']=='BTC' for x in inbox['candidates'])
+    assert all(x['actionable_alert'] is False for x in inbox['candidates'])

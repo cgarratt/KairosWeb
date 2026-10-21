@@ -115,7 +115,6 @@
       </div>
     </div>
     <nav class="global-nav" aria-label="Navegación Kairos">
-      <a class="global-nav-link {{ 'active' if request.path == '/' else '' }}" href="/" title="Resumen de patrimonio, composición y liquidez con precios MCP">Dashboard</a>
       {% for mode in nav_modes %}
       <a class="global-nav-link {{ 'active' if request.path == '/mode/' ~ mode.slug else '' }}" href="/mode/{{ mode.slug }}" title="{{ mode.description }}">{{ mode.name }}</a>
       {% endfor %}

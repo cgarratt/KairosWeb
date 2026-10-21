@@ -24,15 +24,16 @@ from werkzeug.local import LocalProxy
 from werkzeug.exceptions import HTTPException
 from google_sheets_master import get_state, SheetDataError, public_failure_code, cache_status as sheet_cache_status
 from hype_weekly import aggregate_weeks, HypeHistoryError
-from portfolio_unrealized import summarize_unrealized, portfolio_allocation, category_allocation, pri_valuation_history
+from portfolio_unrealized import summarize_unrealized, portfolio_allocation, category_allocation, pri_valuation_history, build_fixed_basket_history, btc_equivalent, RepricingError
 from custody_balancer import compare_custody, CustodyError
+from orders_inbox import drift_tone, tradingbot_tokens
 from kairos_sheets_features import (
     unread_alerts, mark_alert_read, mark_all_alerts_read, settings_data, prepare_changes,
     save_changes, SettingsError, _remote_data as _unused_remote_marker
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.22'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.26'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -63,7 +64,7 @@ def policy_numeric(key, allowed):
     return float(row['value'])
 
 MODE_DEFS = [
-    {'slug':'portafolio','name':'Portafolio','subtitle':'Capital integral y rentabilidad histórica','description':'Seguimiento estratégico del capital y la liquidez del portafolio.'},
+    {'slug':'portafolio','name':'Portafolio','subtitle':'Visión ejecutiva y valoración en BTC','description':'Única página principal: distribución, balance, rentabilidad y custodia.'},
     {'slug':'balancer','name':'Balancer','subtitle':'Rebalanceo y liquidez','description':'Propuestas de rebalanceo, control de piso de liquidez y protección de Core.'},
     {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Retrocesos desde P1 semanal PROPUESTO/VALIDADO/CONFIRMADO y P2 máximo posterior; solo simulaciones INFRA.'},
     {'slug':'ventas','name':'Ventas','subtitle':'Objetivo USDT','description':'Propuestas solo SELL para acercarse a la meta de liquidez y reducir sobrepeso.'},
@@ -254,8 +255,12 @@ def fmt_price(v):
 def fmt_pct(v):
     return f"{v:.1f}%"
 
-def tone_from_drift(d):
-    return 'danger' if d > 1 else 'warn' if d < -1 else 'ok'
+def tone_from_drift(d, band_pp=None):
+    # The same MASTER-approved band drives classification and visual styling.
+    band=approved_numeric('DRIFT_BAND_PP') if band_pp is None else float(band_pp)
+    if not math.isfinite(band) or band < 0:
+        raise SheetDataError('DRIFT_BAND_PP: invalid band')
+    return drift_tone(d,band)
 
 def custody_summary(prices):
     sums={'HODL_bloqueado':0.0,'Core_estrategico':0.0,'Exchange_declarado':0.0}
@@ -334,6 +339,8 @@ def core_dashboard(prices):
     liquidity=SNAPSHOT['physical_total_USDT']
     trading=SNAPSHOT['trading_real_fixed_USDT']
     total_value = portfolio_crypto+liquidity
+    btc_usdt_spot = prices['BTC']
+    total_btc_equivalent = btc_equivalent(total_value, btc_usdt_spot)
     return {
         'rows': rows,
         'crypto_value': portfolio_crypto,
@@ -341,6 +348,8 @@ def core_dashboard(prices):
         'usdt_operating':SNAPSHOT['kairos_operating_USDT_before_commitments'],
         'trading_reserve':trading,
         'total_value':total_value,
+        'total_btc_equivalent':total_btc_equivalent,
+        'btc_usdt_spot':btc_usdt_spot,
         'usdt_pct':liquidity/total_value if total_value else 0,
         'crypto_pct':portfolio_crypto/total_value if total_value else 0,
         'snapshot_date':SNAPSHOT['units_snapshot_as_of'],
@@ -618,7 +627,8 @@ def build_mode_payload(slug, d, observed):
             excess=max(0.0,(r['weight']-r['target'])*d['crypto_value'])
             sell_tokens.append({'token':r['token'],'price':r['price'],'weight':r['weight'],
                                 'target':r['target'],'exchange_units':exch,
-                                'units':r['units'],'tier':r['tier'],'max_usdt':min(excess,value), 'free_exchange_usdt':value,
+                                'units':r['units'],'tier':r['tier'],'reserved_sell_units':float(r.get('reserved_sell_units',0)),
+                                'max_usdt':min(excess,value), 'free_exchange_usdt':value,
                                 'overweight':r['drift_pp']>band})
         return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],'kind':'ventas','current':{'P':p,'cash':cash,'cash_pct':d['usdt_pct']*100,'floor':approved_numeric('STRUCTURAL_USDT_TARGET')*p,'max_percent':max(100*policy_numeric('SLIDER_MAX_SIMULATED_USDT_TARGET',{'APROBADO_SIMULACION'}),d['usdt_pct']*100),'default_percent':100*approved_numeric('ORDINARY_DEFAULT_USDT_TARGET'),'trading':d['trading_reserve'],'band_pp':band},'tokens':sell_tokens, 'notes':['Solo SELL; BTC NEVER SELL. No se altera Core/HODL.','Slider hasta la meta simulada configurada en Google Sheets; 40% no es límite del simulador.','Inventario referencial de Exchange; usuario declara 0 órdenes y 0 fills pendientes, sin certificación remota del exchange.']}
         needed = max(0.0, usdt_gap)
@@ -660,7 +670,8 @@ def build_mode_payload(slug, d, observed):
             'max_leverage':approved_numeric('MAX_LEVERAGE'),
             'min_rr':approved_numeric('RISK_REWARD_MIN'),
             'power_buying_reference':policy_numeric('QF_POWER_BUYING_REFERENCE',{'REFERENCIA_USUARIO_NO_BALANCE'})}
-        watch = [r for r in rows if r['token'] in ('BTC','ETH','SOL','HYPE','LINK')]
+        allowed=tradingbot_universe()
+        watch = [r for r in rows if r['token'] in allowed]
         return {
             **common,
             'tb_risk_policy':tb_policy,
@@ -895,33 +906,41 @@ def balancer_report(d, observed):
     custody_comparison = compare_custody(custody_positions, g.kairos_state['custody_policy'])
     buy_candidates=[r for r in rows if r['drift_pp'] < -band]
     sell_candidates=[r for r in rows if r['drift_pp'] > band and r['token']!='BTC']
-    tokens_to_exchange={k:float(v[2]) for k,v in SNAPSHOT['custody_core_blocked__core_strategic__exchange'].items()}
-    def free_declared(r):
-        key='PUMPFUN' if r['token']=='PUMP' else r['token']
-        return max(0,tokens_to_exchange.get(key,0))
-    # Previews use physical inventory ceilings but do not subtract unverified SELL reservations.
-    sale_preview=[]
-    for r in sell_candidates:
-        theoretical=max(0,crypto*(r['weight']-r['target']))
-        declared=free_declared(r)*r['price']
-        value=min(theoretical,declared)
-        sale_preview.append({'token':r['token'],'value':value,'units':value/r['price'] if r['price'] else 0,
-                             'weight':r['weight'],'target':r['target'],'drift':r['drift_pp']})
-    sale_total=sum(r['value'] for r in sale_preview)
-    # Hypothetical BUY uses the independent Balancer reserve; 40% is informational.
+    from orders_inbox import allocate_infra_buys, overweight_sell_plan
+    # Reader certifies 05_ORDENES contains no operational open orders.
+    # This is *only* the published ledger, NOT live exchange verification.
+    sale_preview=overweight_sell_plan(rows,band)
+    sale_total=sum(x['value'] for x in sale_preview)
     current_cash_capacity=reserve
+    # Conditional scenario: sale proceeds are hypothetical until fill is verified.
     projected_cash_capacity=reserve+sale_total
-    buy_preview=[]
-    weight_deficit=sum(max(0,r['target']-r['weight']) for r in buy_candidates)
-    for r in buy_candidates:
-        amount=current_cash_capacity*(r['target']-r['weight'])/weight_deficit if weight_deficit else 0
-        buy_preview.append({'token':r['token'],'value':amount,'reference':reserve_nominal*(r['target']-r['weight'])/weight_deficit if weight_deficit else 0,'weight':r['weight'],'target':r['target'],'drift':r['drift_pp']})
-    buy_total=sum(r['value'] for r in buy_preview)
-    # Independent scenarios: BUY only and SELL only, no sequential fill assumption.
+    buy_preview=allocate_infra_buys(rows,current_cash_capacity,band)
+    buy_total=sum(x['value'] for x in buy_preview)
+    sold_by_token={x['token']:x['value'] for x in sale_preview}
+    conditional_rows=[{**r,'value':r['value']-sold_by_token.get(r['token'],0.)} for r in rows]
+    conditional_crypto=max(0.,crypto-sale_total)
+    for r in conditional_rows:
+        r['weight']=r['value']/conditional_crypto if conditional_crypto else 0.0
+        r['drift_pp']=(r['weight']-r['target'])*100
+    conditional_buys=allocate_infra_buys(conditional_rows,projected_cash_capacity,band)
+    conditional_by_token={x['token']:x['value'] for x in conditional_buys}
+    # Keep all conditional candidates visible, including INFRA created by a
+    # hypothetical sale. The 'after sales' column is purely conditional.
+    initial_by_token={x['token']:x for x in buy_preview}
+    displayed={r['token']:r for r in buy_candidates}
+    displayed.update({r['token']:r for r in rows if r['token'] in conditional_by_token})
+    buy_preview=[initial_by_token.get(token,{'token':token,'value':0.,'reference':0.,
+                 'weight':r['weight'],'target':r['target'],'drift':r['drift_pp']})
+                 for token,r in displayed.items()]
+    buy_with_sales=[{'token':r['token'],'value':conditional_by_token.get(r['token'],0.)}
+                    for r in buy_preview]
+    buy_total_after_sales=sum(x['value'] for x in conditional_buys)
+    # Independent outcomes: BUY-only and SELL-only, never count proceeds as real.
     after_buy_crypto=crypto+buy_total
     after_sell_crypto=max(0,crypto-sale_total)
-    buy_weights={r['token']:(r['value']+next((x['value'] for x in buy_preview if x['token']==r['token']),0))/after_buy_crypto if after_buy_crypto else 0 for r in rows}
-    sell_weights={r['token']:(r['value']-next((x['value'] for x in sale_preview if x['token']==r['token']),0))/after_sell_crypto if after_sell_crypto else 0 for r in rows}
+    bought={x['token']:x['value'] for x in buy_preview}
+    buy_weights={r['token']:(r['value']+bought.get(r['token'],0.))/after_buy_crypto if after_buy_crypto else 0 for r in rows}
+    sell_weights={r['token']:(r['value']-sold_by_token.get(r['token'],0.))/after_sell_crypto if after_sell_crypto else 0 for r in rows}
     return {'generated_at':observed,'snapshot_note':d['note'],'status_badge':'MCP Spot + Sheets PUBLICADO',
       'current':{'P':p,'cash':cash,'crypto':crypto,'floor':floor,'gap':gap,'excess':excess,
                  'reserve':reserve,'current_cash_capacity':current_cash_capacity,'projected_cash_capacity':projected_cash_capacity,'reserve_nominal':reserve_nominal,'residual_after_bags':residual_after_bags,'operational_25':operational_25,'c1':c1,'c2':c2,'trading':trading,
@@ -933,11 +952,11 @@ def balancer_report(d, observed):
         {'label':'Reserva Trading','value':fmt_money(trading),'help':'Reserva separada Quantfury; incluida en USDT físico','tone':'primary'}],
       'custody_comparison':custody_comparison,
       'buys':buy_preview,'sells':sale_preview,'buy_total':buy_total,'sell_total':sale_total,
-      'buy_with_sales':[{'token':r['token'],'value':projected_cash_capacity*(r['target']-r['weight'])/weight_deficit if weight_deficit else 0} for r in buy_candidates],
+      'buy_with_sales':buy_with_sales, 'buy_total_after_sales':buy_total_after_sales,
       'buy_chart':[{'token':r['token'],'actual':r['weight']*100,'post':buy_weights[r['token']]*100,'target':r['target']*100} for r in buy_candidates],
       'sell_chart':[{'token':r['token'],'actual':r['weight']*100,'post':sell_weights[r['token']]*100,'target':r['target']*100} for r in sell_candidates],
       'buy_cash_after':cash-buy_total,'sell_cash_after':cash+sale_total,
-      'limitations':'0 órdenes abiertas y 0 fills pendientes declarados por usuario; libro privado de exchange no verificado. Simulación NO es orden ni fill.'}
+      'limitations':'05_ORDENES no contiene órdenes activas según MASTER; el libro privado de Exchange no está verificado. Se respetan topes acumulados por Tier y BTC NEVER SELL. Escenarios independientes: ni ventas ni compras son fills.'}
 
 @app.context_processor
 def common_nav():
@@ -945,7 +964,8 @@ def common_nav():
 
 @app.route('/')
 def home():
-    return render_template('index.html', modes=MODE_DEFS, master=APP_VERSION)
+    # Single canonical dashboard/portfolio view. Legacy bookmarks still work.
+    return redirect(url_for('integral_portfolio_page'), code=302)
 
 @app.route('/mode/portafolio')
 def integral_portfolio_page():
@@ -956,29 +976,25 @@ def integral_portfolio_page():
     alive = sum(x['actual_usdt'] for x in segments if x['key'] != 'lost')
     lost = next(x['actual_usdt'] for x in segments if x['key'] == 'lost')
     gain_to_recover = (base / alive - 1) * 100 if alive > 0 else None
-    # No estimated/mock history is permitted. 21_PRI_HISTORIAL only holds
-    # certified observations when a future complete run actually publishes one.
+    # The dashboard has exactly ONE time series: fixed-current-holdings repricing.
+    # Never insert actual historical PRI equity points into this different basis.
     history_points = []
-    history_note = 'Sin observaciones de patrimonio completas y certificadas en 21_PRI_HISTORIAL.'
-    try:
-        from kairos_sheets_features import read_ranges
-        raw = read_ranges({'pri': "'21_PRI_HISTORIAL'!A4:V1200"})
-        history_points = pri_valuation_history(raw.get('pri',[]))
-        if history_points:
-            history_note = 'Valoración Spot histórica certificada, sin ajuste de flujos; no implica rentabilidad neta.'
-    except Exception as exc:
-        app.logger.info('PRI history not available (no synthetic fallback): %s',type(exc).__name__)
-        history_note = '21_PRI_HISTORIAL no disponible; sin serie histórica verificable.'
+    history_note = 'Los registros PRI no se mezclan con la simulación retrospectiva de cartera fija.'
     spot_breakdown = None
     spot_observed = None
     pnl_report = None
     allocation = None
     categories = None
     portfolio_rows = []
-    o2c2_reference = None
+    btc_total = None
+    btc_reference_price = None
+    bsi_archive = None
     try:
         spot_observed, live = load_live_dashboard()
         portfolio_rows=live['rows']
+        btc_reference_price=live['btc_usdt_spot']
+        btc_total=live['total_btc_equivalent']
+        bsi_archive=live['bsi_historical']
         pnl_report = summarize_unrealized(portfolio_rows)
         allocation=portfolio_allocation(portfolio_rows,live['usdt_total'])
         categories=category_allocation(portfolio_rows)
@@ -989,12 +1005,6 @@ def integral_portfolio_page():
         spot_breakdown = {'core':core_value,'exchange':exchange_value,
                           'liquidity':cash_total-qf,'trading':qf,
                           'total':live['total_value'],'source':'Binance MCP + Google Sheets PUBLICADO'}
-        # Informative budget reference; never interpreted as pending BUY.
-        param=PARAMETERS.get('FORECAST_O2_FIB_500_PCT')
-        if param and param.get('status') in ('APROBADO','APROBADO_SIMULACION'):
-            ratio=float(param['value'])/100
-            if 0<=ratio<=1:
-                o2c2_reference=ratio*live['usdt_operating']
     except Exception as exc:
         app.logger.info('Integral portfolio live pricing unavailable: %s',type(exc).__name__)
     return render_template('portfolio_integral.html', master=APP_VERSION, segments=segments,
@@ -1002,30 +1012,92 @@ def integral_portfolio_page():
                            spot=spot_breakdown, spot_observed=spot_observed, pnl_report=pnl_report,
                            allocation=allocation, categories=categories, portfolio_rows=portfolio_rows,
                            history_points=history_points, history_note=history_note,
-                           o2c2_reference=o2c2_reference,
+                           btc_total=btc_total, btc_reference_price=btc_reference_price,
+                           bsi_archive=bsi_archive,
                            source_note=values['source_note'], total_recorded=sum(x['actual_usdt'] for x in segments),
                            total_target=sum(x['target_usdt'] for x in segments))
 
-@app.route('/mode/ordenes')
-def orders_inbox_page():
-    """Phase 1: no exchange API, no proposed items written to 05_ORDENES."""
-    mode=MODES_BY_SLUG['ordenes']
+# Historical *fixed current holdings* repricing (not historic portfolio returns).
+# Cache only exact, MCP-verified daily closes, scoped by calendar day.
+_REPRICING_CACHE={'utc_day':None,'snapshot_id':None,'data':None,'stored':0.0}
+_REPRICING_LOCK=threading.Lock()
+
+@app.route('/api/portfolio-repricing')
+def portfolio_repricing_api():
     try:
         observed,d=load_live_dashboard()
-        buy=build_mode_payload('compras',d,observed)
+        utc_day=datetime.now(timezone.utc).date().isoformat()
+        with _REPRICING_LOCK:
+            snapshot_id=g.kairos_state['control']['snapshot_id']
+            if (_REPRICING_CACHE['data'] is not None and _REPRICING_CACHE['utc_day']==utc_day
+                    and _REPRICING_CACHE['snapshot_id']==snapshot_id and time.monotonic()-_REPRICING_CACHE['stored']<900):
+                data=_REPRICING_CACHE['data']
+            else:
+                from concurrent.futures import ThreadPoolExecutor
+                def one(row):
+                    t=row['token']
+                    return t,call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
+                        {'symbol':t+'USDT','interval':'1d','limit':100})
+                with ThreadPoolExecutor(max_workers=6) as pool:
+                    candles=dict(pool.map(one,d['rows']))
+                data=build_fixed_basket_history(d['rows'],d['usdt_total'],candles)
+                _REPRICING_CACHE.update(utc_day=utc_day,snapshot_id=snapshot_id,data=data,stored=time.monotonic())
+        return jsonify({**data,'snapshot_id':g.kairos_state['control']['snapshot_id'],
+                        'snapshot_cut':g.kairos_state['control']['fecha_corte'],
+                        'spot_observed_utc':observed,'historical_basis':'CURRENT_HOLDINGS_AT_CLOSED_DAILY_SPOT'})
+    except Exception as exc:
+        incident=uuid.uuid4().hex[:10]
+        app.logger.exception('Fixed-basket historical repricing failed id=%s',incident)
+        return jsonify({'status':'DATA_ERROR','origin':'HISTORICO_BINANCE_SPOT',
+                        'reason':'No hay 12 series diarias completas y verificables; no se calcula una curva parcial.',
+                        'error_id':incident}),503
+
+@app.route('/mode/ordenes')
+def orders_inbox_page():
+    """Separate market/snapshot gate from independent balance and weekly sources.
+
+    Weekly pivots are required for structural proposals, never for ordinary
+    Balancer recommendations. Missing structural quotes must not erase valid
+    balance proposals. All outputs remain phase-1, non-executable.
+    """
+    mode=MODES_BY_SLUG['ordenes']
+    stage='MASTER y Spot MCP'
+    try:
+        observed,d=load_live_dashboard()  # MUST remain fail-closed.
+        stage='Balance de portafolio'
         bal=balancer_report(d,observed)
+        stage='Estructura semanal MCP'
+        structural_note=None
+        try:
+            buy=build_mode_payload('compras',d,observed)
+            blocked=sorted(t for t,c in buy.get('weekly_context',{}).items()
+                           if c.get('status') in ('MCP_DATA_ERROR','DATA_ERROR'))
+            if blocked:
+                structural_note='Estructura incompleta para '+', '.join(blocked)+'. N/D para niveles sin velas 1W suficientes.'
+        except Exception as exc:
+            app.logger.exception('Orders structure unavailable; balance can still be shown')
+            structural_note='Estructura MCP no certificable; niveles Fibonacci N/D. Balance independiente permanece en modo propuesta.'
+            tokens=[{'token':r['token'],'price':r['price'],'current_usdt':r['value'],
+                     'units':r['units'],'target':r['target']} for r in d['rows']]
+            buy={'tokens':tokens,'o2_levels':{},'buy_eligibility':{},
+                 'buy_stage_weights':{},'forecast_o2_allocation':[25.,25.,25.,25.],
+                 'drift_band_pp':approved_numeric('DRIFT_BAND_PP'),'weekly_context':{}}
+        stage='Ensamblaje de propuestas'
         from orders_inbox import build_order_inbox
         from wave_macro_context import published_wave_levels
         wave_levels=published_wave_levels(g.kairos_state['wave_pivots'])
         inbox=build_order_inbox(d,buy,bal,wave_levels=wave_levels)
         return render_template('ordenes.html',mode=mode,inbox=inbox,observed=observed,
                                snapshot=g.kairos_state['control']['snapshot_id'],master=APP_VERSION,error=None,
+                               structural_note=structural_note,
                                tier_by_token={row['token']:row['tier'] for row in d['rows']})
     except Exception as exc:
         incident=uuid.uuid4().hex[:10]
-        app.logger.error('Orders inbox DATA_ERROR id=%s class=%s',incident,type(exc).__name__)
+        app.logger.exception('Orders inbox DATA_ERROR id=%s stage=%s',incident,stage)
+        # Do not leak raw MCP credentials, response bodies or sensitive traces.
         return render_template('ordenes.html',mode=mode,inbox=None,observed=None,
-                               snapshot=None,master=APP_VERSION,error='Datos MCP/Sheets o pivotes no disponibles. Ninguna propuesta nueva mostrada.'),503
+                               snapshot=None,master=APP_VERSION,error='No se pudo verificar '+stage+'. Ninguna propuesta nueva mostrada.',
+                               structural_note=None,error_id=incident,error_stage=stage),503
 
 @app.route('/mode/<slug>')
 def mode_page(slug):
@@ -1457,12 +1529,19 @@ def pivot_preliminary_endpoint():
 
 # Technical candidates based only on fully closed Binance Spot 4H candles.
 # Heuristic screening, never claim certified Kairos TradingBot signals.
-_TB_SET=('BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO')
+def tradingbot_universe():
+    record=PARAMETERS.get('UNIVERSE')
+    if not record or record.get('module')!='TRADINGBOT' or record.get('status')!='APROBADO':
+        raise SheetDataError('12_PARAMETROS_KAIROS: TradingBot UNIVERSE no aprobado')
+    try:
+        return tradingbot_tokens(record.get('value'),TIERS)
+    except ValueError as exc:
+        raise SheetDataError(str(exc)) from exc
 @app.route('/api/tradingbot/candidates')
 def tradingbot_candidates():
     symbol=request.args.get('token','ETH').upper()
-    if symbol not in _TB_SET:return jsonify({'status':'INVALID_TOKEN'}),400
     try:
+        if symbol not in tradingbot_universe():return jsonify({'status':'INVALID_TOKEN'}),400
         # Both timeframes consist of confirmed, closed candles only. No actionable
         # recommendation without a separately reconciled QF account/instrument.
         four=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',{'symbol':symbol+'USDT','interval':'4h','limit':180})
@@ -1497,6 +1576,8 @@ def _deployed_asset_status():
         'alerts_bell': ('static/alert_bell.js', ('alert-timeframe', '/api/alerts/read', 'event-bull', 'event-bear')),
         'integral_donut': ('templates/portfolio_integral.html', ('data-capital-chart="donut"', 'integral-donut-sector')),
         'portfolio_layout_v2022': ('templates/portfolio_integral.html', ('data-layout-row="1"','data-layout-row="2"','data-layout-row="3"','data-layout-row="4"')),
+        'consolidated_dashboard_v2025': ('templates/portfolio_integral.html', ('id="btc-portfolio-total"', 'data-history-display="percent"', 'data-portfolio-executive="12"', 'data-bsi-summary="informative"')),
+        'consolidated_navigation_v2025': ('templates/base.html', ('href="/mode/{{ mode.slug }}"', 'global-nav-link')),
         'portfolio_allocation_v2022': ('portfolio_unrealized.py', ('def portfolio_allocation(', 'def category_allocation(', 'def pri_valuation_history(')),
         'portfolio_unrealized_chart': ('templates/portfolio_integral.html', ('data-portfolio-chart="unrealized"', 'integral-pnl-bar gain', 'integral-pnl-bar loss')),
         'portfolio_unrealized_calc': ('portfolio_unrealized.py', ('def summarize_unrealized(', "'missing_tokens': missing")),
@@ -1508,6 +1589,9 @@ def _deployed_asset_status():
         'buy_p1p2_anchors': ('templates/trade_sim.html', ('Maestro de Precios - Retrocesos Fibo', '<th>P1</th><th>P2</th>', 'pivot-anchor-dot')),
         'buy_p1p2_policy': ('buy_weekly_policy.py', ('def select_p1_p2_buy_impulse(', 'P1_ADMITIDO_P2_MAXIMO_SEMANAL_POSTERIOR')),
         'orders_page': ('templates/ordenes.html', ('Backlog de Ordenes Compra / Venta', 'Próximas órdenes por Token', 'USDT compra', 'Unidades venta', 'id="orders-level"', 'FASE 1 · SOLO PROPUESTAS')),
+        'fixed_basket_repricing': ('portfolio_unrealized.py', ('def build_fixed_basket_history(', 'SIMULACION_CARTERA_FIJA', 'closed_only')),
+        'fixed_basket_repricing_ui': ('templates/portfolio_integral.html', ('/api/portfolio-repricing','SIMULACIÓN RETROSPECTIVA')),
+        'orders_partial_structural_fallback': ('app.py', ('def orders_inbox_page(', 'Estructura semanal MCP', 'build_order_inbox(d,buy,bal')),
         'orders_engine': ('orders_inbox.py', ('def build_order_inbox(', 'def structural_sell_candidates(', 'def portfolio_candidates(', "'buy_usdt':", "'sell_units':")),
         'orders_filters': ('static/orders_inbox.js', ('function visible(', 'orders-venue', 'orders-tier', 'orders-side', 'orders-token', 'orders-level')), 
         'pivot_mcp_status_protection': ('static/settings_master.js', ("current.cl_status!=='PROPUESTO'", "statusInput?.value!=='PROPUESTO'", "if(rec[field]!=='PROPUESTO')continue")),
@@ -1523,6 +1607,8 @@ def _deployed_asset_status():
         'buy_custom_fibo_weights': ('static/purchase_weights.js', ('function rebalance(', 'function normalize(', 'function asFractions(', 'function waterfall(', 'function validateDraft(')),
         'buy_slider_percent_available': ('templates/trade_sim.html', ('Capital para compras (% de USDT disponible)', 'budgetFromAvailablePercent(target,maxBuyCash)', 'Llenado secuencial: primero C1, luego C2, C3 y C4')),
         'buy_waterfall_fixed_percentages': ('static/purchase_weights.js', ('function waterfall(budget,maximum,percentages)', 'function budgetFromAvailablePercent(percent,maximum)', 'function validateDraft(rawValues)')),
+        'balancer_math_v2026': ('orders_inbox.py', ('def sell_capacity_usdt(', 'def overweight_sell_plan(', 'def allocate_infra_buys(', 'def tradingbot_tokens(')),
+        'balancer_wiring_v2026': ('app.py', ('sale_preview=overweight_sell_plan(rows,band)', 'buy_preview=allocate_infra_buys(rows,current_cash_capacity,band)', 'return drift_tone(d,band)', 'def tradingbot_universe():')),
         'sales_optimizer_engine': ('static/sales_optimizer.js', ('function calculate(items,physicalCash,targetPct,bandPp,qf=0)', 'const stage1=', 'const stage2Amount=', 'TARGET_REACHED', 'CAPACITY_LIMITED')),
         'sales_optimizer_ui': ('templates/trade_sim.html', ('KairosSalesOptimizer.calculate(', 'sell-weight-body', 'sell-plan-status', 'requested_percent')),
         'balancer_custody_engine': ('custody_balancer.py', ('def compare_custody(', "'ideal_nominal'", "'ideal_feasible'", "'transfer_count'")),
