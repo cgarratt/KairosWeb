@@ -1,6 +1,6 @@
-# KairosWeb v2.0.26 — INTEGRIDAD BALANCER / COMPRAS / VENTAS / ÓRDENES
+# KairosWeb v2.0.27 — DASHBOARD BSI + ESTADOS + LOGOS
 
-**Aplicación:** `2.0.26` · **Google Sheets schema:** `5.0.0` · **Motor KairosGPT compatible:** v1.3.6.
+**Aplicación:** `2.0.27` · **Google Sheets schema:** `5.0.0` · **Motor KairosGPT compatible:** v1.3.6.
 
 ## Novedades acumuladas sobre KairosWeb v2.0.18
 
@@ -22,7 +22,7 @@
 
 1. Extraer el ZIP **en la raíz del repositorio de KairosWeb**; el contenido se encuentra en la raíz, no en un subdirectorio adicional. Reemplazar los archivos por estos manteniendo las variables de entorno existentes. **No añadir credenciales ni subir `.env`.**
 2. Revisar diferencias, hacer commit y desplegar Render. Este ZIP no ejecuta git push, no crea un GitHub Release y no redepliega por sí mismo.
-3. Comprobar `/health`: `service=KairosWeb`, `version=2.0.26`, `status=UP`, `release_assets.consistent=true` y checks `sales_optimizer_engine`, `sales_optimizer_ui`, `portfolio_unrealized_chart`.
+3. Comprobar `/health`: `service=KairosWeb`, `version=2.0.27`, `status=UP`, `release_assets.consistent=true` y checks `sales_optimizer_engine`, `sales_optimizer_ui`, `portfolio_unrealized_chart`.
 4. Abrir `/mode/ventas` y `/mode/ventas?usdt_pct=55`; comprobar el porcentaje solicitado, prioridades y el comparativo. Confirmar que no hay órdenes reales creadas.
 5. Confirmar `/mode/portafolio` y el gráfico de resultado no realizado; verificar Compras, Forecast, Pivotes y Órdenes fase 1.
 
@@ -30,7 +30,7 @@
 
 - `python -m pytest -q` sobre el release extraído.
 - `node tests/test_sales_optimizer.js` y tests JS adicionales incluidos.
-- `SHA256SUMS.txt` / `RELEASE_MANIFEST_v2.0.26.json` permiten comprobar integridad de archivos del ZIP, excluyendo sus propios metadatos.
+- `SHA256SUMS.txt` / `RELEASE_MANIFEST_v2.0.27.json` permiten comprobar integridad de archivos del ZIP, excluyendo sus propios metadatos.
 
 **Límite:** menos de 100 archivos; se omiten algunos tests de regresión antiguos del paquete distribuible para mantener ese límite (pero se ejecutaron en el checkout completo). Los fuentes de aplicación y assets no se han eliminado.
 
@@ -47,7 +47,7 @@ Incluye el módulo de custodia 2.0.20 y corrige el renderizado de Balancer cuand
 ## Release 2.0.22 · Nuevo layout de Portafolio
 
 - Cuatro filas tras los KPI: (1) capital histórico / allocation 13 componentes, (2) rentabilidad histórica / PnL no realizado por token, (3) categoría T1–T3 / composición 12 tokens, (4) seguimiento del portafolio.
-- Gráficos actuales consumen el MASTER PUBLICADO y MCP Spot; el histórico solo utiliza observaciones completas y verificables en `21_PRI_HISTORIAL`. Hasta que existan al menos dos observaciones completas, las curvas permanecen en **Historial insuficiente**. No se crean series sintéticas.
+- Gráficos actuales consumen el MASTER PUBLICADO y MCP Spot. El panel BSI usa solo una muestra 4H archivada en `09_BSI` como referencia; no representa señales de venta certificadas.
 - Comparación histórica de valor no equivale a rentabilidad real ajustada por depósitos/retiros; PnL histórico N/D sin serie de costos de cada fecha.
 - Ver `RELEASE_NOTES_v2.0.22.md`, `/health` (marcadores `portfolio_layout_v2022`, `portfolio_allocation_v2022`) y `/mode/portafolio`.
 
@@ -60,10 +60,10 @@ Incluye el módulo de custodia 2.0.20 y corrige el renderizado de Balancer cuand
 
 ## Release 2.0.25 · Cartera retrospectiva y diagnóstico de Órdenes
 
-- `GET /api/portfolio-repricing` consulta MCP Binance Spot OHLCV **1D cerrado** de los 12 pares con un máximo de 100 días. Los alinea por día UTC sin interpolación y valora las unidades **ACTUALES** de `02_POSICIONES` y el USDT físico **ACTUAL** de `03_LIQUIDEZ`. Incluye QF una sola vez. No escribe en `21_PRI_HISTORIAL`, no reconstruye fills y no etiqueta la curva como rentabilidad real.
-- `/mode/portafolio` muestra dos curvas de **cartera fija retrospectiva** después de la consulta asíncrona: variación porcentual y seguimiento en USDT. Los botones `7D/30D/90D/VTD/ALL` utilizan únicamente el periodo efectivamente disponible; ALL no significa toda la vida del portafolio, sino todos los días consultados.
+- La curva de rentabilidad retrospectiva y su endpoint `/api/portfolio-repricing` fueron **retirados** de Portafolio por petición del usuario; no se disparan consultas 1D para esa vista.
+- `/mode/portafolio` ya no genera curvas históricas. La segunda fila muestra BSI 4H archivado y resultado no realizado por token.
 - `/mode/ordenes` mantiene independiente el Balancer ordinario del filtro 1W de Compras. Si falla solo la estructura semanal, los niveles de compra quedan N/D y los cálculos de Balance pueden continuar como **propuestas no ejecutables**. Si faltan Sheets válidos, 12 precios Spot o la valoración Balancer, muestra `DATA ERROR` y la etapa/ID diagnóstico; no usa inventarios del ZIP.
-- `/health`: version `2.0.26`, chequeos de integridad para el nuevo motor e interfaz.
+- `/health`: version `2.0.27`, chequeos de integridad para el nuevo motor e interfaz.
 - No se ejecutan, cancelan, envían o simulan fills de órdenes. No se actualiza el MASTER.
 
 ### Validación de esta entrega
@@ -75,10 +75,10 @@ Incluye el módulo de custodia 2.0.20 y corrige el renderizado de Balancer cuand
 
 ## Dashboard + Portafolio consolidados (2.0.25)
 
-Una sola vista `/mode/portafolio` accesible desde `/` (redirección). Valor total en USDT y equivalente BTC Spot `total_usdt/BTCUSDT`, sin agregar la reserva QF dos veces. El gráfico retrospectivo ofrece selector Variación % / Valor USDT y sustituye a la segunda curva de Seguimiento. La tabla ejecutiva muestra los 12 tokens, custodias y valoraciones (BTC por token). BSI se conserva sólo como referencia histórica desplegable; el presupuesto O2C2 sigue correspondiendo al modo Compras. Sin órdenes, fills ni cambios al Master.
+Una sola vista `/mode/portafolio` accesible desde `/` (redirección). Valor total en USDT y equivalente BTC Spot `total_usdt/BTCUSDT`, sin agregar la reserva QF dos veces. La segunda fila muestra gráfico BSI archivado y P&L por token. La tabla ejecutiva muestra los 12 tokens, custodias, valoraciones BTC y estado INFRA/NEUTRAL/SOBRE. BSI sigue siendo solo una referencia histórica NO SELL; el presupuesto O2C2 sigue correspondiendo al modo Compras. Sin órdenes, fills ni cambios al Master.
 
 
-## Release 2.0.26 · Cálculos y controles consistentes
+## Release 2.0.26 (heredado) · Cálculos y controles consistentes
 
 - **Balancer BUY:** asignación INFRA únicamente, recalculando el denominador de la manga cripto. Límite final del déficit por token, con USDT sobrante sin gastar. El escenario con ventas también se recalcula desde un inventario post-venta **hipotético**, sin acreditar fills ni caja real.
 - **Balancer SELL + Órdenes:** cálculo compartido de unidades máximas: `min(Exchange − reserva SELL, unidades_totales × fracción Tier − reserva SELL)`, T1=30%, T2=70%, T3=100%. BTC nunca se vende. Se prioriza SOBRE y se reevalúan pesos después de cada venta hipotética.
@@ -87,3 +87,13 @@ Una sola vista `/mode/portafolio` accesible desde `/` (redirección). Valor tota
 - **TradingBot:** solo los 5 tokens T1 del parámetro `TRADINGBOT.UNIVERSE` APROBADO. Si falta o difiere, DATA ERROR; Quantfury continúa WATCH.
 - **Regresión:** tests de borde, reservas SELL, conciliación BUY por déficit, y paridad numérica JavaScript/Python para la etapa SOBRE. Ninguna operación real.
 - El registro de histórico, la arquitectura de servicios y diagnósticos de dependencias en vivo permanecen en backlog v2.0.27–29.
+
+
+## Release 2.0.27 · Presentación Portafolio
+
+- Fila 2 izquierda: BSI histórico 4H archivado en 09_BSI, solo informativo; jamás se presenta como señal SELL activa.
+- Fila 4: nueva columna INFRA / NEUTRAL / SOBRE basada en la desviación frente al objetivo y la banda dinámica `DRIFT_BAND_PP` del MASTER.
+- Identificadores visuales al lado de tokens en tabla, allocation, P&L, BSI y comparación; imagen externa opcional con fallback local permanente.
+- Retiradas las dos secciones colapsables inferiores BSI y composición histórica por segmentos. El donut histórico de primera fila se mantiene.
+- Conserva valorización total en USDT y BTC, simulaciones de trading y protección de custodia.
+- No cambia posiciones, parámetros ni órdenes del MASTER.

@@ -24,7 +24,7 @@ from werkzeug.local import LocalProxy
 from werkzeug.exceptions import HTTPException
 from google_sheets_master import get_state, SheetDataError, public_failure_code, cache_status as sheet_cache_status
 from hype_weekly import aggregate_weeks, HypeHistoryError
-from portfolio_unrealized import summarize_unrealized, portfolio_allocation, category_allocation, pri_valuation_history, build_fixed_basket_history, btc_equivalent, RepricingError
+from portfolio_unrealized import summarize_unrealized, portfolio_allocation, category_allocation, pri_valuation_history, btc_equivalent
 from custody_balancer import compare_custody, CustodyError
 from orders_inbox import drift_tone, tradingbot_tokens
 from kairos_sheets_features import (
@@ -33,7 +33,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.26'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.27'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -335,7 +335,7 @@ def core_dashboard(prices):
         row['weight']=row['value']/portfolio_crypto if portfolio_crypto else 0
         row['drift_pp']=(row['weight']-row['target'])*100
         band=approved_numeric('DRIFT_BAND_PP')
-        row['status']='SOBRE' if row['drift_pp']>band else 'INFRA' if row['drift_pp'] < -band else 'OK'
+        row['status']='SOBRE' if row['drift_pp']>band else 'INFRA' if row['drift_pp'] < -band else 'NEUTRAL'
     liquidity=SNAPSHOT['physical_total_USDT']
     trading=SNAPSHOT['trading_real_fixed_USDT']
     total_value = portfolio_crypto+liquidity
@@ -976,10 +976,8 @@ def integral_portfolio_page():
     alive = sum(x['actual_usdt'] for x in segments if x['key'] != 'lost')
     lost = next(x['actual_usdt'] for x in segments if x['key'] == 'lost')
     gain_to_recover = (base / alive - 1) * 100 if alive > 0 else None
-    # The dashboard has exactly ONE time series: fixed-current-holdings repricing.
-    # Never insert actual historical PRI equity points into this different basis.
-    history_points = []
-    history_note = 'Los registros PRI no se mezclan con la simulación retrospectiva de cartera fija.'
+    # Retrospective pricing chart intentionally retired by user's design approval.
+    # Historical BSI is displayed for information only; no SELL signal.
     spot_breakdown = None
     spot_observed = None
     pnl_report = None
@@ -1011,46 +1009,10 @@ def integral_portfolio_page():
                            base=base, alive=alive, lost=lost, gain_to_recover=gain_to_recover,
                            spot=spot_breakdown, spot_observed=spot_observed, pnl_report=pnl_report,
                            allocation=allocation, categories=categories, portfolio_rows=portfolio_rows,
-                           history_points=history_points, history_note=history_note,
                            btc_total=btc_total, btc_reference_price=btc_reference_price,
                            bsi_archive=bsi_archive,
                            source_note=values['source_note'], total_recorded=sum(x['actual_usdt'] for x in segments),
                            total_target=sum(x['target_usdt'] for x in segments))
-
-# Historical *fixed current holdings* repricing (not historic portfolio returns).
-# Cache only exact, MCP-verified daily closes, scoped by calendar day.
-_REPRICING_CACHE={'utc_day':None,'snapshot_id':None,'data':None,'stored':0.0}
-_REPRICING_LOCK=threading.Lock()
-
-@app.route('/api/portfolio-repricing')
-def portfolio_repricing_api():
-    try:
-        observed,d=load_live_dashboard()
-        utc_day=datetime.now(timezone.utc).date().isoformat()
-        with _REPRICING_LOCK:
-            snapshot_id=g.kairos_state['control']['snapshot_id']
-            if (_REPRICING_CACHE['data'] is not None and _REPRICING_CACHE['utc_day']==utc_day
-                    and _REPRICING_CACHE['snapshot_id']==snapshot_id and time.monotonic()-_REPRICING_CACHE['stored']<900):
-                data=_REPRICING_CACHE['data']
-            else:
-                from concurrent.futures import ThreadPoolExecutor
-                def one(row):
-                    t=row['token']
-                    return t,call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
-                        {'symbol':t+'USDT','interval':'1d','limit':100})
-                with ThreadPoolExecutor(max_workers=6) as pool:
-                    candles=dict(pool.map(one,d['rows']))
-                data=build_fixed_basket_history(d['rows'],d['usdt_total'],candles)
-                _REPRICING_CACHE.update(utc_day=utc_day,snapshot_id=snapshot_id,data=data,stored=time.monotonic())
-        return jsonify({**data,'snapshot_id':g.kairos_state['control']['snapshot_id'],
-                        'snapshot_cut':g.kairos_state['control']['fecha_corte'],
-                        'spot_observed_utc':observed,'historical_basis':'CURRENT_HOLDINGS_AT_CLOSED_DAILY_SPOT'})
-    except Exception as exc:
-        incident=uuid.uuid4().hex[:10]
-        app.logger.exception('Fixed-basket historical repricing failed id=%s',incident)
-        return jsonify({'status':'DATA_ERROR','origin':'HISTORICO_BINANCE_SPOT',
-                        'reason':'No hay 12 series diarias completas y verificables; no se calcula una curva parcial.',
-                        'error_id':incident}),503
 
 @app.route('/mode/ordenes')
 def orders_inbox_page():
@@ -1576,7 +1538,7 @@ def _deployed_asset_status():
         'alerts_bell': ('static/alert_bell.js', ('alert-timeframe', '/api/alerts/read', 'event-bull', 'event-bear')),
         'integral_donut': ('templates/portfolio_integral.html', ('data-capital-chart="donut"', 'integral-donut-sector')),
         'portfolio_layout_v2022': ('templates/portfolio_integral.html', ('data-layout-row="1"','data-layout-row="2"','data-layout-row="3"','data-layout-row="4"')),
-        'consolidated_dashboard_v2025': ('templates/portfolio_integral.html', ('id="btc-portfolio-total"', 'data-history-display="percent"', 'data-portfolio-executive="12"', 'data-bsi-summary="informative"')),
+        'consolidated_dashboard_v2027': ('templates/portfolio_integral.html', ('id="btc-portfolio-total"', 'data-bsi-chart="archived"', 'data-portfolio-executive="12"', 'class="port-status', 'port-coin-logo')),
         'consolidated_navigation_v2025': ('templates/base.html', ('href="/mode/{{ mode.slug }}"', 'global-nav-link')),
         'portfolio_allocation_v2022': ('portfolio_unrealized.py', ('def portfolio_allocation(', 'def category_allocation(', 'def pri_valuation_history(')),
         'portfolio_unrealized_chart': ('templates/portfolio_integral.html', ('data-portfolio-chart="unrealized"', 'integral-pnl-bar gain', 'integral-pnl-bar loss')),
@@ -1589,8 +1551,6 @@ def _deployed_asset_status():
         'buy_p1p2_anchors': ('templates/trade_sim.html', ('Maestro de Precios - Retrocesos Fibo', '<th>P1</th><th>P2</th>', 'pivot-anchor-dot')),
         'buy_p1p2_policy': ('buy_weekly_policy.py', ('def select_p1_p2_buy_impulse(', 'P1_ADMITIDO_P2_MAXIMO_SEMANAL_POSTERIOR')),
         'orders_page': ('templates/ordenes.html', ('Backlog de Ordenes Compra / Venta', 'Próximas órdenes por Token', 'USDT compra', 'Unidades venta', 'id="orders-level"', 'FASE 1 · SOLO PROPUESTAS')),
-        'fixed_basket_repricing': ('portfolio_unrealized.py', ('def build_fixed_basket_history(', 'SIMULACION_CARTERA_FIJA', 'closed_only')),
-        'fixed_basket_repricing_ui': ('templates/portfolio_integral.html', ('/api/portfolio-repricing','SIMULACIÓN RETROSPECTIVA')),
         'orders_partial_structural_fallback': ('app.py', ('def orders_inbox_page(', 'Estructura semanal MCP', 'build_order_inbox(d,buy,bal')),
         'orders_engine': ('orders_inbox.py', ('def build_order_inbox(', 'def structural_sell_candidates(', 'def portfolio_candidates(', "'buy_usdt':", "'sell_units':")),
         'orders_filters': ('static/orders_inbox.js', ('function visible(', 'orders-venue', 'orders-tier', 'orders-side', 'orders-token', 'orders-level')), 

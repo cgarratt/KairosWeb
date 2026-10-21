@@ -2,7 +2,7 @@
 {% block title %}Kairos | Portafolio{% endblock %}
 {% block head %}
 <style>
-/* KairosWeb v2.0.26 | Dashboard + Portafolio single view, no redundant historical chart */
+/* KairosWeb v2.0.27 | BSI archive, classification + resilient token logos */
 .port-page{--port-border:var(--line,#dce6f5);--port-ink:var(--text,#122b54);--port-sub:var(--muted,#647994);--port-surface:var(--panel,#fff)}
 .port-page .port-hero{display:flex;align-items:start;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:4px 2px 18px}
 .port-page .port-hero h2{font-size:clamp(24px,3vw,35px);margin:0;color:var(--port-ink)}
@@ -72,9 +72,28 @@
 .port-summary-columns strong{display:block;margin-top:4px;font-size:17px;color:var(--port-ink)}
 .port-controls-display{margin:5px 0 12px}.port-archived-bsi{display:grid;grid-template-columns:repeat(auto-fill,minmax(115px,1fr));gap:7px;margin-top:11px}.port-archived-bsi span{font-size:11px;padding:7px;border:1px solid var(--port-border);border-radius:7px}
 @media(max-width:600px){.port-summary-columns{grid-template-columns:1fr 1fr}.port-kpi .btc-total{font-size:17px}}
+
+/* Offline visual token badges are always present; official logo images overlay only on successful load. */
+.port-coin{display:inline-flex;align-items:center;gap:7px;min-width:0;white-space:nowrap}
+.port-coin-logo{width:21px;height:21px;flex:none;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;position:relative;background:var(--coin-bg,#46617e);color:var(--coin-fg,#fff);font-size:12px;font-weight:900;letter-spacing:-.4px;overflow:hidden}
+.port-coin-logo img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:var(--port-surface);font-size:0}
+.port-coin-glyph{line-height:1}
+.port-coin-name{overflow:hidden;text-overflow:ellipsis}
+.port-coin[data-token="BTC"]{--coin-bg:#f49b23}.port-coin[data-token="ETH"]{--coin-bg:#6679b0}.port-coin[data-token="SOL"]{--coin-bg:#6146b3}.port-coin[data-token="LINK"]{--coin-bg:#215bd2}.port-coin[data-token="HYPE"]{--coin-bg:#159b74}.port-coin[data-token="HBAR"]{--coin-bg:#515b70}.port-coin[data-token="SUI"]{--coin-bg:#429cdd}.port-coin[data-token="ONDO"]{--coin-bg:#232b46}.port-coin[data-token="PUMP"]{--coin-bg:#31a456}.port-coin[data-token="PLUME"]{--coin-bg:#865fa7}.port-coin[data-token="VIRTUAL"]{--coin-bg:#596eaf}.port-coin[data-token="PEPE"]{--coin-bg:#4b8e46}.port-coin[data-token="USDT"]{--coin-bg:#1d947e}
+.port-status{display:inline-flex;border-radius:7px;padding:4px 7px;font-size:10px;font-weight:850;letter-spacing:.02em}
+.port-status.INFRA{background:rgba(226,159,58,.17);color:#b47714}.port-status.SOBRE{background:rgba(211,69,96,.15);color:#d34c69}.port-status.NEUTRAL{background:rgba(30,155,114,.16);color:#159c72}
+.port-bsi-grid{display:grid;gap:5px;margin-top:11px}.port-bsi-row{display:grid;grid-template-columns:99px minmax(0,1fr) 70px;gap:9px;align-items:center;min-height:22px;font-size:11px}.port-bsi-label{min-width:0}.port-bsi-row strong{text-align:right;font-variant-numeric:tabular-nums}
+.port-bsi-axis{height:16px;display:grid;grid-template-columns:1fr 1fr;background:linear-gradient(90deg,transparent 49.8%,#6b84a2 49.8%,#6b84a2 50.2%,transparent 50.2%)}.port-bsi-half{display:flex;height:16px;align-items:center}.port-bsi-half.negative{justify-content:flex-end}.port-bsi-half.positive{justify-content:flex-start}.port-bsi-bar{height:12px;display:block;border-radius:2px;min-width:1px}.port-bsi-bar.down{background:#d24962}.port-bsi-bar.up{background:#18a886}
+.port-executive td:first-child{min-width:91px}.port-legend-name .port-coin-logo,.port-token-col .port-coin-logo{width:17px;height:17px;font-size:10px}.port-token-col .port-coin{gap:3px}.port-token-col .port-coin-name{font-size:9px}
+@media(max-width:600px){.port-bsi-row{grid-template-columns:80px minmax(0,1fr) 58px;gap:5px}}
 </style>
 {% endblock %}
 {% block content %}
+{% macro coin_tag(symbol) -%}
+{% set logos={'BTC':'bitcoin-btc','ETH':'ethereum-eth','SOL':'solana-sol','LINK':'chainlink-link','HYPE':'hyperliquid-hype','HBAR':'hedera-hbar','SUI':'sui-sui','ONDO':'ondo-finance-ondo','PUMP':'pump-fun-pump','PLUME':'plume-plume','PEPE':'pepe-pepe','VIRTUAL':'virtual-protocol-virtual','USDT':'tether-usdt'} %}
+{% set glyphs={'BTC':'₿','ETH':'Ξ','SOL':'≋','LINK':'⬡','HYPE':'H','HBAR':'ℏ','SUI':'◈','ONDO':'◎','PUMP':'↗','PLUME':'✦','PEPE':'🐸','VIRTUAL':'V','USDT':'₮'} %}
+<span class="port-coin" data-token="{{ symbol }}"><span class="port-coin-logo" aria-hidden="true"><span class="port-coin-glyph">{{ glyphs.get(symbol,symbol[:1]) }}</span>{% if symbol in logos %}<img loading="lazy" src="https://cryptologos.cc/logos/{{ logos[symbol] }}-logo.png" alt="" onerror="this.remove()">{% endif %}</span><span class="port-coin-name">{{ symbol }}</span></span>
+{%- endmacro %}
 <div class="port-page">
 <header class="port-hero"><div><h2>KAIROS | PORTAFOLIO</h2><p>Inventario publicado: {{ g.kairos_state['control']['fecha_corte'] }} · Spot MCP: {{ spot_observed or 'N/D' }}</p></div><span class="port-tag">SOLO LECTURA · MASTER PUBLICADO 5.0.0</span></header>
 <div class="port-kpis" data-layout-region="kpis">
@@ -94,22 +113,35 @@
  <article class="port-card" data-allocation-chart="13"><div class="port-card-head"><div><h3>Allocation por token (incluye USDT)</h3><p class="sub">Distribución actual del patrimonio completo · datos Spot.</p></div></div>
  {% if allocation %}{% set aacc=namespace(distance=0.0) %}
  <div class="port-donut-layout"><svg class="port-donut" viewBox="0 0 220 220" role="img" aria-label="Allocation de 12 activos y USDT"><circle class="integral-donut-base" cx="110" cy="110" r="72"/><g transform="rotate(-90 110 110)">{% for it in allocation['items'] %}{% set arc=it.pct/100*circumference %}{% if arc>0 %}<circle class="integral-donut-sector" data-allocation-token="{{ it.token }}" cx="110" cy="110" r="72" stroke="{{ it.color }}" stroke-dasharray="{{ '%.5f'|format(arc) }} {{ circumference }}" stroke-dashoffset="{{ '%.5f'|format(-aacc.distance) }}"><title>{{ it.token }}: {{ '${:,.2f}'.format(it.value) }} ({{ '%.2f'|format(it.pct) }}%)</title></circle>{% endif %}{% set aacc.distance=aacc.distance+arc %}{% endfor %}</g><text class="integral-donut-caption" x="110" y="96">Patrimonio actual</text><text class="integral-donut-center" x="110" y="114">{{ '${:,.0f}'.format(allocation.total) }}</text><text class="integral-donut-caption" x="110" y="134">USDT · total</text></svg>
- <div class="port-legend port-legend-scroll" aria-label="Allocation desglosado por token"><div class="port-legend-item heading"><span>Token</span><span>%</span><span>USDT</span></div>{% for it in allocation['items'] %}<div class="port-legend-item"><span class="port-legend-name"><i class="dot" style="background:{{ it.color }}"></i>{{ it.token }}</span><strong>{{ '%.2f%%'|format(it.pct) }}</strong><strong data-private="money">{{ '{:,.0f}'.format(it.value) }}</strong></div>{% endfor %}</div></div>
+ <div class="port-legend port-legend-scroll" aria-label="Allocation desglosado por token"><div class="port-legend-item heading"><span>Token</span><span>%</span><span>USDT</span></div>{% for it in allocation['items'] %}<div class="port-legend-item"><span class="port-legend-name"><i class="dot" style="background:{{ it.color }}"></i>{{ coin_tag(it.token) }}</span><strong>{{ '%.2f%%'|format(it.pct) }}</strong><strong data-private="money">{{ '{:,.0f}'.format(it.value) }}</strong></div>{% endfor %}</div></div>
  {% else %}<div class="port-empty"><strong>Allocation no disponible</strong>Requiere la valoración completa de los 12 tokens mediante Binance Spot MCP.</div>{% endif %}
  </article>
 </div>
-<!-- Fila 2: historic series / compact unrealized pnl -->
+<!-- Fila 2: BSI historical chart (informational) / compact unrealized PnL -->
 <div class="port-pair" data-layout-row="2">
- <article class="port-card" data-history-chart="returns"><div class="port-card-head"><div><h3>Rentabilidad retrospectiva · cartera fija</h3><p class="sub">Cartera actual a precios pasados · simulación retrospectiva, sin flujos.</p></div><div class="port-controls" role="group" aria-label="Rango histórico">{% for interval in ['7D','30D','90D','VTD','ALL'] %}<button type="button" class="port-control" data-history-range="{{ interval }}" aria-pressed="{{ 'true' if interval=='30D' else 'false' }}">{{ interval }}</button>{% endfor %}</div></div>
- <div class="port-controls port-controls-display" role="group" aria-label="Unidad de seguimiento histórico"><button type="button" class="port-control" data-history-display="percent" aria-pressed="true">Variación %</button><button type="button" class="port-control" data-history-display="usdt" aria-pressed="false">Valor USDT</button></div>
- <div class="port-chart-surface" id="history-chart-surface"><div class="port-empty"><strong>Cargando MCP 1D</strong>Consultando cierres diarios para los 12 tokens.</div></div>
- <p class="port-foot" id="repricing-note">Cartera fija retrospectiva; no representa rendimientos realizados ni ajustados por flujos. {{ history_note }}</p>
+ <article class="port-card" data-bsi-chart="archived">
+  <div class="port-card-head"><div><h3>BTC Strength Index (BSI)</h3><p class="sub">Fortaleza relativa frente a BTC · referencia histórica 4H archivada</p></div><span class="port-badge">SOLO INFORMATIVO</span></div>
+  {% if bsi_archive and bsi_archive.rows %}
+  {% set valid_bsi=bsi_archive.rows|selectattr('bsi','ne',none)|list %}
+  {% if valid_bsi %}
+  {% set maximum_bsi=(valid_bsi|map(attribute='bsi')|map('abs')|max) %}
+  <div class="port-bsi-grid" role="img" aria-label="BSI histórico relativo a BTC por token; muestra archivada, no indicador en tiempo real">
+  {% for r in valid_bsi %}
+  <div class="port-bsi-row" data-bsi-token="{{ r.token }}">
+   <span class="port-bsi-label">{{ coin_tag(r.token) }}</span>
+   <div class="port-bsi-axis"><div class="port-bsi-half negative">{% if r.bsi<0 %}<span class="port-bsi-bar down" style="width:{{ '%.4f'|format(((-r.bsi)/maximum_bsi)*100 if maximum_bsi else 0) }}%"></span>{% endif %}</div><div class="port-bsi-half positive">{% if r.bsi>0 %}<span class="port-bsi-bar up" style="width:{{ '%.4f'|format((r.bsi/maximum_bsi)*100 if maximum_bsi else 0) }}%"></span>{% endif %}</div></div>
+   <strong class="{{ 'integral-pnl-positive' if r.bsi>0 else 'integral-pnl-negative' if r.bsi<0 else '' }}">{{ '%+.2f'|format(r.bsi) }}%</strong>
+  </div>{% endfor %}
+  </div>
+  <p class="port-foot">Muestra histórica 4H · cierre {{ bsi_archive.sample_close_utc or 'no registrado' }} · fuente: 09_BSI. No se combina con Spot actual. <strong>BSI SELL BLOQUEADO</strong> hasta certificar baseline y HWM.</p>
+  {% else %}<div class="port-empty"><strong>BSI sin lecturas válidas</strong>Las lecturas archivadas no permiten un gráfico verificable.</div>{% endif %}
+  {% else %}<div class="port-empty"><strong>BSI no disponible</strong>Se requiere la muestra histórica publicada en 09_BSI.</div>{% endif %}
  </article>
  <section class="port-card" data-portfolio-chart="unrealized">
   <div class="integral-pnl-head"><div><h3>Resultado no realizado por token</h3><p class="sub">Valor Spot menos costo abierto · unidades actuales · USDT</p></div>
   {% if pnl_report and pnl_report.total_usdt is not none %}<div class="integral-pnl-total {{ 'integral-pnl-positive' if pnl_report.total_usdt>0 else 'integral-pnl-negative' if pnl_report.total_usdt<0 else 'integral-pnl-zero' }}" data-private="money">{{ '{:+,.2f}'.format(pnl_report.total_usdt) }} USDT<small>{{ '{:+.2f}%'.format(pnl_report.total_pct) if pnl_report.total_pct is not none else 'N/D' }} sobre costo abierto</small></div>
   {% else %}<div class="integral-pnl-total integral-pnl-zero">N/D<small>{{ 'Spot MCP no disponible' if not pnl_report else 'Costos incompletos: total no verificable' }}</small></div>{% endif %}</div>
-  {% if pnl_report %}<div class="integral-pnl-scroller"><div class="integral-pnl-plot" aria-label="Resultados no realizados por token">{% for item in pnl_report['items'] %}<div class="integral-pnl-row" data-pnl-token="{{ item.token }}"><span class="integral-pnl-token">{{ item.token }}</span><div class="integral-pnl-track" aria-label="{{ item.token }}: {{ '{:+,.2f}'.format(item.pnl_usdt) if item.pnl_usdt is not none else 'N/D' }} USDT"><div class="integral-pnl-half loss">{% if item.pnl_usdt is not none and item.pnl_usdt<0 %}<span class="integral-pnl-bar loss" style="width:{{ item.bar_pct }}%"></span>{% endif %}</div><div class="integral-pnl-half gain">{% if item.pnl_usdt is not none and item.pnl_usdt>0 %}<span class="integral-pnl-bar gain" style="width:{{ item.bar_pct }}%"></span>{% endif %}</div></div><span class="integral-pnl-number {{ 'integral-pnl-positive' if item.pnl_usdt is not none and item.pnl_usdt>0 else 'integral-pnl-negative' if item.pnl_usdt is not none and item.pnl_usdt<0 else 'integral-pnl-zero' }}" data-private="money">{{ ('{:+,.0f}'.format(item.pnl_usdt)) if item.pnl_usdt is not none else 'N/D' }}</span></div>{% endfor %}</div></div><div class="integral-pnl-legend"><span><i style="background:#16876d"></i>Ganancia no realizada</span><span><i style="background:#d24962"></i>Pérdida no realizada</span></div><p class="integral-pnl-info">Fuente: 02_POSICIONES del Master PUBLICADO + Spot Binance MCP{{ ' · Observación: ' ~ spot_observed if spot_observed else '' }}. No incluye USDT físico ni pérdidas realizadas históricas; no acredita fills.{% if pnl_report.missing_tokens %} Sin costo/precio verificable: {{ pnl_report.missing_tokens|join(', ') }}; no se imputa USDT $0.{% endif %}</p>
+  {% if pnl_report %}<div class="integral-pnl-scroller"><div class="integral-pnl-plot" aria-label="Resultados no realizados por token">{% for item in pnl_report['items'] %}<div class="integral-pnl-row" data-pnl-token="{{ item.token }}"><span class="integral-pnl-token">{{ coin_tag(item.token) }}</span><div class="integral-pnl-track" aria-label="{{ item.token }}: {{ '{:+,.2f}'.format(item.pnl_usdt) if item.pnl_usdt is not none else 'N/D' }} USDT"><div class="integral-pnl-half loss">{% if item.pnl_usdt is not none and item.pnl_usdt<0 %}<span class="integral-pnl-bar loss" style="width:{{ item.bar_pct }}%"></span>{% endif %}</div><div class="integral-pnl-half gain">{% if item.pnl_usdt is not none and item.pnl_usdt>0 %}<span class="integral-pnl-bar gain" style="width:{{ item.bar_pct }}%"></span>{% endif %}</div></div><span class="integral-pnl-number {{ 'integral-pnl-positive' if item.pnl_usdt is not none and item.pnl_usdt>0 else 'integral-pnl-negative' if item.pnl_usdt is not none and item.pnl_usdt<0 else 'integral-pnl-zero' }}" data-private="money">{{ ('{:+,.0f}'.format(item.pnl_usdt)) if item.pnl_usdt is not none else 'N/D' }}</span></div>{% endfor %}</div></div><div class="integral-pnl-legend"><span><i style="background:#16876d"></i>Ganancia no realizada</span><span><i style="background:#d24962"></i>Pérdida no realizada</span></div><p class="integral-pnl-info">Fuente: 02_POSICIONES del Master PUBLICADO + Spot Binance MCP{{ ' · Observación: ' ~ spot_observed if spot_observed else '' }}. No incluye USDT físico ni pérdidas realizadas históricas; no acredita fills.{% if pnl_report.missing_tokens %} Sin costo/precio verificable: {{ pnl_report.missing_tokens|join(', ') }}; no se imputa USDT $0.{% endif %}</p>
   {% else %}<p class="integral-pnl-info">Datos MCP no disponibles. No se calcula P&L con precios de capturas o archivos históricos.</p>{% endif %}
  </section>
 </div>
@@ -119,80 +151,24 @@
  {% if categories %}<div class="port-tier-chart">{% for c in categories %}<div class="port-tier-col"><strong>{{ '%.2f%%'|format(c.actual) }} / {{ '%.0f%%'|format(c.target) }}</strong><div class="port-tier-bars"><div class="port-tier-bar" style="height:{{ c.actual/80*100 }}%" title="{{ c.tier }} actual {{ '%.2f'|format(c.actual) }}%"></div><div class="port-tier-bar target" style="height:{{ c.target/80*100 }}%" title="{{ c.tier }} objetivo {{ '%.2f'|format(c.target) }}%"></div></div><small>{{ 'Tier '~c.tier[1:] }}</small></div>{% endfor %}</div><p class="port-foot">T1: BTC, ETH, SOL, LINK, HYPE · T2: HBAR, SUI, ONDO, PUMP, PLUME · T3: VIRTUAL, PEPE</p>
  {% else %}<div class="port-empty">Sin cotizaciones completas para la distribución por categoría.</div>{% endif %}</article>
  <article class="port-card" data-composition-chart="tokens"><div class="port-card-head"><div><h3>Composición del portafolio</h3><p class="sub">Peso actual vs. objetivo · 12 tokens (sin USDT)</p></div><div class="port-chart-key"><span><i style="background:#267ce5"></i>Actual</span><span><i style="background:#cad6e6"></i>Objetivo</span></div></div>
- {% if portfolio_rows %}<div class="port-token-scroller"><div class="port-token-chart">{% for r in portfolio_rows %}<div class="port-token-col"><strong>{{ '%.1f'|format(r.weight*100) }}%</strong><div class="port-token-bars"><div class="port-token-bar" style="height:{{ r.weight*100/30*100 }}%" title="{{ r.token }} actual {{ '%.2f'|format(r.weight*100) }}%"></div><div class="port-token-bar target" style="height:{{ r.target*100/30*100 }}%" title="{{ r.token }} objetivo {{ '%.2f'|format(r.target*100) }}%"></div></div><small>{{ r.token }}</small></div>{% endfor %}</div></div><p class="port-foot">Objetivos de 02_POSICIONES; desviaciones comparadas contra la manga cripto.</p>
+ {% if portfolio_rows %}<div class="port-token-scroller"><div class="port-token-chart">{% for r in portfolio_rows %}<div class="port-token-col" title="{{ r.token }}: {{ r.status }} · {{ '%+.2f'|format(r.drift_pp) }} pp"><strong>{{ '%.1f'|format(r.weight*100) }}%</strong><div class="port-token-bars"><div class="port-token-bar" style="height:{{ r.weight*100/30*100 }}%" title="{{ r.token }} actual {{ '%.2f'|format(r.weight*100) }}%"></div><div class="port-token-bar target" style="height:{{ r.target*100/30*100 }}%" title="{{ r.token }} objetivo {{ '%.2f'|format(r.target*100) }}%"></div></div><small>{{ coin_tag(r.token) }}</small></div>{% endfor %}</div></div><p class="port-foot">Objetivos de 02_POSICIONES; desviaciones comparadas contra la manga cripto.</p>
  {% else %}<div class="port-empty">Sin cotizaciones completas para comparar los 12 tokens.</div>{% endif %}</article>
 </div>
-<!-- Fila 4: one executive token table; no second copy of the historical curve -->
+<!-- Fila 4: one executive token table; no duplicate history/BSI collapsible sections -->
 <div class="port-pair" data-layout-row="4" style="grid-template-columns:minmax(0,1fr)">
  <article class="port-card" data-portfolio-executive="12">
   <div class="port-card-head"><div><h3>Seguimiento del portafolio</h3><p class="sub">Tabla ejecutiva · 12 tokens · unidades y valoración actual, una sola fuente publicada.</p></div><span class="port-badge">Spot MCP · {{ spot_observed or 'N/D' }}</span></div>
-  {% if portfolio_rows %}<div class="port-table-scroll"><table class="port-executive"><thead><tr><th>Token</th><th>Unidades</th><th>HODL</th><th>Core</th><th>Exchange</th><th>Precio Spot</th><th>Valor USDT</th><th>Valor BTC</th><th>Peso cripto</th><th>Target</th><th>Drift pp</th></tr></thead><tbody>
-  {% for r in portfolio_rows %}<tr><td>{{ r.token }}</td><td data-private="money">{{ '{:,.8f}'.format(r.units).rstrip('0').rstrip('.') }}</td><td data-private="money">{{ '{:,.8f}'.format(r.hodl_units).rstrip('0').rstrip('.') }}</td><td data-private="money">{{ '{:,.8f}'.format(r.core_units).rstrip('0').rstrip('.') }}</td><td data-private="money">{{ '{:,.8f}'.format(r.exchange_units).rstrip('0').rstrip('.') }}</td><td data-private="money">{{ '${:,.8f}'.format(r.price).rstrip('0').rstrip('.') }}</td><td data-private="money">{{ '${:,.2f}'.format(r.value) }}</td><td data-private="money">{{ '{:.8f}'.format(r.value/btc_reference_price) if btc_reference_price else 'N/D' }}</td><td>{{ '%.2f%%'|format(r.weight*100) }}</td><td>{{ '%.2f%%'|format(r.target*100) }}</td><td>{{ '%+.2f'|format(r.drift_pp) }}</td></tr>{% endfor %}</tbody>
-  <tfoot><tr><td>TOTAL</td><td colspan="5">Cripto + USDT físico</td><td data-private="money">{{ '${:,.2f}'.format(spot.total) if spot else 'N/D' }}</td><td data-private="money">{{ '{:.8f}'.format(btc_total) if btc_total is not none else 'N/D' }}</td><td colspan="3">100% manga cripto excluye USDT</td></tr></tfoot></table></div>
+  {% if portfolio_rows %}<div class="port-table-scroll"><table class="port-executive"><thead><tr><th>Token</th><th>Unidades</th><th>HODL</th><th>Core</th><th>Exchange</th><th>Precio Spot</th><th>Valor USDT</th><th>Valor BTC</th><th>Peso cripto</th><th>Target</th><th>Drift pp</th><th>Estado</th></tr></thead><tbody>
+  {% for r in portfolio_rows %}<tr><td>{{ coin_tag(r.token) }}</td><td data-private="money">{{ '{:,.8f}'.format(r.units).rstrip('0').rstrip('.') }}</td><td data-private="money">{{ '{:,.8f}'.format(r.hodl_units).rstrip('0').rstrip('.') }}</td><td data-private="money">{{ '{:,.8f}'.format(r.core_units).rstrip('0').rstrip('.') }}</td><td data-private="money">{{ '{:,.8f}'.format(r.exchange_units).rstrip('0').rstrip('.') }}</td><td data-private="money">{{ '${:,.8f}'.format(r.price).rstrip('0').rstrip('.') }}</td><td data-private="money">{{ '${:,.2f}'.format(r.value) }}</td><td data-private="money">{{ '{:.8f}'.format(r.value/btc_reference_price) if btc_reference_price else 'N/D' }}</td><td>{{ '%.2f%%'|format(r.weight*100) }}</td><td>{{ '%.2f%%'|format(r.target*100) }}</td><td>{{ '%+.2f'|format(r.drift_pp) }}</td><td><span class="port-status {{ r.status if r.status in ['INFRA','SOBRE','NEUTRAL'] else 'NEUTRAL' }}" data-status="{{ r.status if r.status in ['INFRA','SOBRE','NEUTRAL'] else 'NEUTRAL' }}">{{ r.status if r.status in ['INFRA','SOBRE','NEUTRAL'] else 'NEUTRAL' }}</span></td></tr>{% endfor %}</tbody>
+  <tfoot><tr><td>TOTAL</td><td colspan="5">Cripto + USDT físico</td><td data-private="money">{{ '${:,.2f}'.format(spot.total) if spot else 'N/D' }}</td><td data-private="money">{{ '{:.8f}'.format(btc_total) if btc_total is not none else 'N/D' }}</td><td colspan="4">100% manga cripto excluye USDT</td></tr></tfoot></table></div>
   {% else %}<div class="port-empty"><strong>Datos Spot no disponibles</strong>Se requiere la valoración verificable de los 12 tokens.</div>{% endif %}
   <div class="port-summary-columns">
     <div><small>USDT operativo</small><strong data-private="money">{{ '${:,.2f}'.format(spot.liquidity) if spot else 'N/D' }}</strong></div>
     <div><small>Reserva Trading QF</small><strong data-private="money">{{ '${:,.2f}'.format(spot.trading) if spot else 'N/D' }}</strong></div>
     <div><small>Costo abierto cripto</small><strong data-private="money">{{ '${:,.2f}'.format(pnl_report.cost_open_usdt) if pnl_report and pnl_report.cost_open_usdt is not none else 'N/D' }}</strong></div>
   </div>
-  <details data-bsi-summary="informative"><summary>BTC Strength Index (BSI) · referencia histórica, no señal SELL</summary>
-    <p class="port-foot">BSI SELL bloqueado hasta certificar baseline/HWM; las lecturas archivadas no equivalen a indicadores en tiempo real.</p>
-    {% if bsi_archive %}<div class="port-archived-bsi">{% for r in bsi_archive.rows %}<span>{{ r.token }}: {{ '%+.2f'|format(r.bsi) if r.bsi is not none else 'N/D' }}%</span>{% endfor %}</div>{% else %}<p class="port-foot">Archivo BSI no disponible.</p>{% endif %}
-  </details>
-  <details><summary>Composición histórica por segmentos · detalle contable</summary><div class="port-table-scroll"><table class="port-followup-table"><thead><tr><th>Segmento</th><th class="num">Objetivo USDT</th><th class="num">Registrado histórico</th><th class="num">Desviación pp</th></tr></thead><tbody>{% for s in segments %}{% set drift=(s.actual_usdt-s.target_usdt)/base*100 %}<tr><td>{{ s.name }}</td><td class="num">{{ '${:,.2f}'.format(s.target_usdt) }}</td><td class="num">{{ '${:,.2f}'.format(s.actual_usdt) }}</td><td class="num">{{ '%+.1f'|format(drift) }}</td></tr>{% endfor %}</tbody></table></div><p class="port-foot">{{ source_note }}. Lost no es saldo. Los datos históricos de 08_INTEGRAL son una referencia contable; no representan saldos Spot.</p></details>
   <p class="port-foot">El valor USDT físico ya incluye QF una sola vez. Equivalencia BTC = patrimonio total USDT / BTCUSDT Spot del mismo instante de consulta. No genera operaciones ni altera custodia.</p>
  </article>
 </div>
 </div>
-<script>
-(function(){
- 'use strict';
- let points={{ history_points|tojson }};
- let displayMode='percent';
- const formatMoney=value=>new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(value);
- const fmtDate=s=>s.slice(5);
- const rangeButtons=[...document.querySelectorAll('[data-history-range]')];
- const displayButtons=[...document.querySelectorAll('[data-history-display]')];
- let activeRange='30D';
- function filteredRange(){
-   if(!points.length)return [];
-   if(activeRange==='ALL')return points;
-   const latest=new Date(points[points.length-1].timestamp);
-   if(activeRange==='VTD')return points.filter(p=>new Date(p.timestamp).getUTCFullYear()===latest.getUTCFullYear());
-   const days={'7D':7,'30D':30,'90D':90}[activeRange]||30;
-   const cutoff=latest.getTime()-days*86400000;
-   return points.filter(p=>new Date(p.timestamp).getTime()>=cutoff);
- }
- function empty(container,title,msg){container.replaceChildren();const box=document.createElement('div');box.className='port-empty';const heading=document.createElement('strong');heading.textContent=title;box.append(heading,document.createTextNode(msg));container.append(box);}
- const ns='http://www.w3.org/2000/svg';
- function el(name,attrs={}){const node=document.createElementNS(ns,name);Object.entries(attrs).forEach(([k,v])=>node.setAttribute(k,String(v)));return node;}
- function chart(target,list,keys,colors,relative){
-   if(list.length<2){empty(target,'Historial insuficiente','Se requieren al menos dos cierres Spot diarios completos y homogéneos.');return;}
-   const W=820,H=245,L=69,R=15,T=18,B=34,sw=W-L-R,sh=H-T-B;
-   const series=keys.map(k=>list.map((p,i)=>relative?(p[k]/list[0][k]-1)*100:p[k]));
-   if(series.some(ar=>ar.some(v=>!Number.isFinite(v)))){empty(target,'Datos incompletos','La serie no permite construir una gráfica válida.');return;}
-   let low=Math.min(...series.flat()),high=Math.max(...series.flat());if(relative){low=Math.min(0,low);high=Math.max(0,high);}
-   if(high===low){high+=1;low-=1;}
-   const margin=(high-low)*.1;low-=margin;high+=margin;
-   const x=i=>L+sw*(i/(list.length-1));const y=v=>T+sh*(high-v)/(high-low);
-   const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img','aria-label':relative?'Variación hipotética de cartera fija (%)':'Revalorización histórica de cartera fija (USD)'});
-   for(let i=0;i<=4;i++){const v=low+(high-low)*i/4,yy=y(v);svg.append(el('line',{x1:L,y1:yy,x2:W-R,y2:yy,stroke:'currentColor','stroke-opacity':'.12'}));const label=el('text',{x:L-8,y:yy+4,'text-anchor':'end',fill:'currentColor','fill-opacity':'.55','font-size':'11'});label.textContent=relative?`${v.toFixed(1)}%`:formatMoney(v);svg.append(label);}
-   keys.forEach((key,n)=>{const color=colors[n],values=series[n];const d=values.map((v,i)=>`${i?'L':'M'}${x(i).toFixed(2)},${y(v).toFixed(2)}`).join(' ');svg.append(el('path',{d,stroke:color,'stroke-width':'3',fill:'none','stroke-linecap':'round','stroke-linejoin':'round'}));values.forEach((v,i)=>{const c=el('circle',{cx:x(i),cy:y(v),r:'3',fill:color});const title=el('title');title.textContent=`${list[i].day}: ${key} ${relative?v.toFixed(2)+'%':'US$'+formatMoney(v)}`;c.append(title);svg.append(c);});});
-   for(const index of [0,list.length-1]){const tx=el('text',{x:x(index),y:H-8,'text-anchor':index===0?'start':'end',fill:'currentColor','fill-opacity':'.6','font-size':'11'});tx.textContent=fmtDate(list[index].day);svg.append(tx);}
-   target.replaceChildren(svg);
- }
- function render(){
-   const subset=filteredRange();chart(document.getElementById('history-chart-surface'),subset,['total'],['#188fba'],displayMode==='percent');
- }
- rangeButtons.forEach(b=>b.addEventListener('click',()=>{activeRange=b.dataset.historyRange;rangeButtons.forEach(c=>c.setAttribute('aria-pressed',String(c===b)));render();}));
- displayButtons.forEach(b=>b.addEventListener('click',()=>{displayMode=b.dataset.historyDisplay;displayButtons.forEach(c=>c.setAttribute('aria-pressed',String(c===b)));render();}));
- fetch('/api/portfolio-repricing',{credentials:'same-origin',cache:'no-store'})
-   .then(async r=>{const data=await r.json();if(!r.ok||data.status!=='OK')throw new Error(data.reason||'Histórico MCP no disponible');return data;})
-   .then(data=>{points=data.points;
-     const n=document.getElementById('repricing-note');if(n)n.textContent='SIMULACIÓN RETROSPECTIVA · Inventario actual congelado, cierres Binance Spot 1D · '+data.days+' días completos (hasta '+data.last_closed_day+'). No son rendimientos reales ni flujos históricos.';
-     render();})
-   .catch(err=>{const n=document.getElementById('repricing-note');if(n)n.textContent='Historial MCP no disponible: '+err.message+'. No se inventan precios ni se sustituyen por cotizaciones actuales.';
-     if(points.length<2){empty(document.getElementById('history-chart-surface'),'Historial insuficiente','Sin 12 cierres MCP homogéneos.');}});
-})();
-</script>
 {% endblock %}

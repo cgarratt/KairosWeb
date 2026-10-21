@@ -75,7 +75,8 @@ def chart_section():
     source=(ROOT/'templates/portfolio_integral.html').read_text()
     start=source.index('<section class="port-card" data-portfolio-chart="unrealized">')
     end=source.index('</section>',start)+len('</section>')
-    return Environment(loader=FileSystemLoader(ROOT/'templates')).from_string(source[start:end])
+    macro=source[source.index('{% macro coin_tag'):source.index('<div class="port-page">')]
+    return Environment(loader=FileSystemLoader(ROOT/'templates')).from_string(macro+source[start:end])
 
 
 def test_chart_template_positive_negative_zero_and_fallback():
@@ -148,14 +149,15 @@ def test_portfolio_approved_four_row_layout():
     first=html[rows[0]:rows[1]]
     assert first.index('data-capital-chart="donut"')<first.index('data-allocation-chart="13"')
     second=html[rows[1]:rows[2]]
-    assert second.index('data-history-chart="returns"')<second.index('data-portfolio-chart="unrealized"')
+    assert second.index('data-bsi-chart="archived"')<second.index('data-portfolio-chart="unrealized"')
     third=html[rows[2]:rows[3]]
     assert third.index('data-category-chart="tier"')<third.index('data-composition-chart="tokens"')
     assert 'data-portfolio-executive="12"' in html[rows[3]:]
     assert 'data-tracking-chart="portfolio"' not in html
-    assert 'data-history-display="percent"' in html
-    assert 'history_points|tojson' in html
-    assert 'Historial insuficiente' in html
+    assert 'data-history-chart' not in html
+    assert '/api/portfolio-repricing' not in html
+    assert 'data-bsi-summary="informative"' not in html
+    assert '<details' not in html
 
 
 def test_template_full_render_with_certified_sample_and_missing_values():
@@ -163,22 +165,28 @@ def test_template_full_render_with_certified_sample_and_missing_values():
     tokens='BTC ETH SOL LINK HYPE HBAR SUI ONDO PUMP PLUME VIRTUAL PEPE'.split()
     rows=[{'token':t,'units':1.0,'price':i+1.0,'avg_cost':i+.5,
            'value':i+1.0,'weight':(i+1)/78,'target':.05,'tier':('T1' if i<5 else 'T2' if i<10 else 'T3'),
-           'hodl_units':0.,'core_units':0.,'exchange_units':1.,'drift_pp':0.} for i,t in enumerate(tokens)]
+           'hodl_units':0.,'core_units':0.,'exchange_units':1.,'drift_pp':([-2.0,0.0,4.0][i%3]),'status':(['INFRA','NEUTRAL','SOBRE'][i%3])} for i,t in enumerate(tokens)]
     ctx={'g':SimpleNamespace(kairos_state={'control':{'fecha_corte':'2026-10-19'}}),
          'base':150000.0,'segments':[{'key':'hodl_core','actual_usdt':100000.0,'target_usdt':100000.0,'name':'HODL + Core'},
                                     {'key':'lost','actual_usdt':50000.0,'target_usdt':50000.0,'name':'Lost'}],
          'spot':{'total':sum(r['value'] for r in rows)+200,'liquidity':100,'trading':100},
          'spot_observed':'2026-10-21T11:00:00Z','pnl_report':summarize_unrealized(rows),
          'allocation':portfolio_allocation(rows,200),'categories':category_allocation(rows),
-         'portfolio_rows':rows,'btc_total':278.,'btc_reference_price':1.,'bsi_archive':None,'history_points':[],
-         'history_note':'Sin historia', 'source_note':'Master publicado'}
+         'portfolio_rows':rows,'btc_total':278.,'btc_reference_price':1.,
+         'bsi_archive':{'rows':[{'token':'SOL','bsi':-8.92},{'token':'PLUME','bsi':6.36}], 'sample_close_utc':'2026-10-18T00:00:00Z'},'source_note':'Master publicado'}
     env=Environment(loader=FileSystemLoader(ROOT/'templates'))
     template=(ROOT/'templates/portfolio_integral.html').read_text()
     region=template[template.index('<div class="port-page">'):template.index('{% endblock %}',template.index('<div class="port-page">'))]
-    markup=env.from_string(region).render(**ctx)
+    macro=template[template.index('{% macro coin_tag'):template.index('<div class="port-page">')]
+    markup=env.from_string(macro+region).render(**ctx)
     assert 'data-allocation-token="USDT"' in markup
     assert markup.count('data-allocation-token=')==13
     assert markup.count('data-pnl-token=')==12
+    assert markup.count('data-status=')==12
+    assert all(f'data-status="{x}"' in markup for x in ('SOBRE','INFRA','NEUTRAL'))
+    assert markup.count('data-bsi-token=')==2
+    assert markup.count('class="port-coin"')>=25
+    assert '<details' not in markup
     assert 'Seguimiento del portafolio' in markup
     assert 'id="btc-portfolio-total"' in markup
     assert '₿ 278.00000000' in markup
@@ -225,9 +233,9 @@ def test_fixed_basket_does_not_fabricate_missing_or_incoherent_candles():
 
 def test_historical_scenario_not_written_to_pri_and_orders_source_separated():
     source=(ROOT/'app.py').read_text()
-    assert "@app.route('/api/portfolio-repricing')" in source
+    assert "@app.route('/api/portfolio-repricing')" not in source
     assert "'_REPRICING_CACHE'" not in source  # no disk cache or synthetic database
-    assert "snapshot_id']==snapshot_id" in source
+    assert 'build_fixed_basket_history' not in source
     assert "stage='Estructura semanal MCP'" in source
     assert 'structural_note=' in source
     assert "stage='Balance de portafolio'" in source
