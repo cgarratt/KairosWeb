@@ -21,16 +21,18 @@ from fastmcp import Client
 from wave_macro_context import resolve as resolve_weekly_wave_context, resolve_long_term_buy
 from forecast_fibo_policy import defaults_from_master
 from werkzeug.local import LocalProxy
+from werkzeug.exceptions import HTTPException
 from google_sheets_master import get_state, SheetDataError, public_failure_code, cache_status as sheet_cache_status
 from hype_weekly import aggregate_weeks, HypeHistoryError
 from portfolio_unrealized import summarize_unrealized
+from custody_balancer import compare_custody, CustodyError
 from kairos_sheets_features import (
     unread_alerts, mark_alert_read, mark_all_alerts_read, settings_data, prepare_changes,
     save_changes, SettingsError, _remote_data as _unused_remote_marker
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.18'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.21'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -599,23 +601,26 @@ def build_mode_payload(slug, d, observed):
         }
 
     if slug == 'ventas':
+        stage1=PARAMETERS.get('SALES_STAGE_1',{})
+        stage2=PARAMETERS.get('SALES_STAGE_2',{})
+        if stage1.get('value')!='SELL_SOBRE_EXCHANGE_FREE_FIRST' or stage1.get('status')!='APROBADO' or stage2.get('value')!='SELL_REST_MINIMIZE_SQUARED_PP_DRIFT' or stage2.get('status')!='APROBADO_SIMULACION':
+            raise SheetDataError('VENTAS: etapa 2 optimizada aún no aprobada en MASTER')
         p=d['total_value']; cash=d['usdt_total']
         custody=SNAPSHOT['custody_core_blocked__core_strategic__exchange']
         sell_tokens=[]
         # Todos los activos no-BTC son potenciales fuentes de venta una vez agotados los sobreponderados.
         # El inventario disponible se limita a Exchange confirmado por snapshot, no a Core/HODL.
         for r in d['rows']:
-            if r['token']=='BTC':
-                continue
+            # BTC appears in the weights comparator; optimizer sets hard SELL cap=0.
             key='PUMPFUN' if r['token']=='PUMP' else r['token']
             exch=max(0.0,float(custody.get(key,[0,0,0])[2]))
             value=max(0.0,exch*r['price'])
             excess=max(0.0,(r['weight']-r['target'])*d['crypto_value'])
             sell_tokens.append({'token':r['token'],'price':r['price'],'weight':r['weight'],
                                 'target':r['target'],'exchange_units':exch,
-                                'max_usdt':min(excess,value), 'free_exchange_usdt':value,
+                                'units':r['units'],'tier':r['tier'],'max_usdt':min(excess,value), 'free_exchange_usdt':value,
                                 'overweight':r['drift_pp']>band})
-        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],'kind':'ventas','current':{'P':p,'cash':cash,'cash_pct':d['usdt_pct']*100,'floor':approved_numeric('STRUCTURAL_USDT_TARGET')*p,'max_percent':max(100*policy_numeric('SLIDER_MAX_SIMULATED_USDT_TARGET',{'APROBADO_SIMULACION'}),d['usdt_pct']*100)},'tokens':sell_tokens, 'notes':['Solo SELL; BTC NEVER SELL. No se altera Core/HODL.','Slider hasta la meta simulada configurada en Google Sheets; 40% no es límite del simulador.','Inventario referencial de Exchange; usuario declara 0 órdenes y 0 fills pendientes, sin certificación remota del exchange.']}
+        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],'kind':'ventas','current':{'P':p,'cash':cash,'cash_pct':d['usdt_pct']*100,'floor':approved_numeric('STRUCTURAL_USDT_TARGET')*p,'max_percent':max(100*policy_numeric('SLIDER_MAX_SIMULATED_USDT_TARGET',{'APROBADO_SIMULACION'}),d['usdt_pct']*100),'default_percent':100*approved_numeric('ORDINARY_DEFAULT_USDT_TARGET'),'trading':d['trading_reserve'],'band_pp':band},'tokens':sell_tokens, 'notes':['Solo SELL; BTC NEVER SELL. No se altera Core/HODL.','Slider hasta la meta simulada configurada en Google Sheets; 40% no es límite del simulador.','Inventario referencial de Exchange; usuario declara 0 órdenes y 0 fills pendientes, sin certificación remota del exchange.']}
         needed = max(0.0, usdt_gap)
         sell_rows=[]
         for r in sellable_over:
@@ -879,6 +884,15 @@ def balancer_report(d, observed):
     # Indicative ONLY; actual commitments and reserved bags are not reconciled.
     theoretical_ceiling=max(0,min(excess,residual_after_bags,reserve+excess))
     band=approved_numeric('DRIFT_BAND_PP')
+    # Custody Balancer: published 02_POSICIONES + 04_CUSTODIA, unit-only calculation.
+    # The comparison does not assume orders filled or any custody transfer.
+    custody_positions = {
+        ('PUMPFUN' if r['token']=='PUMP' else r['token']): {
+            'tier':r['tier'], 'units':r['units'], 'hodl':r['hodl_units'],
+            'core':r['core_units'], 'exchange':r['exchange_units']
+        } for r in d['rows']
+    }
+    custody_comparison = compare_custody(custody_positions, g.kairos_state['custody_policy'])
     buy_candidates=[r for r in rows if r['drift_pp'] < -band]
     sell_candidates=[r for r in rows if r['drift_pp'] > band and r['token']!='BTC']
     tokens_to_exchange={k:float(v[2]) for k,v in SNAPSHOT['custody_core_blocked__core_strategic__exchange'].items()}
@@ -917,6 +931,7 @@ def balancer_report(d, observed):
         {'label':'Meta estructural USDT','value':fmt_money(floor),'help':'Protección de liquidez','tone':'neutral'},
         {'label':'Reserva Balancer estimada','value':fmt_money(reserve),'help':'USDT menos 25% P de presupuesto compras y Reserva Trading, sin límite 40%','tone':'warn'},
         {'label':'Reserva Trading','value':fmt_money(trading),'help':'Reserva separada Quantfury; incluida en USDT físico','tone':'primary'}],
+      'custody_comparison':custody_comparison,
       'buys':buy_preview,'sells':sale_preview,'buy_total':buy_total,'sell_total':sale_total,
       'buy_with_sales':[{'token':r['token'],'value':projected_cash_capacity*(r['target']-r['weight'])/weight_deficit if weight_deficit else 0} for r in buy_candidates],
       'buy_chart':[{'token':r['token'],'actual':r['weight']*100,'post':buy_weights[r['token']]*100,'target':r['target']*100} for r in buy_candidates],
@@ -998,6 +1013,16 @@ def mode_page(slug):
         return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master=APP_VERSION), 503
     try:
         payload = build_mode_payload(slug, dashboard, observed)
+        if slug == 'ventas':
+            override=request.args.get('usdt_pct')
+            if override is not None:
+                try:
+                    override=float(override)
+                    if not math.isfinite(override) or not 0<=override<=100:
+                        raise ValueError('porcentaje fuera de rango')
+                except (ValueError, TypeError):
+                    abort(400, description='Objetivo de USDT inválido: usar 0–100%')
+                payload['current']['requested_percent']=override
         # All four simulation modes receive the same read-only wave reference.
         # A slider can modify a scenario, never the Master-confirmed wave price.
         payload['wave_pivots']=g.kairos_state['wave_pivots']
@@ -1006,6 +1031,8 @@ def mode_page(slug):
         payload['confirmed_pivot_count']=sum(1 for rec in payload['wave_pivots'].values()
                for wave in rec['waves'].values() if wave['status']=='CONFIRMADO')
         return render_template('balancer.html' if slug=='balancer' else 'trade_sim.html' if slug in ('compras','ventas') else 'forecast.html' if slug=='forecast' else 'tradingbot.html' if slug=='tradingbot' else 'mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master=APP_VERSION)
+    except HTTPException:
+        raise
     except Exception as exc:
         error_id = uuid.uuid4().hex[:10]
         app.logger.exception('Kairos MODE_RENDER slug=%s ID=%s',slug,error_id)
@@ -1466,6 +1493,10 @@ def _deployed_asset_status():
         'buy_custom_fibo_weights': ('static/purchase_weights.js', ('function rebalance(', 'function normalize(', 'function asFractions(', 'function waterfall(', 'function validateDraft(')),
         'buy_slider_percent_available': ('templates/trade_sim.html', ('Capital para compras (% de USDT disponible)', 'budgetFromAvailablePercent(target,maxBuyCash)', 'Llenado secuencial: primero C1, luego C2, C3 y C4')),
         'buy_waterfall_fixed_percentages': ('static/purchase_weights.js', ('function waterfall(budget,maximum,percentages)', 'function budgetFromAvailablePercent(percent,maximum)', 'function validateDraft(rawValues)')),
+        'sales_optimizer_engine': ('static/sales_optimizer.js', ('function calculate(items,physicalCash,targetPct,bandPp,qf=0)', 'const stage1=', 'const stage2Amount=', 'TARGET_REACHED', 'CAPACITY_LIMITED')),
+        'sales_optimizer_ui': ('templates/trade_sim.html', ('KairosSalesOptimizer.calculate(', 'sell-weight-body', 'sell-plan-status', 'requested_percent')),
+        'balancer_custody_engine': ('custody_balancer.py', ('def compare_custody(', "'ideal_nominal'", "'ideal_feasible'", "'transfer_count'")),
+        'balancer_custody_ui': ('templates/balancer.html', ('id="custody-balancer"', 'Ideal nominal (uds.)', 'Movimientos propuestos', 'payload.custody_comparison')), 
         'buy_custom_fibo_ui': ('templates/trade_sim.html', ('id="fibo-split-reset"', 'id="fibo-split-apply"', 'refreshFiboDraft', 'showFiboControls();paint();')),
         'forecast_elliott_table': ('templates/forecast.html', ('Simulación - Ondas Elliott', '<th>O5 (SH3)</th>')),
         'orders_simple_filters': ('templates/ordenes.html', ('Backlog de Ordenes Compra / Venta','id="orders-venue"','id="orders-tier"','id="orders-side"','id="orders-token"')),

@@ -24,7 +24,7 @@
 <div class="grid">
 <section class="panel span-12 hero"><div><h2>{{ mode.name }}</h2><p>{{ mode.description }}</p></div><div class="badge info">SIMULACIÓN · SIN ÓRDENES</div></section>
 {% include '_wave_confirmed.html' %}
-<section class="panel span-12"><h2>{{ 'Despliegue USDT · retrocesos semanales' if mode.slug=='compras' else 'Objetivo de liquidez USDT' }}</h2><p class="sub">{{ 'P1 admite PROPUESTO, VALIDADO y CONFIRMADO para simular; P2 es el máximo semanal cerrado posterior. Solo compras a INFRA; USDT no asignado permanece en caja.' if mode.slug=='compras' else 'Mover el slider vende primero activos sobreponderados y luego distribuye proporcionalmente entre los demás, hasta el límite de Exchange.' }}</p>
+<section class="panel span-12"><h2>{{ 'Despliegue USDT · retrocesos semanales' if mode.slug=='compras' else 'Objetivo de liquidez USDT' }}</h2><p class="sub">{{ 'P1 admite PROPUESTO, VALIDADO y CONFIRMADO para simular; P2 es el máximo semanal cerrado posterior. Solo compras a INFRA; USDT no asignado permanece en caja.' if mode.slug=='compras' else 'Etapa 1: vender SOBRE primero. Etapa 2: optimizar las desviaciones de pesos hasta alcanzar el porcentaje USDT indicado, con topes de Exchange/Tier. BTC NEVER SELL.' }}</p>
 <div class="sim-layout{{ ' purchase-metrics' if mode.slug=='compras' else '' }}" style="margin:18px 0">
 <div class="sim-metric"><small>◉ Patrimonio estimado</small><b id="portfolio-metric">—</b><small>Spot MCP + snapshot</small></div>
 <div class="sim-metric"><small>◈ USDT físico</small><b id="cash-metric">—</b><small id="cash-pct">—</small></div>
@@ -35,8 +35,8 @@
 <div class="sim-metric"><small>{{ '◇ Compra simulada' if mode.slug=='compras' else '◇ Ventas simuladas' }}</small><b id="allocation-metric">—</b><small id="allocation-caption">{{ 'Presupuesto definido por el slider, no compra ejecutada' if mode.slug=='compras' else 'Solo escenario, no orden' }}</small></div>
 </div>
 <div class="control-panel"><div class="sim-panel-title"><strong>{{ 'Capital para compras (% de USDT disponible)' if mode.slug=='compras' else 'Liquidez objetivo (% del patrimonio P)' }}</strong><strong id="slider-value" style="font-size:23px;color:#1657a7">—</strong></div>
-<input id="allocation-slider" type="range" aria-label="{{ 'Porcentaje de USDT disponible para compras' if mode.slug=='compras' else 'Porcentaje de liquidez objetivo' }}" min="{{ 0 if mode.slug=='compras' else payload.current.cash_pct }}" max="{{ 100 if mode.slug=='compras' else payload.current.max_percent }}" step="{{ 0.1 if mode.slug=='compras' else 'any' }}" value="{{ 100 if mode.slug=='compras' else ([payload.current.cash_pct,40]|max) }}">
-<div style="display:flex;justify-content:space-between;gap:12px" class="sub"><span>{{ '0% · USDT $0' if mode.slug=='compras' else ('%.2f%% USDT actual'|format(payload.current.cash_pct)) }}</span><span>{{ '100% = Máximo disponible:' if mode.slug=='compras' else '70% USDT objetivo máximo' }} {% if mode.slug=='compras' %}<strong id="max-buy-slider">—</strong>{% endif %}</span></div>
+<input id="allocation-slider" type="range" aria-label="{{ 'Porcentaje de USDT disponible para compras' if mode.slug=='compras' else 'Porcentaje de liquidez objetivo' }}" min="0" max="{{ 100 if mode.slug=='compras' else payload.current.max_percent }}" step="{{ 0.1 if mode.slug=='compras' else 'any' }}" value="{{ 100 if mode.slug=='compras' else payload.current.requested_percent|default(payload.current.default_percent) }}">
+<div style="display:flex;justify-content:space-between;gap:12px" class="sub"><span>{{ '0% · USDT $0' if mode.slug=='compras' else '0% · No se venden activos si la caja actual supera la meta' }}</span><span>{{ '100% = Máximo disponible:' if mode.slug=='compras' else '100% objetivo teórico (sujeto a Exchange)' }} {% if mode.slug=='compras' %}<strong id="max-buy-slider">—</strong>{% endif %}</span></div>
 {% if mode.slug=='compras' %}<p class="sub" style="margin-top:10px">Capital seleccionado (% de USDT disponible) para Compras: <strong id="selected-buy-budget">—</strong> · Llenado secuencial: primero C1, luego C2, C3 y C4.</p>{% endif %}
 </div>
 </section>
@@ -63,8 +63,8 @@
 </section>
 {% endif %}
 {% if mode.slug=='ventas' %}
-<section class="panel span-12"><h2>Candidatos SELL</h2><p class="sub">Ordenados por exceso de peso; BTC excluido. Límites de Exchange declarados, sin descontar órdenes pendientes.</p>
-<div style="overflow-x:auto"><table><thead><tr><th>Token</th><th>% Actual</th><th>% Objetivo</th><th>% Post-venta</th><th>Exchange ud.</th><th>USDT estimado</th><th>Unidades SELL</th><th>Acción</th></tr></thead><tbody id="sim-body"></tbody><tfoot id="sim-foot" style="font-weight:800;background:#eaf3ff;border-top:2px solid #91b7e9"></tfoot></table></div></section>
+<section class="panel span-12"><h2>Candidatos SELL</h2><p class="sub">Órdenes en prioridad: SOBRE primero, después balance optimizado. BTC excluido. Cupo de cada token: min(Exchange libre, límite acumulado del Tier). Escenario sin órdenes reales.</p><p class="sub" id="sell-plan-status" role="status"></p>
+<div style="overflow-x:auto"><table><thead><tr><th>Prioridad / Fase</th><th>Token</th><th>% Actual</th><th>% Objetivo</th><th>% Post-venta</th><th>Exchange ud.</th><th>USDT estimado</th><th>Unidades SELL</th><th>Acción</th></tr></thead><tbody id="sim-body"></tbody><tfoot id="sim-foot" style="font-weight:800;background:#eaf3ff;border-top:2px solid #91b7e9"></tfoot></table></div><h3>Pesos antes / objetivo / después (12 tokens)</h3><div style="overflow-x:auto"><table><thead><tr><th>Token</th><th>% Antes</th><th>% Objetivo</th><th>% Después</th><th>Desviación final</th><th>USDT venta total</th></tr></thead><tbody id="sell-weight-body"></tbody></table></div></section>
 {% endif %}
 
 </div>
@@ -72,6 +72,7 @@
 <script src="{{ url_for('static', filename='o2_sequential.js') }}?v={{ master }}"></script>
 <script src="{{ url_for('static', filename='purchase_weights.js') }}?v={{ master }}"></script>
 <script src="{{ url_for('static', filename='forecast_level_status.js') }}?v={{ master }}"></script>
+<script src="{{ url_for('static', filename='sales_optimizer.js') }}?v={{ master }}"></script>
 <script>
 const mode={{ payload.kind|tojson }};
 const o2Weights={{ payload.forecast_o2_allocation|default([0,60,40,0])|tojson }};
@@ -188,41 +189,25 @@ if(mode==='compras'){
   const forecastPatrimonyPercent=P>0?100*referenceCapacity/P:0;
   el('forecast-detail-link').href='/mode/forecast?deploy='+encodeURIComponent(forecastPatrimonyPercent.toFixed(4));
 }else{
-  const desired=Math.max(0,P*target/100-cash);
-  // Etapa 1: vender sobreponderados hasta el menor entre su exceso y el Exchange libre declarado.
-  const firstCaps=source.tokens.map(x=>x.overweight?Math.min(x.max_usdt,x.free_exchange_usdt):0);
-  const stage1=distribute(desired,source.tokens.map((x,i)=>({...x,phase1:firstCaps[i]})),'phase1');
-  const phase1Sum=stage1.reduce((a,b)=>a+b,0);
-  const remaining=Math.max(0,desired-phase1Sum);
-  // Etapa 2: solo el resto de tokens inicialmente no sobreponderados; ventas proporcionales
-  // a los pesos objetivo entre los que todavía tienen capacidad Exchange.
-  // Si faltase más, se admite capacidad Exchange restante de los sobreponderados,
-  // manteniendo la misma ponderación objetivo para diluir de forma ordenada.
-  const stage2=Array(source.tokens.length).fill(0);
-  function allocateProportional(amount,indices){
-    let left=amount;let count=0;
-    while(left>0.000001 && count++<source.tokens.length+2){
-      const eligible=indices.filter(i=>source.tokens[i].free_exchange_usdt-stage1[i]-stage2[i]>0.000001);
-      if(!eligible.length)break;
-      const denom=eligible.reduce((s,i)=>s+source.tokens[i].target,0);
-      if(denom<=0)break;
-      const shares=eligible.map(i=>({i,room:source.tokens[i].free_exchange_usdt-stage1[i]-stage2[i],share:left*source.tokens[i].target/denom}));
-      let filled=0;
-      for(const v of shares){const take=Math.min(v.room,v.share);stage2[v.i]+=take;filled+=take;}
-      if(filled<0.000001)break;
-      left-=filled;
-    }
-    return left;
-  }
-  let unmet=allocateProportional(remaining,source.tokens.map((x,i)=>!x.overweight?i:-1).filter(i=>i>=0));
-  if(unmet>0.000001)unmet=allocateProportional(unmet,source.tokens.map((x,i)=>x.overweight?i:-1).filter(i=>i>=0));
-  allocated=source.tokens.map((x,i)=>stage1[i]+stage2[i]);
-  const sum=allocated.reduce((a,b)=>a+b,0);after=cash+sum;
-  el('third-metric').textContent=dollar(P*target/100)+' ('+target.toFixed(1)+'%)';el('allocation-metric').textContent=dollar(sum);
-  // Sin alteración del cálculo de ventas.
-  const crypto=P-cash;const cryptoAfter=crypto-sum;
-  el('sim-foot').innerHTML=`<tr><td colspan="5">TOTAL VENTAS USDT</td><td>${dollar(sum)}</td><td>—</td><td>SIMULACIÓN</td></tr>`;
-  el('sim-body').innerHTML=source.tokens.map((x,i)=>{let a=allocated[i],action=a>0?'SELL · SIMULAR':'HOLD';let newValue=x.weight*crypto-a;let post=cryptoAfter>0?100*newValue/cryptoAfter:null;return `<tr><td>${token(x.token)}</td><td>${(100*x.weight).toFixed(1)}%</td><td>${(100*x.target).toFixed(1)}%</td><td><b>${post===null?'N/D':post.toFixed(1)+'%'}</b></td><td data-private="units">${quantity(x.exchange_units)}</td><td><b>${dollar(a)}</b></td><td data-private="units">${quantity(a/x.price)}</td><td><span class="sim-actions ${a?'sell':'watch'}">${action}</span></td></tr>`}).join('')||'<tr><td colspan="8">Sin activos con Exchange vendible.</td></tr>';
+  const sim=window.KairosSalesOptimizer.calculate(source.tokens,cash,target,source.current.band_pp,source.current.trading);
+  allocated=sim.positions.map(x=>x.sell_usdt);
+  const sum=sim.total_usdt;after=sim.cash_after;
+  el('third-metric').textContent=dollar(P*target/100)+' ('+target.toFixed(1)+'%)';
+  el('allocation-metric').textContent=dollar(sum);
+  el('allocation-caption').textContent='Etapa 1 '+dollar(sim.stage1_usdt)+' · Etapa 2 '+dollar(sim.stage2_usdt);
+  el('sell-plan-status').textContent=sim.status==='TARGET_REACHED'
+     ? 'Objetivo alcanzado (simulado). No se ejecutaron órdenes.'
+     : 'Objetivo NO alcanzable con Exchange/Tier. USDT faltante: '+dollar(sim.unmet_usdt)+'. No se vende custodia protegida.';
+  el('sim-foot').innerHTML=`<tr><td colspan="6">TOTAL VENTAS USDT</td><td>${dollar(sum)}</td><td>—</td><td>SIMULACIÓN</td></tr>`;
+  const byToken=Object.fromEntries(sim.positions.map(x=>[x.token,x]));
+  el('sell-weight-body').innerHTML=sim.positions.map(x=>{const drift=x.after_pct-x.target_pct;
+     const classification=drift>source.current.band_pp?'SOBRE':drift < -source.current.band_pp?'INFRA':'NEUTRAL';
+     return `<tr><td>${token(x.token)}</td><td>${x.before_pct.toFixed(2)}%</td><td>${x.target_pct.toFixed(2)}%</td><td><b>${x.after_pct.toFixed(2)}%</b></td><td>${drift.toFixed(2)} pp · ${classification}</td><td>${dollar(x.sell_usdt)}</td></tr>`;
+  }).join('');
+  el('sim-body').innerHTML=sim.orders.map(order=>{
+    const x=source.tokens.find(x=>x.token===order.token),p=byToken[order.token];
+    return `<tr><td><b>${order.priority} · E${order.stage}</b></td><td>${token(order.token)}</td><td>${p.before_pct.toFixed(2)}%</td><td>${p.target_pct.toFixed(2)}%</td><td><b>${p.after_pct.toFixed(2)}%</b></td><td data-private="units">${quantity(x.exchange_units)}</td><td><b>${dollar(order.usdt)}</b></td><td data-private="units">${quantity(order.units)}</td><td><span class="sim-actions sell">SELL · SIMULAR</span></td></tr>`;
+  }).join('')||'<tr><td colspan="9">Sin ventas necesarias o sin activos elegibles.</td></tr>';
 }
 let max=Math.max(1,...allocated);el('alloc-chart').innerHTML=source.tokens.map((x,i)=>`<div class="bar-row"><div class="bar-label">${token(x.token)}</div><div class="bar-track"><div class="bar-fill ${mode==='ventas'?'danger':'ok'}" style="width:${100*allocated[i]/max}%"></div></div><div class="bar-value">${dollar(allocated[i])}</div></div>`).join('')||'<span class="muted">Sin candidatos</span>';
 el('before-cash').textContent=dollar(cash)+' ('+(100*cash/P).toFixed(1)+'%)';el('after-cash').textContent=dollar(after)+' ('+(100*after/P).toFixed(1)+'%)';el('before-bar').style.width=cap(100*cash/P,0,100)+'%';el('after-bar').style.width=cap(100*after/P,0,100)+'%';}

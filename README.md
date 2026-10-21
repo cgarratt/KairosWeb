@@ -1,42 +1,44 @@
-# KairosWeb v2.0.18 — Release completo para GitHub
+# KairosWeb v2.0.19 — RELEASE PARA GITHUB / RENDER
 
-**Versión aplicación:** `2.0.18` · **Schema Google Sheets:** `5.0.0` sin cambios · **Fuente de datos operativos:** Google Sheets ORIGINAL PUBLICADO y MCP Spot; nunca ZIP, capturas ni archivos locales como balances o precios.
+**Aplicación:** `2.0.19` · **Google Sheets schema:** `5.0.0` · **Motor KairosGPT compatible:** v1.3.5.
 
-## Novedad desde v2.0.17 — Semáforo de peso post-compra
+## Novedades acumuladas sobre KairosWeb v2.0.18
 
-En **Compras → Maestro de Precios - Retrocesos Fibo**, el fondo de cada grupo de tres celdas (Precio Fib, % Peso, USDT) se activa **únicamente si ese token recibe al menos un centavo de USDT en la compra simulada del tramo**:
+1. **Ventas ordinarias (2 etapas)**: primera etapa vende tokens SOBRE de forma secuencial; segunda etapa minimiza la suma de desviaciones cuadráticas entre pesos cripto finales y targets al distribuir el faltante de USDT. No confundir con Ventas O3/O5.
+2. **Objetivo dinámico USDT**: `Kairos Ventas` usa 40% por defecto en el Master `ORDINARY_DEFAULT_USDT_TARGET`; `/mode/ventas?usdt_pct=55` o el deslizador permiten un porcentaje explícito de 0% a 100%, sin modificar el default. Meta no alcanzable = mostrar faltante y `CAPACITY_LIMITED`.
+3. **Restricciones duras**: BTC NEVER SELL; Exchange libre y órdenes SELL reservadas; límites acumulados T1 30% / T2 70% / T3 100%; HODL/Core protegidos; QF contado una sola vez. No hay creación/cancelación de órdenes, ni fills supuestos ni transferencias.
+4. **UI**: lista de ventas ordenadas con fase, unidades y USDT, y tabla de los 12 tokens con peso antes / objetivo / después. El selector de porcentaje funciona independientemente de los sliders de Compras.
+5. **Portafolio**: se libera el gráfico de resultado no realizado de la anterior DEV; usa unidades y costos del Master y precios del MCP, sin mezclar pérdidas realizadas históricas ni USDT.
+6. **Se preserva v2.0.18**: semáforo de peso post-compra en Precio / %Peso / USDT Fibonacci, y módulos de Compras, Forecast, Pivotes, Alertas y Órdenes fase 1.
 
-- **Verde:** desviación del peso cripto **post-compra** frente a su objetivo `>= 0 pp` (alcanza o supera target).
-- **Ámbar:** `-1 pp <= desviación < 0 pp` (ligeramente bajo target).
-- **Rojo:** `desviación < -1 pp` (aún bajo target por más de 1 punto porcentual).
-- **Sin color:** asignación que se muestra como USDT `$0.00`, N/D, tramo no comprable o valoración no disponible.
+## Fuentes y gates
 
-La desviación se calcula en **puntos porcentuales**: `100 × (peso post-compra en fracción − target en fracción)`. La clasificación cromática **NO utiliza más** el mínimo histórico post-P2; no cambia la disponibilidad de pivotes P1/P2 ni sus semáforos de estado. Mover el slider y aplicar porcentajes C1–C4 vuelve a calcular colores, pesos y compras.
+- Fuente única de saldos/custodia/parámetros: Google Sheets ORIGINAL `KAIROS_V5_MASTER`, ID `1_tG5FK_u0biVZm2iXaK6fJi1enBYJYLAG6txkpTgsy8`. Sólo snapshot `PUBLICADO`, schema 5.0.0. No usar ZIP/capturas para cotizaciones o inventario.
+- Mercado: MCP Binance Spot (12 tokens); macro HYPE con Hyperliquid Spot HYPE/USDC. No sustituir precios faltantes.
+- Ventas requiere `SALES_STAGE_1=SELL_SOBRE_EXCHANGE_FREE_FIRST` (APROBADO), `SALES_STAGE_2=SELL_REST_MINIMIZE_SQUARED_PP_DRIFT` (APROBADO_SIMULACION), `ORDINARY_DEFAULT_USDT_TARGET` (APROBADO) y `SLIDER_MAX_SIMULATED_USDT_TARGET` (APROBADO_SIMULACION).
+- No se han alterado inventarios ni configuraciones del Master durante la **creación de este ZIP**.
 
-## Funciones conservadas
+## Publicar en GitHub / Render
 
-- Slider `0–100%` del USDT físico disponible **menos reserva QF una sola vez**; cupos máximos en O2C1→O2C4 con waterfall secuencial.
-- Porcentajes C1–C4 editables y aplicables sólo cuando suman exactamente 100%; restaurar porcentajes desde el Master sin escribir sobre él.
-- Compras **sólo INFRA**, máximo déficit/target por token, reevaluación por tramo; caja no asignada permanece en USDT.
-- Órdenes fase 1: backlog, filtro de Nivel, importes de compra y unidades venta cuando existe base aprobada; sin ejecución remota.
-- Forecast protege pivotes VALIDADO/CONFIRMADO; Ventas ordinarias no filtra por pivotes; BTC NEVER SELL y custodia HODL/Core protegida.
+1. Extraer el ZIP **en la raíz del repositorio de KairosWeb**; el contenido se encuentra en la raíz, no en un subdirectorio adicional. Reemplazar los archivos por estos manteniendo las variables de entorno existentes. **No añadir credenciales ni subir `.env`.**
+2. Revisar diferencias, hacer commit y desplegar Render. Este ZIP no ejecuta git push, no crea un GitHub Release y no redepliega por sí mismo.
+3. Comprobar `/health`: `service=KairosWeb`, `version=2.0.21`, `status=UP`, `release_assets.consistent=true` y checks `sales_optimizer_engine`, `sales_optimizer_ui`, `portfolio_unrealized_chart`.
+4. Abrir `/mode/ventas` y `/mode/ventas?usdt_pct=55`; comprobar el porcentaje solicitado, prioridades y el comparativo. Confirmar que no hay órdenes reales creadas.
+5. Confirmar `/portfolio` y el gráfico de resultado no realizado; verificar Compras, Forecast, Pivotes y Órdenes fase 1.
 
-## Instalación y verificación
+## Verificación local
 
-1. Descomprimir el contenido del ZIP en el repositorio GitHub, conservando las rutas. Hacer commit y desplegar en Render. No subir secretos.
-2. Visitar `/health`, verificar `version: 2.0.18`, `status: UP`, `release_assets.consistent: true` y controles `buy_postweight_semaphore`, `buy_postweight_color_ui`.
-3. En Compras, probar slider `0%, 50%, 100%`; verificar que las compras de `USDT $0.00` no tengan color, y que sólo las que reciben USDT se iluminen en Precio/% Peso/USDT según su desviación **post-compra** (pp).
-4. Verificar que P1/P2 siguen mostrando estados, editor C1–C4 sigue respondiendo y Ventas/Forecast/Órdenes no cambian inesperadamente.
-5. Para HYPE verificar conectividad independiente con Hyperliquid Spot HYPE/USDC en Render. Los tests locales no certifican endpoints de producción.
+- `python -m pytest -q` sobre el release extraído.
+- `node tests/test_sales_optimizer.js` y tests JS adicionales incluidos.
+- `SHA256SUMS.txt` / `RELEASE_MANIFEST_v2.0.19.json` permiten comprobar integridad de archivos del ZIP, excluyendo sus propios metadatos.
 
-**Seguridad:** no se publican pivotes ni cambia el Master desde este ZIP; sin fills ni órdenes reales. El release tiene menos de 100 archivos e incluye manifiesto de integridad SHA-256.
+**Límite:** menos de 100 archivos; se omiten algunos tests de regresión antiguos del paquete distribuible para mantener ese límite (pero se ejecutaron en el checkout completo). Los fuentes de aplicación y assets no se han eliminado.
+
+## Balancer 2.0.20 · Custodia
+
+Tabla actual/ideal/factible de unidades HODL, Core y Exchange más propuestas manuales Exchange→HODL/Core. Sin transfers automáticos.
 
 
-## DESARROLLO ACUMULATIVO (NO RELEASE) · Resultado no realizado en Portafolio
-- La pestaña Portafolio muestra un gráfico divergente por los 12 tokens: ganancias en verde y pérdidas en rojo.
-- Resultado no realizado = unidades actuales de 02_POSICIONES × (Spot Binance MCP - costo medio registrado).
-- Total en USDT y porcentaje sobre costo abierto; no suma las pérdidas realizadas, el efectivo USDT ni posiciones históricas cerradas.
-- Si no hay Spot MCP, la página histórica sigue accesible y el gráfico presenta N/D, nunca datos de un ZIP/captura.
-- Si falta costo verificable en un token con unidades, el total es N/D (no se inventa cero).
-- Código nuevo: portfolio_unrealized.py y tests/test_portfolio_unrealized.py; /health verifica ambos.
-- Basado en KairosWeb v2.0.18; NO cambia la versión productiva, el Master o las órdenes.
+## Release 2.0.21 · Hotfix compatibilidad Balancer
+
+Incluye el módulo de custodia 2.0.20 y corrige el renderizado de Balancer cuando clientes o pruebas entregan payloads anteriores sin `custody_comparison`. El panel de custodia solo se muestra cuando hay datos conciliados; el resto de Balancer permanece disponible. No ejecuta transferencias ni modifica el MASTER.
