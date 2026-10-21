@@ -1,6 +1,6 @@
-# KairosWeb v2.0.19 — RELEASE PARA GITHUB / RENDER
+# KairosWeb v2.0.22 — RELEASE PARA GITHUB / RENDER
 
-**Aplicación:** `2.0.19` · **Google Sheets schema:** `5.0.0` · **Motor KairosGPT compatible:** v1.3.5.
+**Aplicación:** `2.0.22` · **Google Sheets schema:** `5.0.0` · **Motor KairosGPT compatible:** v1.3.6.
 
 ## Novedades acumuladas sobre KairosWeb v2.0.18
 
@@ -22,15 +22,15 @@
 
 1. Extraer el ZIP **en la raíz del repositorio de KairosWeb**; el contenido se encuentra en la raíz, no en un subdirectorio adicional. Reemplazar los archivos por estos manteniendo las variables de entorno existentes. **No añadir credenciales ni subir `.env`.**
 2. Revisar diferencias, hacer commit y desplegar Render. Este ZIP no ejecuta git push, no crea un GitHub Release y no redepliega por sí mismo.
-3. Comprobar `/health`: `service=KairosWeb`, `version=2.0.21`, `status=UP`, `release_assets.consistent=true` y checks `sales_optimizer_engine`, `sales_optimizer_ui`, `portfolio_unrealized_chart`.
+3. Comprobar `/health`: `service=KairosWeb`, `version=2.0.22`, `status=UP`, `release_assets.consistent=true` y checks `sales_optimizer_engine`, `sales_optimizer_ui`, `portfolio_unrealized_chart`.
 4. Abrir `/mode/ventas` y `/mode/ventas?usdt_pct=55`; comprobar el porcentaje solicitado, prioridades y el comparativo. Confirmar que no hay órdenes reales creadas.
-5. Confirmar `/portfolio` y el gráfico de resultado no realizado; verificar Compras, Forecast, Pivotes y Órdenes fase 1.
+5. Confirmar `/mode/portafolio` y el gráfico de resultado no realizado; verificar Compras, Forecast, Pivotes y Órdenes fase 1.
 
 ## Verificación local
 
 - `python -m pytest -q` sobre el release extraído.
 - `node tests/test_sales_optimizer.js` y tests JS adicionales incluidos.
-- `SHA256SUMS.txt` / `RELEASE_MANIFEST_v2.0.19.json` permiten comprobar integridad de archivos del ZIP, excluyendo sus propios metadatos.
+- `SHA256SUMS.txt` / `RELEASE_MANIFEST_v2.0.22.json` permiten comprobar integridad de archivos del ZIP, excluyendo sus propios metadatos.
 
 **Límite:** menos de 100 archivos; se omiten algunos tests de regresión antiguos del paquete distribuible para mantener ese límite (pero se ejecutaron en el checkout completo). Los fuentes de aplicación y assets no se han eliminado.
 
@@ -42,3 +42,11 @@ Tabla actual/ideal/factible de unidades HODL, Core y Exchange más propuestas ma
 ## Release 2.0.21 · Hotfix compatibilidad Balancer
 
 Incluye el módulo de custodia 2.0.20 y corrige el renderizado de Balancer cuando clientes o pruebas entregan payloads anteriores sin `custody_comparison`. El panel de custodia solo se muestra cuando hay datos conciliados; el resto de Balancer permanece disponible. No ejecuta transferencias ni modifica el MASTER.
+
+
+## Release 2.0.22 · Nuevo layout de Portafolio
+
+- Cuatro filas tras los KPI: (1) capital histórico / allocation 13 componentes, (2) rentabilidad histórica / PnL no realizado por token, (3) categoría T1–T3 / composición 12 tokens, (4) seguimiento del portafolio.
+- Gráficos actuales consumen el MASTER PUBLICADO y MCP Spot; el histórico solo utiliza observaciones completas y verificables en `21_PRI_HISTORIAL`. Hasta que existan al menos dos observaciones completas, las curvas permanecen en **Historial insuficiente**. No se crean series sintéticas.
+- Comparación histórica de valor no equivale a rentabilidad real ajustada por depósitos/retiros; PnL histórico N/D sin serie de costos de cada fecha.
+- Ver `RELEASE_NOTES_v2.0.22.md`, `/health` (marcadores `portfolio_layout_v2022`, `portfolio_allocation_v2022`) y `/mode/portafolio`.

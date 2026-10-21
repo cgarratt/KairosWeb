@@ -1,101 +1,164 @@
 {% extends 'base.html' %}
-{% block title %}Kairos · Portafolio integral{% endblock %}
-{% block head %}<style>
-.integral-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}.integral-stat{padding:20px;background:#f3f7ff;border:1px solid #dce6f5;border-radius:16px}.integral-stat span{display:block;font-size:13px;color:#617089}.integral-stat strong{display:block;margin-top:9px;font-size:25px;color:#184885}.integral-stat.loss strong{color:#c4465a}.integral-stat.good strong{color:#16876b}.integral-tracks{display:flex;flex-direction:column;gap:14px;margin-top:14px}.integral-track{display:grid;grid-template-columns:125px 1fr 110px;align-items:center;gap:10px}.integral-bars{display:flex;flex-direction:column;gap:3px}.integral-bar-row{display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:8px;align-items:center}.integral-amount{font-size:12px;color:#435b79;white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}.integral-bar{height:12px;border-radius:4px;min-width:0}.integral-bar.target{background:#b5c8df}.integral-bar.actual{background:#3179cc}.integral-bar.loss{background:#cc526a}.integral-legend{display:flex;gap:18px;align-items:center;font-size:12px;color:#617089}.integral-legend i{width:12px;height:12px;display:inline-block;border-radius:3px;margin-right:4px}.integral-warning{background:#fff8e9;border:1px solid #f1ddb2;padding:14px;border-radius:12px;margin-top:20px;color:#755919;font-size:13px}.integral-grid{display:grid;grid-template-columns:7fr 5fr;gap:18px}.integral-donut-layout{display:grid;grid-template-columns:minmax(170px,220px) minmax(0,1fr);gap:18px;align-items:center;margin:18px auto 10px}.integral-donut{display:block;width:min(100%,220px);height:auto;margin:auto;overflow:visible}.integral-donut .integral-donut-base{fill:none;stroke:#d9e4f1;stroke-width:34}.integral-donut .integral-donut-sector{fill:none;stroke-width:34;stroke-linecap:butt;transition:stroke-width .15s}.integral-donut .integral-donut-sector:hover{stroke-width:40}.integral-donut-center{fill:#184885;font-size:20px;font-weight:800;text-anchor:middle;dominant-baseline:middle}.integral-donut-caption{fill:#617089;font-size:11px;text-anchor:middle;dominant-baseline:middle}.integral-donut-zero{font-size:12px;color:#617089}.integral-donut-layout .integral-breakdown{grid-template-columns:1fr}.integral-donut-layout .integral-breakdown-item{display:flex;align-items:center;justify-content:space-between;gap:8px}.integral-donut-layout .integral-breakdown-item strong{white-space:nowrap;font-variant-numeric:tabular-nums}.integral-donut-layout .integral-dot{flex:0 0 11px;margin-right:3px}:root[data-theme="dark"] .integral-donut-center{fill:#f2f6ff}:root[data-theme="dark"] .integral-donut-caption{fill:#b7c9e3}:root[data-theme="dark"] .integral-donut-base{stroke:#2b3e59}:root[data-theme="dark"] .integral-donut-layout .integral-breakdown-item{color:#e1ecff}.integral-breakdown{display:grid;grid-template-columns:1fr 1fr;gap:10px}.integral-breakdown-item{font-size:13px;color:#334257}.integral-dot{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:8px}.integral-table .num{text-align:right;font-variant-numeric:tabular-nums}.integral-table tfoot{background:#ebf3fd;font-weight:800}.integral-note{font-size:12px;color:#66768e;margin-top:12px}@media(max-width:900px){.integral-kpis{grid-template-columns:repeat(2,1fr)}.integral-grid{grid-template-columns:1fr}}@media(max-width:580px){.integral-donut-layout{grid-template-columns:1fr;gap:8px}.integral-donut{width:205px}.integral-kpis{grid-template-columns:1fr}.integral-track{grid-template-columns:95px 1fr 78px}}
-
-/* Live, read-only portfolio P&L: diverging horizontal bars, same order as Master. */
-.integral-pnl-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap}
-.integral-pnl-total{text-align:right;font-size:clamp(23px,2.5vw,34px);font-weight:800;font-variant-numeric:tabular-nums}
-.integral-pnl-total small{display:block;font-size:13px;font-weight:500;color:var(--muted);margin-top:3px}
-.integral-pnl-positive{color:#128468}.integral-pnl-negative{color:#ce425c}.integral-pnl-zero{color:var(--muted)}
-.integral-pnl-scroller{overflow-x:auto;max-width:100%;margin-top:18px}
-.integral-pnl-plot{min-width:525px;display:grid;gap:5px}
-.integral-pnl-row{display:grid;grid-template-columns:100px minmax(0,1fr) 105px;gap:12px;align-items:center;min-height:31px}
-.integral-pnl-token{font-size:13px;font-weight:750;color:var(--text)}
-.integral-pnl-track{position:relative;display:grid;grid-template-columns:1fr 1fr;align-items:center;height:24px;background:linear-gradient(90deg,transparent 49.85%,var(--line) 49.85%,var(--line) 50.15%,transparent 50.15%)}
-.integral-pnl-half{display:flex;align-items:center;height:21px}
-.integral-pnl-half.loss{justify-content:flex-end}
-.integral-pnl-half.gain{justify-content:flex-start}
-.integral-pnl-bar{height:20px;min-width:2px;border-radius:3px;display:block}
-.integral-pnl-bar.loss{background:#d24962}
-.integral-pnl-bar.gain{background:#16876d}
-.integral-pnl-number{font-size:13px;font-weight:750;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.integral-pnl-legend{display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:12px;margin-top:16px}
-.integral-pnl-legend i{width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:5px;vertical-align:middle}
-.integral-pnl-info{color:var(--muted);font-size:12px;line-height:1.55;margin-top:16px}
-:root[data-theme="dark"] .integral-pnl-positive{color:#41d9ad}
-:root[data-theme="dark"] .integral-pnl-negative{color:#ff8294}
-@media(max-width:640px){.integral-pnl-total{text-align:left}.integral-pnl-row{grid-template-columns:70px minmax(0,1fr) 100px;gap:6px}}
-</style>{% endblock %}
+{% block title %}Kairos | Portafolio{% endblock %}
+{% block head %}
+<style>
+/* KairosWeb v2.0.22 | Portafolio: four approved rows after KPI cards */
+.port-page{--port-border:var(--line,#dce6f5);--port-ink:var(--text,#122b54);--port-sub:var(--muted,#647994);--port-surface:var(--panel,#fff)}
+.port-page .port-hero{display:flex;align-items:start;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:4px 2px 18px}
+.port-page .port-hero h2{font-size:clamp(24px,3vw,35px);margin:0;color:var(--port-ink)}
+.port-page .port-hero p{margin:4px 0;color:var(--port-sub);font-size:12px}
+.port-tag{padding:7px 12px;border-radius:18px;color:#215b9d;background:#e8f2ff;font-size:11px;font-weight:700;max-width:100%;word-wrap:break-word}
+.port-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin-bottom:13px}
+.port-kpi{padding:15px 18px;background:var(--port-surface);border:1px solid var(--port-border);border-radius:14px;min-width:0}
+.port-kpi small{display:block;font-size:11px;font-weight:750;color:var(--port-sub);text-transform:uppercase;letter-spacing:.03em}
+.port-kpi strong{display:block;font-size:clamp(18px,2.1vw,28px);line-height:1.2;margin:6px 0;font-variant-numeric:tabular-nums;color:var(--port-ink);overflow-wrap:anywhere}
+.port-kpi strong.negative{color:#d9435e}.port-kpi strong.positive{color:#12966f}
+.port-kpi span{display:block;color:var(--port-sub);font-size:11px}
+.port-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin-bottom:13px;align-items:stretch}
+.port-page .port-card{margin:0;padding:19px;min-width:0;border:1px solid var(--port-border);background:var(--port-surface);border-radius:15px;box-shadow:0 4px 17px rgba(24,61,98,.035);overflow:hidden}
+.port-card-head{display:flex;justify-content:space-between;align-items:start;gap:14px;flex-wrap:wrap;margin-bottom:11px}
+.port-card h3{font-size:17px;color:var(--port-ink);margin:0}.port-card p.sub{font-size:12px;margin:3px 0 0;color:var(--port-sub)}
+.port-donut-layout{display:grid;grid-template-columns:minmax(155px,245px) minmax(0,1fr);gap:13px;align-items:center;min-height:238px}
+.port-donut{width:min(100%,238px);height:auto;margin:0 auto;display:block;overflow:visible}
+.port-donut .integral-donut-base{fill:none;stroke:#d9e5f3;stroke-width:34}
+.port-donut .integral-donut-sector{fill:none;stroke-width:34;stroke-linecap:butt;transition:stroke-width .15s}
+.port-donut .integral-donut-sector:hover{stroke-width:39}
+.integral-donut-center{font-weight:800;font-size:16px;text-anchor:middle;dominant-baseline:middle;fill:var(--port-ink)}
+.integral-donut-caption{text-anchor:middle;dominant-baseline:middle;font-size:10px;fill:var(--port-sub)}
+.port-legend{display:grid;gap:5px;min-width:0}.port-legend-item{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:center;font-size:11px;color:var(--port-ink);border-bottom:1px solid var(--port-border);padding:3px 0}
+.port-legend-item .port-legend-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.port-legend-item .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}.port-legend-item strong{font-variant-numeric:tabular-nums;white-space:nowrap}
+.port-legend-scroll{max-height:274px;overflow:auto;scrollbar-width:thin}.port-legend-item.heading{color:var(--port-sub);font-weight:700}
+.port-badge{padding:4px 7px;border-radius:8px;background:#edf4fd;font-size:11px;color:#2d6198}
+.port-controls{display:flex;gap:5px;flex-wrap:wrap;align-items:center}.port-control{border:1px solid var(--port-border);background:var(--port-surface);color:var(--port-sub);border-radius:7px;padding:5px 8px;font-size:11px;cursor:pointer}.port-control[aria-pressed=true]{background:#1466cb;color:#fff;border-color:#1466cb}
+.port-chart-surface{height:244px;position:relative}.port-chart-surface svg{width:100%;height:100%;display:block}
+.port-empty{min-height:185px;display:flex;align-items:center;justify-content:center;text-align:center;flex-direction:column;padding:20px;background:var(--surface-secondary,rgba(123,157,201,.055));border:1px dashed var(--port-border);border-radius:12px;color:var(--port-sub);font-size:12px;line-height:1.6}
+.port-empty strong{font-size:15px;color:var(--port-ink);margin-bottom:5px}
+.port-foot{font-size:10px;color:var(--port-sub);line-height:1.55;margin-top:9px}
+.integral-pnl-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.integral-pnl-total{font-size:clamp(17px,2.2vw,23px);font-weight:800;text-align:right;font-variant-numeric:tabular-nums}
+.integral-pnl-total small{display:block;font-size:11px;font-weight:500;color:var(--port-sub);margin-top:3px}
+.integral-pnl-positive{color:#168f6b}.integral-pnl-negative{color:#d24962}.integral-pnl-zero{color:var(--port-sub)}
+.integral-pnl-scroller{max-height:280px;overflow:auto}.integral-pnl-plot{min-width:380px;display:grid;gap:2px}.integral-pnl-row{display:grid;grid-template-columns:64px minmax(0,1fr) 70px;gap:7px;align-items:center;min-height:21px}
+.integral-pnl-token{font-size:11px;font-weight:700}.integral-pnl-track{display:grid;grid-template-columns:1fr 1fr;height:17px;background:linear-gradient(90deg,transparent 49.8%,#92a5c1 49.8%,#92a5c1 50.2%,transparent 50.2%)}
+.integral-pnl-half{display:flex;align-items:center;height:17px}.integral-pnl-half.loss{justify-content:flex-end}.integral-pnl-half.gain{justify-content:flex-start}.integral-pnl-bar{display:block;height:12px;min-width:1px;border-radius:2px}.integral-pnl-bar.loss{background:#d24962}.integral-pnl-bar.gain{background:#18a886}.integral-pnl-number{font-weight:700;font-size:11px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.integral-pnl-legend{display:flex;gap:13px;flex-wrap:wrap;margin-top:9px;font-size:10px;color:var(--port-sub)}
+.integral-pnl-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px}
+.integral-pnl-info{color:var(--port-sub);font-size:10px;line-height:1.45;margin-top:11px}
+.port-tier-chart,.port-token-chart{display:flex;align-items:flex-end;justify-content:space-around;gap:12px;height:235px;border-bottom:1px solid var(--port-border);padding:22px 4px 0;position:relative}
+.port-tier-col,.port-token-col{flex:1;min-width:0;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}
+.port-tier-bars,.port-token-bars{height:175px;display:flex;align-items:end;justify-content:center;gap:6px;width:100%}
+.port-tier-bar,.port-token-bar{width:min(36%,36px);border-radius:4px 4px 0 0;min-height:1px;position:relative;background:#267ce5}
+.port-tier-bar.target,.port-token-bar.target{background:#cad6e6}
+.port-tier-col small,.port-token-col small{font-size:10px;color:var(--port-sub);white-space:nowrap}.port-tier-col strong,.port-token-col strong{font-size:10px;color:var(--port-ink);font-weight:800}
+.port-chart-key{display:flex;gap:13px;justify-content:flex-end;flex-wrap:wrap;font-size:10px;color:var(--port-sub)}
+.port-chart-key i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:4px}
+.port-table-scroll{overflow:auto}.port-followup-table{width:100%;font-size:11px}.port-followup-table .num{text-align:right;font-variant-numeric:tabular-nums}
+.port-current-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:12px}.port-current-metrics strong{display:block;color:var(--port-ink);font-size:17px;font-variant-numeric:tabular-nums}.port-current-metrics small{display:block;color:var(--port-sub);font-size:10px}
+.port-page details{margin-top:14px}.port-page details summary{cursor:pointer;color:#1e64a6;font-size:12px;font-weight:700}
+:root[data-theme="dark"] .port-tag,:root[data-theme="dark"] .port-badge{background:#203650;color:#add1fd}:root[data-theme="dark"] .port-donut .integral-donut-base{stroke:#29445d}
+@media(max-width:1080px){.port-donut-layout{grid-template-columns:1fr}.port-donut{width:205px}.port-legend-scroll{max-height:160px}}
+@media(max-width:820px){.port-pair{grid-template-columns:1fr}.port-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.port-donut-layout{grid-template-columns:minmax(160px,220px) minmax(0,1fr)}.port-legend-scroll{max-height:270px}}
+@media(max-width:540px){.port-kpis{gap:7px}.port-kpi{padding:11px}.port-kpi strong{font-size:19px}.port-page .port-card{padding:13px}.port-donut-layout{grid-template-columns:1fr}.port-legend-scroll{max-height:180px}.port-pair{gap:8px}.port-token-chart{min-width:620px}.port-token-scroller{overflow:auto}.integral-pnl-plot{min-width:355px}.port-chart-surface{height:225px}}
+</style>
+{% endblock %}
 {% block content %}
-<div class="grid">
-<section class="panel span-12 hero"><div><h2>Portafolio integral</h2><p>Capital histórico · asignación estratégica · pérdidas realizadas</p></div><span class="badge info">● SNAPSHOT HISTÓRICO</span></section>
-<section class="span-12"><div class="integral-kpis">
-<div class="integral-stat"><span>Capital base histórico</span><strong>{{ '${:,.0f}'.format(base) }}</strong></div>
-<div class="integral-stat good"><span>Capital vivo declarado</span><strong>{{ '${:,.0f}'.format(alive) }}</strong></div>
-<div class="integral-stat loss"><span>Pérdidas realizadas acumuladas</span><strong>{{ '${:,.0f}'.format(lost) }}</strong></div>
-<div class="integral-stat"><span>Patrimonio Spot estimado</span><strong>{{ '${:,.0f}'.format(spot.total) if spot else 'Sin datos MCP' }}</strong><span>Cripto + USDT, sin pérdidas realizadas</span></div><div class="integral-stat"><span>Recuperación necesaria</span><strong>{{ '%.1f%%'|format(gain_to_recover) if gain_to_recover is not none else 'N/D' }}</strong><span>Ganancia sobre capital vivo hasta base histórica</span></div></div></section>
-<section class="panel span-12" data-portfolio-chart="unrealized">
-  <div class="integral-pnl-head">
-    <div>
-      <h3>Resultado no realizado por token</h3>
-      <p class="sub">Valor Spot menos costo abierto · posiciones vigentes · USDT</p>
-    </div>
-    {% if pnl_report and pnl_report.total_usdt is not none %}
-    <div class="integral-pnl-total {{ 'integral-pnl-positive' if pnl_report.total_usdt > 0 else 'integral-pnl-negative' if pnl_report.total_usdt < 0 else 'integral-pnl-zero' }}" data-private="money">
-      {{ '{:+,.2f}'.format(pnl_report.total_usdt) }} USDT
-      <small>{{ '{:+.2f}%'.format(pnl_report.total_pct) if pnl_report.total_pct is not none else 'N/D' }} sobre costo abierto</small>
-    </div>
-    {% else %}
-    <div class="integral-pnl-total integral-pnl-zero">N/D<small>{{ 'Spot MCP no disponible' if not pnl_report else 'Costos incompletos: total no verificable' }}</small></div>
-    {% endif %}
-  </div>
-  {% if pnl_report %}
-    <div class="integral-pnl-scroller">
-      <div class="integral-pnl-plot" aria-label="Resultados no realizados por token">
-        {% for item in pnl_report["items"] %}
-        <div class="integral-pnl-row" data-pnl-token="{{ item.token }}">
-          <span class="integral-pnl-token">{{ item.token }}</span>
-          <div class="integral-pnl-track" aria-label="{{ item.token }}: {{ '{:+,.2f}'.format(item.pnl_usdt) if item.pnl_usdt is not none else 'N/D' }} USDT">
-            <div class="integral-pnl-half loss">{% if item.pnl_usdt is not none and item.pnl_usdt < 0 %}<span class="integral-pnl-bar loss" style="width:{{ item.bar_pct }}%"></span>{% endif %}</div>
-            <div class="integral-pnl-half gain">{% if item.pnl_usdt is not none and item.pnl_usdt > 0 %}<span class="integral-pnl-bar gain" style="width:{{ item.bar_pct }}%"></span>{% endif %}</div>
-          </div>
-          <span class="integral-pnl-number {{ 'integral-pnl-positive' if item.pnl_usdt is not none and item.pnl_usdt > 0 else 'integral-pnl-negative' if item.pnl_usdt is not none and item.pnl_usdt < 0 else 'integral-pnl-zero' }}" data-private="money">{{ ('{:+,.0f}'.format(item.pnl_usdt)) if item.pnl_usdt is not none else 'N/D' }}</span>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
-    <div class="integral-pnl-legend"><span><i style="background:#16876d"></i>Ganancia no realizada</span><span><i style="background:#d24962"></i>Pérdida no realizada</span><span>Línea central = 0 USDT</span></div>
-    <p class="integral-pnl-info">Fuente: 02_POSICIONES del Master PUBLICADO + Spot Binance MCP{{ ' · Observación: ' ~ spot_observed if spot_observed else '' }}. Suma sobre costo promedio × unidades actuales; no incluye USDT físico ni pérdidas realizadas históricas. No acredita ventas, fills ni rentabilidad realizada.{% if pnl_report.missing_tokens %} Sin costo/precio verificable: {{ pnl_report.missing_tokens|join(', ') }}; no se imputa USDT $0.{% endif %}</p>
-  {% else %}
-    <p class="integral-pnl-info">Datos MCP no disponibles. No se calcula P&L con precios de capturas o archivos históricos.</p>
-  {% endif %}
-</section>
-<section class="span-12"><div class="integral-grid">
-<article class="panel"><h3>Objetivo vs. distribución registrada</h3><p class="sub">Comparación en USD; las pérdidas realizadas no constituyen un activo.</p><div class="integral-legend"><span><i style="background:#b5c8df"></i>Objetivo</span><span><i style="background:#3179cc"></i>Actual</span></div><div class="integral-tracks">{% for s in segments %}<div class="integral-track"><strong style="font-size:13px">{{ s.name }}</strong><div class="integral-bars"><div class="integral-bar-row"><div class="integral-bar target" style="width:{{ s.target_usdt/base*100 }}%"></div><span class="integral-amount">{{ '${:,.0f}'.format(s.target_usdt) }}</span></div><div class="integral-bar-row"><div class="integral-bar {{ 'loss' if s.key=='lost' else 'actual' }}" style="width:{{ s.actual_usdt/base*100 }}%"></div><span class="integral-amount">{{ '${:,.0f}'.format(s.actual_usdt) }}</span></div></div><div style="text-align:right;font-weight:700;font-size:13px">{{ '%.1f%%'|format(s.actual_usdt/base*100) }}</div></div>{% endfor %}</div><p class="integral-note">Longitud de barra basada en el capital histórico total; porcentaje a la derecha sobre US$150,000.</p></article>
-<article class="panel"><h3>Composición del capital histórico</h3><p class="sub">Capital vigente y pérdidas realizadas, sin doble contabilización.</p>
-{% set colors=['#174a99','#397ac9','#27a88c','#e7a047','#c74a64'] %}
-{% set donut_circumference=452.389342 %}
-{% set donut_acc=namespace(distance=0.0) %}
-<div class="integral-donut-layout" data-capital-chart="donut">
-  <svg class="integral-donut" viewBox="0 0 220 220" role="img" aria-label="Composición del capital histórico: {% for s in segments %}{{ s.name }} {{ '%.1f'|format(s.actual_usdt/base*100) }} por ciento{% if not loop.last %}; {% endif %}{% endfor %}">
-    <circle class="integral-donut-base" cx="110" cy="110" r="72"/>
-    <g transform="rotate(-90 110 110)">
-      {% for s in segments %}
-      {% set arc=(s.actual_usdt / base * donut_circumference) if base > 0 else 0 %}
-      {% if arc > 0 %}<circle class="integral-donut-sector" data-segment="{{ s.key }}" cx="110" cy="110" r="72" stroke="{{ colors[loop.index0] }}" stroke-dasharray="{{ '%.5f'|format(arc) }} {{ '%.5f'|format(donut_circumference) }}" stroke-dashoffset="{{ '%.5f'|format(-donut_acc.distance) }}"><title>{{ s.name }}: {{ '${:,.2f}'.format(s.actual_usdt) }} · {{ '%.1f%%'|format(s.actual_usdt/base*100) }}</title></circle>{% endif %}
-      {% set donut_acc.distance = donut_acc.distance + arc %}
-      {% endfor %}
-    </g>
-    <text class="integral-donut-caption" x="110" y="96">Capital histórico</text>
-    <text class="integral-donut-center" x="110" y="114">{{ '${:,.0f}'.format(base) }}</text>
-    <text class="integral-donut-caption" x="110" y="135">USD · total</text>
-  </svg>
-  <div class="integral-breakdown" aria-label="Leyenda de composición">
-   {% for s in segments %}<div class="integral-breakdown-item"><span><i class="integral-dot" style="background:{{ colors[loop.index0] }}"></i>{{ s.name }}</span><strong>{{ '%.1f%%'|format(s.actual_usdt/base*100) }}</strong></div>{% endfor %}
-  </div>
-</div></article>
-</div></section>
-<section class="panel span-12"><h3>Seguimiento del portafolio integral</h3><p class="sub">Desviación expresada en puntos porcentuales sobre el capital base.</p><div style="overflow:auto"><table class="integral-table"><thead><tr><th>Segmento</th><th class="num">Objetivo USDT</th><th class="num">Objetivo %</th><th class="num">Capital vivo registrado</th><th class="num">Valor Spot USDT</th><th class="num">% registrado / 150k</th><th class="num">Desviación</th><th>Estado</th></tr></thead><tbody>{% for s in segments %}{% set drift=(s.actual_usdt-s.target_usdt)/base*100 %}<tr><td><strong>{{ s.name }}</strong></td><td class="num">{{ '${:,.2f}'.format(s.target_usdt) }}</td><td class="num">{{ '%.1f%%'|format(s.target_usdt/base*100) }}</td><td class="num">{{ '—' if s.key=='lost' else '${:,.2f}'.format(s.actual_usdt) }}</td><td class="num">{% if s.key=='lost' %}No es activo{% elif spot %}{{ '${:,.2f}'.format(spot['core' if s.key=='hodl_core' else 'exchange' if s.key=='exchange' else 'liquidity' if s.key=='liquidity' else 'trading']) }}{% else %}N/D{% endif %}</td><td class="num">{{ '%.1f%%'|format(s.actual_usdt/base*100) }}</td><td class="num" style="color:{{ '#b73954' if drift < -1 or s.key=='lost' else '#158365' }}">{{ '%+.1f pp'|format(drift) }}</td><td>{{ 'PÉRDIDA REALIZADA' if s.key=='lost' else ('BAJO OBJETIVO' if drift < -1 else ('SOBRE OBJETIVO' if drift > 1 else 'EN RANGO')) }}</td></tr>{% endfor %}</tbody><tfoot><tr><td>TOTAL</td><td class="num">{{ '${:,.2f}'.format(total_target) }}</td><td class="num">100%</td><td class="num">{{ '${:,.2f}'.format(alive) }} vivo</td><td class="num">{{ '${:,.2f}'.format(spot.total) if spot else 'N/D' }}</td><td class="num">{{ '%.1f%%'|format(total_recorded/base*100) }}</td><td class="num">0.0 pp</td><td>REFERENCIA</td></tr></tfoot></table></div><div class="integral-warning"><strong>Lectura contable:</strong> Lost corresponde a pérdidas realizadas en Spot y/o futuros; se presenta para conciliación del capital histórico, pero no se suma al patrimonio vivo. Capital inicial US$150,000; capital vivo registrado US$109,045; valor Spot recalculado cuando el MCP esté disponible. La pérdida realizada US$40,955 está excluida de la columna Spot. Esta página usa los importes de referencia declarados y no reemplaza la valoración Spot del Dashboard operativo.</div><p class="integral-note">{{ source_note }} · El cálculo de recuperación supone que el capital base permanece US$150,000 y no hay aportes/retiros adicionales.</p></section>
+<div class="port-page">
+<header class="port-hero"><div><h2>KAIROS | PORTAFOLIO</h2><p>Inventario publicado: {{ g.kairos_state['control']['fecha_corte'] }} · Spot MCP: {{ spot_observed or 'N/D' }}</p></div><span class="port-tag">SOLO LECTURA · MASTER PUBLICADO 5.0.0</span></header>
+<div class="port-kpis" data-layout-region="kpis">
+ <div class="port-kpi"><small>Valor total</small><strong data-private="money">{{ '${:,.2f}'.format(spot.total) if spot else 'N/D' }}</strong><span>Cripto + USDT físico</span></div>
+ <div class="port-kpi"><small>Resultado no realizado</small><strong data-private="money" class="{{ 'negative' if pnl_report and pnl_report.total_usdt is not none and pnl_report.total_usdt < 0 else 'positive' if pnl_report and pnl_report.total_usdt is not none else '' }}">{{ '{:+,.2f}'.format(pnl_report.total_usdt) if pnl_report and pnl_report.total_usdt is not none else 'N/D' }}</strong><span>{{ ('%.2f%% sobre costo abierto'|format(pnl_report.total_pct)) if pnl_report and pnl_report.total_pct is not none else 'Requiere Spot y costos completos' }}</span></div>
+ <div class="port-kpi"><small>Liquidez física</small><strong data-private="money">{{ '${:,.2f}'.format(spot.liquidity+spot.trading) if spot else 'N/D' }}</strong><span>QF incluido una sola vez</span></div>
+ <div class="port-kpi"><small>Presupuesto O2C2</small><strong data-private="money" class="positive">{{ '${:,.2f}'.format(o2c2_reference) if o2c2_reference is not none else 'N/D' }}</strong><span>Referencia teórica · sin orden</span></div>
 </div>
+<!-- Fila 1: donut histórico, donut allocation 12 tokens + USDT -->
+<div class="port-pair" data-layout-row="1">
+ <article class="port-card" data-capital-chart="donut"><div class="port-card-head"><div><h3>Composición del capital histórico</h3><p class="sub">Capital vigente y pérdidas realizadas, sin doble contabilización.</p></div></div>
+ {% set colors=['#174a99','#397ac9','#27a88c','#e7a047','#c74a64'] %}{% set circumference=452.389342 %}{% set acc=namespace(distance=0.0) %}
+ <div class="port-donut-layout"><svg class="port-donut" viewBox="0 0 220 220" role="img" aria-label="Composición del capital histórico"><circle class="integral-donut-base" cx="110" cy="110" r="72"/><g transform="rotate(-90 110 110)">{% for s in segments %}{% set arc=(s.actual_usdt/base*circumference) if base else 0 %}{% if arc>0 %}<circle class="integral-donut-sector" data-segment="{{ s.key }}" cx="110" cy="110" r="72" stroke="{{ colors[loop.index0] }}" stroke-dasharray="{{ '%.5f'|format(arc) }} {{ circumference }}" stroke-dashoffset="{{ '%.5f'|format(-acc.distance) }}"><title>{{ s.name }} · {{ '%.1f%%'|format(s.actual_usdt/base*100) }}</title></circle>{% endif %}{% set acc.distance=acc.distance+arc %}{% endfor %}</g><text class="integral-donut-caption" x="110" y="96">Capital histórico</text><text class="integral-donut-center" x="110" y="114">{{ '${:,.0f}'.format(base) }}</text><text class="integral-donut-caption" x="110" y="134">USDT · base</text></svg>
+ <div class="port-legend">{% for s in segments %}<div class="port-legend-item"><span class="port-legend-name"><i class="dot" style="background:{{ colors[loop.index0] }}"></i>{{ s.name }}</span><strong>{{ '%.1f%%'|format(s.actual_usdt/base*100) }}</strong><strong data-private="money">{{ '${:,.0f}'.format(s.actual_usdt) }}</strong></div>{% endfor %}</div></div>
+ <p class="port-foot">08_INTEGRAL: referencia de capital histórico; LOST no se agrega al patrimonio vivo.</p>
+ </article>
+ <article class="port-card" data-allocation-chart="13"><div class="port-card-head"><div><h3>Allocation por token (incluye USDT)</h3><p class="sub">Distribución actual del patrimonio completo · datos Spot.</p></div></div>
+ {% if allocation %}{% set aacc=namespace(distance=0.0) %}
+ <div class="port-donut-layout"><svg class="port-donut" viewBox="0 0 220 220" role="img" aria-label="Allocation de 12 activos y USDT"><circle class="integral-donut-base" cx="110" cy="110" r="72"/><g transform="rotate(-90 110 110)">{% for it in allocation['items'] %}{% set arc=it.pct/100*circumference %}{% if arc>0 %}<circle class="integral-donut-sector" data-allocation-token="{{ it.token }}" cx="110" cy="110" r="72" stroke="{{ it.color }}" stroke-dasharray="{{ '%.5f'|format(arc) }} {{ circumference }}" stroke-dashoffset="{{ '%.5f'|format(-aacc.distance) }}"><title>{{ it.token }}: {{ '${:,.2f}'.format(it.value) }} ({{ '%.2f'|format(it.pct) }}%)</title></circle>{% endif %}{% set aacc.distance=aacc.distance+arc %}{% endfor %}</g><text class="integral-donut-caption" x="110" y="96">Patrimonio actual</text><text class="integral-donut-center" x="110" y="114">{{ '${:,.0f}'.format(allocation.total) }}</text><text class="integral-donut-caption" x="110" y="134">USDT · total</text></svg>
+ <div class="port-legend port-legend-scroll" aria-label="Allocation desglosado por token"><div class="port-legend-item heading"><span>Token</span><span>%</span><span>USDT</span></div>{% for it in allocation['items'] %}<div class="port-legend-item"><span class="port-legend-name"><i class="dot" style="background:{{ it.color }}"></i>{{ it.token }}</span><strong>{{ '%.2f%%'|format(it.pct) }}</strong><strong data-private="money">{{ '{:,.0f}'.format(it.value) }}</strong></div>{% endfor %}</div></div>
+ {% else %}<div class="port-empty"><strong>Allocation no disponible</strong>Requiere la valoración completa de los 12 tokens mediante Binance Spot MCP.</div>{% endif %}
+ </article>
+</div>
+<!-- Fila 2: historic series / compact unrealized pnl -->
+<div class="port-pair" data-layout-row="2">
+ <article class="port-card" data-history-chart="returns"><div class="port-card-head"><div><h3>Rentabilidad histórica del portafolio</h3><p class="sub">Evolución temporal · sin extrapolar datos faltantes.</p></div><div class="port-controls" role="group" aria-label="Rango histórico">{% for interval in ['7D','30D','90D','VTD','ALL'] %}<button type="button" class="port-control" data-history-range="{{ interval }}" aria-pressed="{{ 'true' if interval=='30D' else 'false' }}">{{ interval }}</button>{% endfor %}</div></div>
+ <div class="port-chart-surface" id="history-chart-surface"><div class="port-empty"><strong>Historial insuficiente</strong>Se requieren al menos dos observaciones certificadas.</div></div>
+ <p class="port-foot">El valor total puede presentar variación nominal, no rentabilidad neta ajustada por aportes/retiros. Sin historial de flujos conciliado, la rentabilidad real es N/D. {{ history_note }}</p>
+ </article>
+ <section class="port-card" data-portfolio-chart="unrealized">
+  <div class="integral-pnl-head"><div><h3>Resultado no realizado por token</h3><p class="sub">Valor Spot menos costo abierto · unidades actuales · USDT</p></div>
+  {% if pnl_report and pnl_report.total_usdt is not none %}<div class="integral-pnl-total {{ 'integral-pnl-positive' if pnl_report.total_usdt>0 else 'integral-pnl-negative' if pnl_report.total_usdt<0 else 'integral-pnl-zero' }}" data-private="money">{{ '{:+,.2f}'.format(pnl_report.total_usdt) }} USDT<small>{{ '{:+.2f}%'.format(pnl_report.total_pct) if pnl_report.total_pct is not none else 'N/D' }} sobre costo abierto</small></div>
+  {% else %}<div class="integral-pnl-total integral-pnl-zero">N/D<small>{{ 'Spot MCP no disponible' if not pnl_report else 'Costos incompletos: total no verificable' }}</small></div>{% endif %}</div>
+  {% if pnl_report %}<div class="integral-pnl-scroller"><div class="integral-pnl-plot" aria-label="Resultados no realizados por token">{% for item in pnl_report['items'] %}<div class="integral-pnl-row" data-pnl-token="{{ item.token }}"><span class="integral-pnl-token">{{ item.token }}</span><div class="integral-pnl-track" aria-label="{{ item.token }}: {{ '{:+,.2f}'.format(item.pnl_usdt) if item.pnl_usdt is not none else 'N/D' }} USDT"><div class="integral-pnl-half loss">{% if item.pnl_usdt is not none and item.pnl_usdt<0 %}<span class="integral-pnl-bar loss" style="width:{{ item.bar_pct }}%"></span>{% endif %}</div><div class="integral-pnl-half gain">{% if item.pnl_usdt is not none and item.pnl_usdt>0 %}<span class="integral-pnl-bar gain" style="width:{{ item.bar_pct }}%"></span>{% endif %}</div></div><span class="integral-pnl-number {{ 'integral-pnl-positive' if item.pnl_usdt is not none and item.pnl_usdt>0 else 'integral-pnl-negative' if item.pnl_usdt is not none and item.pnl_usdt<0 else 'integral-pnl-zero' }}" data-private="money">{{ ('{:+,.0f}'.format(item.pnl_usdt)) if item.pnl_usdt is not none else 'N/D' }}</span></div>{% endfor %}</div></div><div class="integral-pnl-legend"><span><i style="background:#16876d"></i>Ganancia no realizada</span><span><i style="background:#d24962"></i>Pérdida no realizada</span></div><p class="integral-pnl-info">Fuente: 02_POSICIONES del Master PUBLICADO + Spot Binance MCP{{ ' · Observación: ' ~ spot_observed if spot_observed else '' }}. No incluye USDT físico ni pérdidas realizadas históricas; no acredita fills.{% if pnl_report.missing_tokens %} Sin costo/precio verificable: {{ pnl_report.missing_tokens|join(', ') }}; no se imputa USDT $0.{% endif %}</p>
+  {% else %}<p class="integral-pnl-info">Datos MCP no disponibles. No se calcula P&L con precios de capturas o archivos históricos.</p>{% endif %}
+ </section>
+</div>
+<!-- Fila 3: category chart / portfolio weights chart -->
+<div class="port-pair" data-layout-row="3">
+ <article class="port-card" data-category-chart="tier"><div class="port-card-head"><div><h3>Distribución por categoría</h3><p class="sub">Peso actual vs. objetivo · manga cripto (sin USDT)</p></div><div class="port-chart-key"><span><i style="background:#267ce5"></i>Actual</span><span><i style="background:#cad6e6"></i>Objetivo</span></div></div>
+ {% if categories %}<div class="port-tier-chart">{% for c in categories %}<div class="port-tier-col"><strong>{{ '%.2f%%'|format(c.actual) }} / {{ '%.0f%%'|format(c.target) }}</strong><div class="port-tier-bars"><div class="port-tier-bar" style="height:{{ c.actual/80*100 }}%" title="{{ c.tier }} actual {{ '%.2f'|format(c.actual) }}%"></div><div class="port-tier-bar target" style="height:{{ c.target/80*100 }}%" title="{{ c.tier }} objetivo {{ '%.2f'|format(c.target) }}%"></div></div><small>{{ 'Tier '~c.tier[1:] }}</small></div>{% endfor %}</div><p class="port-foot">T1: BTC, ETH, SOL, LINK, HYPE · T2: HBAR, SUI, ONDO, PUMP, PLUME · T3: VIRTUAL, PEPE</p>
+ {% else %}<div class="port-empty">Sin cotizaciones completas para la distribución por categoría.</div>{% endif %}</article>
+ <article class="port-card" data-composition-chart="tokens"><div class="port-card-head"><div><h3>Composición del portafolio</h3><p class="sub">Peso actual vs. objetivo · 12 tokens (sin USDT)</p></div><div class="port-chart-key"><span><i style="background:#267ce5"></i>Actual</span><span><i style="background:#cad6e6"></i>Objetivo</span></div></div>
+ {% if portfolio_rows %}<div class="port-token-scroller"><div class="port-token-chart">{% for r in portfolio_rows %}<div class="port-token-col"><strong>{{ '%.1f'|format(r.weight*100) }}%</strong><div class="port-token-bars"><div class="port-token-bar" style="height:{{ r.weight*100/30*100 }}%" title="{{ r.token }} actual {{ '%.2f'|format(r.weight*100) }}%"></div><div class="port-token-bar target" style="height:{{ r.target*100/30*100 }}%" title="{{ r.token }} objetivo {{ '%.2f'|format(r.target*100) }}%"></div></div><small>{{ r.token }}</small></div>{% endfor %}</div></div><p class="port-foot">Objetivos de 02_POSICIONES; desviaciones comparadas contra la manga cripto.</p>
+ {% else %}<div class="port-empty">Sin cotizaciones completas para comparar los 12 tokens.</div>{% endif %}</article>
+</div>
+<!-- Fila 4: historical tracking of validated observations, plus existing detailed table -->
+<div class="port-pair" data-layout-row="4" style="grid-template-columns:minmax(0,1fr)">
+ <article class="port-card" data-tracking-chart="portfolio"><div class="port-card-head"><div><h3>Seguimiento del portafolio</h3><p class="sub">Evolución observada de patrimonio y liquidez · registros certificados del MASTER.</p></div><span class="port-badge">Fuente: 21_PRI_HISTORIAL</span></div>
+ <div class="port-chart-surface" id="tracking-chart-surface"><div class="port-empty"><strong>Seguimiento en preparación</strong>Aún no hay dos observaciones comparables.</div></div>
+ <div class="port-current-metrics"><div><small>Valor actual (Spot)</small><strong data-private="money">{{ '${:,.2f}'.format(spot.total) if spot else 'N/D' }}</strong></div><div><small>Costo abierto (hoy)</small><strong data-private="money">{{ '${:,.2f}'.format(pnl_report.cost_open_usdt) if pnl_report and pnl_report.total_usdt is not none else 'N/D' }}</strong></div><div><small>P&L no realizado (hoy)</small><strong data-private="money">{{ '{:+,.2f}'.format(pnl_report.total_usdt) if pnl_report and pnl_report.total_usdt is not none else 'N/D' }}</strong></div></div>
+ <p class="port-foot">Los puntos históricos se leen exclusivamente de valoraciones completas del PRI. El costo abierto y el P&L históricos permanecen N/D hasta registrar series equivalentes; no se rellenan usando el costo de hoy.</p>
+ <details><summary>Ver seguimiento contable por segmento (referencia histórica)</summary><div class="port-table-scroll"><table class="port-followup-table"><thead><tr><th>Segmento</th><th class="num">Objetivo USDT</th><th class="num">Actual registrado</th><th class="num">Desviación pp</th></tr></thead><tbody>{% for s in segments %}{% set drift=(s.actual_usdt-s.target_usdt)/base*100 %}<tr><td>{{ s.name }}</td><td class="num">{{ '${:,.2f}'.format(s.target_usdt) }}</td><td class="num">{{ '${:,.2f}'.format(s.actual_usdt) }}</td><td class="num">{{ '%+.1f'|format(drift) }}</td></tr>{% endfor %}</tbody></table></div><p class="port-foot">{{ source_note }}. Lost no es un activo. No se infieren aportes/retiros ni operaciones.</p></details>
+ </article>
+</div>
+</div>
+<script>
+(function(){
+ 'use strict';
+ const points={{ history_points|tojson }};
+ const formatMoney=value=>new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(value);
+ const fmtDate=s=>s.slice(5);
+ const rangeButtons=[...document.querySelectorAll('[data-history-range]')];
+ let activeRange='30D';
+ function filteredRange(){
+   if(!points.length)return [];
+   if(activeRange==='ALL')return points;
+   const latest=new Date(points[points.length-1].timestamp);
+   if(activeRange==='VTD')return points.filter(p=>new Date(p.timestamp).getUTCFullYear()===latest.getUTCFullYear());
+   const days={'7D':7,'30D':30,'90D':90}[activeRange]||30;
+   const cutoff=latest.getTime()-days*86400000;
+   return points.filter(p=>new Date(p.timestamp).getTime()>=cutoff);
+ }
+ function empty(container,title,msg){container.replaceChildren();const box=document.createElement('div');box.className='port-empty';const heading=document.createElement('strong');heading.textContent=title;box.append(heading,document.createTextNode(msg));container.append(box);}
+ const ns='http://www.w3.org/2000/svg';
+ function el(name,attrs={}){const node=document.createElementNS(ns,name);Object.entries(attrs).forEach(([k,v])=>node.setAttribute(k,String(v)));return node;}
+ function chart(target,list,keys,colors,relative){
+   if(list.length<2){empty(target,'Historial insuficiente','Se requieren al menos dos observaciones certificadas en el período.');return;}
+   const W=820,H=245,L=69,R=15,T=18,B=34,sw=W-L-R,sh=H-T-B;
+   const series=keys.map(k=>list.map((p,i)=>relative?(p[k]/list[0][k]-1)*100:p[k]));
+   if(series.some(ar=>ar.some(v=>!Number.isFinite(v)))){empty(target,'Datos incompletos','La serie no permite construir una gráfica válida.');return;}
+   let low=Math.min(...series.flat()),high=Math.max(...series.flat());if(relative){low=Math.min(0,low);high=Math.max(0,high);}
+   if(high===low){high+=1;low-=1;}
+   const margin=(high-low)*.1;low-=margin;high+=margin;
+   const x=i=>L+sw*(i/(list.length-1));const y=v=>T+sh*(high-v)/(high-low);
+   const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img','aria-label':relative?'Variación nominal de patrimonio (%)':'Histórico de patrimonio y liquidez (USD)'});
+   for(let i=0;i<=4;i++){const v=low+(high-low)*i/4,yy=y(v);svg.append(el('line',{x1:L,y1:yy,x2:W-R,y2:yy,stroke:'currentColor','stroke-opacity':'.12'}));const label=el('text',{x:L-8,y:yy+4,'text-anchor':'end',fill:'currentColor','fill-opacity':'.55','font-size':'11'});label.textContent=relative?`${v.toFixed(1)}%`:formatMoney(v);svg.append(label);}
+   keys.forEach((key,n)=>{const color=colors[n],values=series[n];const d=values.map((v,i)=>`${i?'L':'M'}${x(i).toFixed(2)},${y(v).toFixed(2)}`).join(' ');svg.append(el('path',{d,stroke:color,'stroke-width':'3',fill:'none','stroke-linecap':'round','stroke-linejoin':'round'}));values.forEach((v,i)=>{const c=el('circle',{cx:x(i),cy:y(v),r:'3',fill:color});const title=el('title');title.textContent=`${list[i].day}: ${key} ${relative?v.toFixed(2)+'%':'US$'+formatMoney(v)}`;c.append(title);svg.append(c);});});
+   for(const index of [0,list.length-1]){const tx=el('text',{x:x(index),y:H-8,'text-anchor':index===0?'start':'end',fill:'currentColor','fill-opacity':'.6','font-size':'11'});tx.textContent=fmtDate(list[index].day);svg.append(tx);}
+   target.replaceChildren(svg);
+ }
+ function render(){
+   const subset=filteredRange();chart(document.getElementById('history-chart-surface'),subset,['total'],['#188fba'],true);
+   // Tracking is shown for the complete certified series; period selector belongs to the historic chart above.
+   chart(document.getElementById('tracking-chart-surface'),points,['total','cash'],['#1c69cc','#16a783'],false);
+ }
+ rangeButtons.forEach(b=>b.addEventListener('click',()=>{activeRange=b.dataset.historyRange;rangeButtons.forEach(c=>c.setAttribute('aria-pressed',String(c===b)));render();}));render();
+})();
+</script>
 {% endblock %}

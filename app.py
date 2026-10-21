@@ -24,7 +24,7 @@ from werkzeug.local import LocalProxy
 from werkzeug.exceptions import HTTPException
 from google_sheets_master import get_state, SheetDataError, public_failure_code, cache_status as sheet_cache_status
 from hype_weekly import aggregate_weeks, HypeHistoryError
-from portfolio_unrealized import summarize_unrealized
+from portfolio_unrealized import summarize_unrealized, portfolio_allocation, category_allocation, pri_valuation_history
 from custody_balancer import compare_custody, CustodyError
 from kairos_sheets_features import (
     unread_alerts, mark_alert_read, mark_all_alerts_read, settings_data, prepare_changes,
@@ -32,7 +32,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.21'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.22'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -956,25 +956,53 @@ def integral_portfolio_page():
     alive = sum(x['actual_usdt'] for x in segments if x['key'] != 'lost')
     lost = next(x['actual_usdt'] for x in segments if x['key'] == 'lost')
     gain_to_recover = (base / alive - 1) * 100 if alive > 0 else None
-    # Spot figures are optional; historical reconciliation must remain available during MCP outages.
+    # No estimated/mock history is permitted. 21_PRI_HISTORIAL only holds
+    # certified observations when a future complete run actually publishes one.
+    history_points = []
+    history_note = 'Sin observaciones de patrimonio completas y certificadas en 21_PRI_HISTORIAL.'
+    try:
+        from kairos_sheets_features import read_ranges
+        raw = read_ranges({'pri': "'21_PRI_HISTORIAL'!A4:V1200"})
+        history_points = pri_valuation_history(raw.get('pri',[]))
+        if history_points:
+            history_note = 'Valoración Spot histórica certificada, sin ajuste de flujos; no implica rentabilidad neta.'
+    except Exception as exc:
+        app.logger.info('PRI history not available (no synthetic fallback): %s',type(exc).__name__)
+        history_note = '21_PRI_HISTORIAL no disponible; sin serie histórica verificable.'
     spot_breakdown = None
     spot_observed = None
     pnl_report = None
+    allocation = None
+    categories = None
+    portfolio_rows = []
+    o2c2_reference = None
     try:
         spot_observed, live = load_live_dashboard()
-        pnl_report = summarize_unrealized(live['rows'])
-        core_value = sum((r['hodl_units']+r['core_units'])*r['price'] for r in live['rows'])
-        exchange_value = sum(r['exchange_units']*r['price'] for r in live['rows'])
+        portfolio_rows=live['rows']
+        pnl_report = summarize_unrealized(portfolio_rows)
+        allocation=portfolio_allocation(portfolio_rows,live['usdt_total'])
+        categories=category_allocation(portfolio_rows)
+        core_value = sum((r['hodl_units']+r['core_units'])*r['price'] for r in portfolio_rows)
+        exchange_value = sum(r['exchange_units']*r['price'] for r in portfolio_rows)
         cash_total = live['usdt_total']
         qf = live['trading_reserve']
         spot_breakdown = {'core':core_value,'exchange':exchange_value,
                           'liquidity':cash_total-qf,'trading':qf,
                           'total':live['total_value'],'source':'Binance MCP + Google Sheets PUBLICADO'}
+        # Informative budget reference; never interpreted as pending BUY.
+        param=PARAMETERS.get('FORECAST_O2_FIB_500_PCT')
+        if param and param.get('status') in ('APROBADO','APROBADO_SIMULACION'):
+            ratio=float(param['value'])/100
+            if 0<=ratio<=1:
+                o2c2_reference=ratio*live['usdt_operating']
     except Exception as exc:
-        app.logger.info('Integral portfolio using historical ledger; live pricing unavailable: %s',type(exc).__name__)
+        app.logger.info('Integral portfolio live pricing unavailable: %s',type(exc).__name__)
     return render_template('portfolio_integral.html', master=APP_VERSION, segments=segments,
                            base=base, alive=alive, lost=lost, gain_to_recover=gain_to_recover,
                            spot=spot_breakdown, spot_observed=spot_observed, pnl_report=pnl_report,
+                           allocation=allocation, categories=categories, portfolio_rows=portfolio_rows,
+                           history_points=history_points, history_note=history_note,
+                           o2c2_reference=o2c2_reference,
                            source_note=values['source_note'], total_recorded=sum(x['actual_usdt'] for x in segments),
                            total_target=sum(x['target_usdt'] for x in segments))
 
@@ -1468,6 +1496,8 @@ def _deployed_asset_status():
         'o2_simulator': ('static/o2_sequential.js', ('classifyDrift', 'snapshots')),
         'alerts_bell': ('static/alert_bell.js', ('alert-timeframe', '/api/alerts/read', 'event-bull', 'event-bear')),
         'integral_donut': ('templates/portfolio_integral.html', ('data-capital-chart="donut"', 'integral-donut-sector')),
+        'portfolio_layout_v2022': ('templates/portfolio_integral.html', ('data-layout-row="1"','data-layout-row="2"','data-layout-row="3"','data-layout-row="4"')),
+        'portfolio_allocation_v2022': ('portfolio_unrealized.py', ('def portfolio_allocation(', 'def category_allocation(', 'def pri_valuation_history(')),
         'portfolio_unrealized_chart': ('templates/portfolio_integral.html', ('data-portfolio-chart="unrealized"', 'integral-pnl-bar gain', 'integral-pnl-bar loss')),
         'portfolio_unrealized_calc': ('portfolio_unrealized.py', ('def summarize_unrealized(', "'missing_tokens': missing")),
         'pivots_cl_editor': ('static/settings_master.js', ('reviewUnconfirmedToken', 'waveReviewProofs', 'cl_status')),
