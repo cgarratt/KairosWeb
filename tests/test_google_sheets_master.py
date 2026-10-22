@@ -189,3 +189,94 @@ def test_historical_reference_keeps_provenance_without_inventing_year():
     result=gs.parse_master(raw)
     assert result['integral']['reference_date_label']=='16/10 (año no indicado en la hoja)'
     assert result['integral']['source_note'].startswith('Google Sheets 08_INTEGRAL')
+
+# v2.0.31 — append-only homologation by published snapshot (synthetic figures only).
+def _certified_master():
+    raw=fake_master()
+    state=gs.parse_master(raw)
+    ctrl=state['control']
+    cert=gs.homologation_certificate(state,ctrl['snapshot_id'],ctrl['publicado_utc'],
+                                    '2026-10-22T20:00:00Z')
+    raw[gs.HOMOLOGATION_HISTORY_RANGE]=[gs.HOMOLOGATION_HEADERS,cert]
+    return raw
+
+
+def test_current_ledger_supersedes_old_control_without_rewriting_it():
+    raw=_certified_master()
+    raw[gs.HOMOLOGATION_RANGE]=[
+        ['Control','Resultado','Fuente primaria / brecha'],
+        ['01_CONTROL PUBLICADO','PASS','KAIROS-OLD-SNAPSHOT'],
+        ['03_LIQUIDEZ QF UNA VEZ','PASS','USDT físico 28130 / QF 7225'],
+    ]
+    state=gs.parse_master(raw)
+    h=state['homologation']
+    assert h['status']=='CURRENT'
+    assert h['source']=='25_HOMOLOGACION_HISTORIAL'
+    assert h['certification_scope']=='BASE_CONTABLE'
+    assert 'BSI_SELL_BASELINE_HWM' in h['pending_controls']
+    assert state['snapshot']['physical_total_USDT']==50
+
+
+def test_homologation_ledger_snapshot_change_must_revalidate():
+    raw=_certified_master()
+    for row in raw[gs.SHEETS['control']]:
+        if row and row[0]=='snapshot_id':row[1]='TEST-002'
+    result=gs.parse_master(raw)['homologation']
+    assert result['status']=='STALE'
+    assert 'SNAPSHOT_REFERENCE_STALE' in {item['code'] for item in result['issues']}
+
+
+def test_homologation_ledger_qf_imbalance_invalidates_certificate():
+    raw=_certified_master()
+    raw[gs.HOMOLOGATION_HISTORY_RANGE][-1][10]=0
+    result=gs.parse_master(raw)['homologation']
+    assert result['status']=='STALE'
+    assert 'LIQUIDITY_REFERENCE_STALE' in {item['code'] for item in result['issues']}
+
+
+def test_homologation_latest_entry_wins_not_old_matching_snapshot():
+    raw=_certified_master()
+    old=list(raw[gs.HOMOLOGATION_HISTORY_RANGE][-1])
+    old[0]='TEST-OLD'
+    raw[gs.HOMOLOGATION_HISTORY_RANGE].append(old)
+    result=gs.parse_master(raw)['homologation']
+    assert result['status']=='STALE'
+
+
+def test_certificate_fails_if_critical_validation_not_pass():
+    state=gs.parse_master(fake_master())
+    state['validation']['Reserva QF sin duplicar']='PENDIENTE'
+    with __import__('pytest').raises(gs.SheetDataError):
+        gs.homologation_certificate(state,'TEST-001',state['control']['publicado_utc'],
+                                   '2026-10-22T20:00:00Z')
+
+
+def test_manual_homologation_is_append_only_and_idempotent():
+    import kairos_sheets_features as sf
+    raw=fake_master()
+    state=gs.parse_master(raw)
+    proof={'status':'CURRENT','source':'25_HOMOLOGACION_HISTORIAL',
+           'pending_controls':['PIVOTES_CERTIFICACION']}
+    seen=[]
+    def check_api(method,suffix,**kwargs):
+        seen.append(kwargs.get('payload'))
+        return {'spreadsheetId':'test'}
+    with patch.object(sf,'_remote_data',return_value=raw),\
+         patch.object(sf,'_sheet_ids',return_value={'01_CONTROL':1355071856}),\
+         patch.object(sf,'_api',side_effect=check_api),\
+         patch.object(gs,'get_state',return_value={**state,'homologation':proof}):
+        result=sf.homologate_current_snapshot('TEST-001')
+    assert result['status']=='OK'
+    assert result['already_homologated'] is False
+    requests=seen[0]['requests']
+    assert {'addSheet','updateCells','appendCells'}=={next(iter(r)) for r in requests}
+    assert requests[-1]['appendCells']['sheetId']==2005002501
+    assert all('02_POSICIONES' not in str(req) and '03_LIQUIDEZ' not in str(req) for req in requests)
+
+    state['homologation']=proof
+    with patch.object(sf,'_remote_data',return_value=raw),\
+         patch.object(sf,'_api',side_effect=AssertionError('unexpected write')):
+        # Patch parser output to represent a previously homologated read.
+        with patch.object(sf,'parse_master',return_value=state):
+            again=sf.homologate_current_snapshot('TEST-001')
+    assert again['already_homologated'] is True

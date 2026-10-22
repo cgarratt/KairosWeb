@@ -64,6 +64,36 @@
       }finally{deepButton.disabled=false;}
     });
   }
+  const certifyButton=document.getElementById('master-homologate-current');
+  const certifyOutput=document.getElementById('master-homologate-output');
+  if(certifyButton&&certifyOutput){
+    certifyButton.addEventListener('click',async()=>{
+      certifyButton.disabled=true;
+      certifyOutput.textContent='Leyendo identidad y controles del MASTER…';
+      try{
+        const auth=await fetch('/api/admin/session',{credentials:'same-origin',cache:'no-store'});
+        const account=await auth.json();
+        if(!auth.ok||!account.is_admin||!account.csrf_token)throw new Error('Inicia sesión administrativa en Configuración.');
+        const statusResponse=await fetch('/api/sheets-status',{credentials:'same-origin',cache:'no-store'});
+        const status=await statusResponse.json();
+        const snapshot=status.snapshot_id||status?.control?.snapshot_id;
+        if(!statusResponse.ok||!snapshot)throw new Error('No hay snapshot PUBLICADO válido para homologar.');
+        if(!window.confirm('¿Homologar contabilidad del snapshot '+snapshot+'? No cambiará unidades, saldos, pivotes ni órdenes.')){
+          certifyOutput.textContent='Sin cambios: homologación cancelada.';return;
+        }
+        certifyOutput.textContent='Validando y registrando homologación…';
+        const response=await fetch('/api/settings/homologate',{
+          method:'POST',credentials:'same-origin',cache:'no-store',
+          headers:{'Content-Type':'application/json','X-Kairos-Csrf':account.csrf_token},
+          body:JSON.stringify({expected_snapshot_id:snapshot,confirm:'HOMOLOGAR'})});
+        const result=await response.json();
+        if(!response.ok||result.status!=='OK')throw new Error(result.reason||'No se pudo verificar la homologación.');
+        certifyOutput.textContent=(result.already_homologated?'Ya homologado: ':'Homologación registrada: ')+
+           result.snapshot_id+' · Contabilidad base validada; pivotes y BSI siguen pendientes.';
+      }catch(error){certifyOutput.textContent=error.message||'DATA_ERROR de homologación';}
+      finally{certifyButton.disabled=false;}
+    });
+  }
   panel.addEventListener('click',event=>{
     const button=event.target.closest('button[data-provider]');if(!button)return;
     check(button.dataset.provider,button.classList.contains('mcp-refresh'));

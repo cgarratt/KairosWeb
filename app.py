@@ -30,11 +30,11 @@ from custody_balancer import compare_custody, CustodyError
 from orders_inbox import drift_tone, tradingbot_tokens
 from kairos_sheets_features import (
     unread_alerts, mark_alert_read, mark_all_alerts_read, settings_data, prepare_changes,
-    save_changes, SettingsError, _remote_data as _unused_remote_marker
+    save_changes, homologate_current_snapshot, SettingsError, _remote_data as _unused_remote_marker
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.30'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.32'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1341,6 +1341,23 @@ def settings_publish():
         return jsonify({'status':'DATA_ERROR','reason':'No se pudo publicar nueva versión del Master.'}),503
 
 
+@app.route('/api/settings/homologate',methods=['POST'])
+def settings_homologate():
+    """Explicit administrator action to reconcile the current publication; no balance writes."""
+    if not _same_origin():return jsonify({'status':'FORBIDDEN_ORIGIN'}),403
+    if not _admin_authorized() or not _csrf_ok():return jsonify({'status':'ADMIN_AUTH_REQUIRED'}),403
+    if not os.getenv('KAIROS_GOOGLE_WRITER_JSON'):
+        return jsonify({'status':'WRITE_DISABLED','reason':'Credenciales de edición ausentes'}),503
+    body=request.get_json(silent=True) or {}
+    if body.get('confirm')!='HOMOLOGAR':return jsonify({'status':'CONFIRMATION_REQUIRED'}),400
+    try:return jsonify(homologate_current_snapshot(body.get('expected_snapshot_id')))
+    except SettingsError as exc:return jsonify({'status':'INVALID','reason':str(exc)}),409
+    except Exception as exc:
+        incident=uuid.uuid4().hex[:10]
+        app.logger.error('Master homologation id=%s class=%s',incident,type(exc).__name__)
+        return jsonify({'status':'DATA_ERROR','reason':'Homologación no verificada. Revisar el MASTER antes de reintentar.','error_id':incident}),503
+
+
 @app.route('/api/settings/pivots/cl-review')
 def cl_technical_review_endpoint():
     """Independent evidence gate: 1W 5L/5R + BOS; NEVER confirms a CL.
@@ -1558,11 +1575,14 @@ def _deployed_asset_status():
         'alerts_bell': ('static/alert_bell.js', ('alert-timeframe', '/api/alerts/read', 'event-bull', 'event-bear')),
         'integral_donut': ('templates/portfolio_integral.html', ('data-capital-chart="donut"', 'integral-donut-sector')),
         'portfolio_layout_v2022': ('templates/portfolio_integral.html', ('data-layout-row="1"','data-layout-row="2"','data-layout-row="3"','data-layout-row="4"')),
+        'allocation_legend_v2032': ('templates/portfolio_integral.html', ('data-token-columns="6+6"', 'data-allocation-cash="USDT"', 'data-allocation-column=', 'port-alloc-columns')),
+        'balancer_sell_units_v2032': ('templates/balancer.html', ('<th>Unidades estimadas</th>', 'r.units', 'data-private="units"')),
         'health_three_tiers_v2030': ('app.py', ("@app.route('/api/health/diagnostics')", 'operational_providers', 'functional_modules')),
         'health_diagnostics_ui_v2030': ('templates/settings.html', ('id="health-deep-panel"', 'id="health-check-all"')),
         'health_diagnostics_js_v2030': ('static/mcp_settings.js', ('/api/health/diagnostics', 'health-check-output')),
         'portfolio_error_contract_v2030': ('templates/portfolio_integral.html', ('id="portfolio-diagnostic"','portfolio_diagnostic')),
         'homologation_contract_v2030': ('google_sheets_master.py', ('HOMOLOGATION_RANGE', 'assess_homologation(', 'SNAPSHOT_REFERENCE_STALE')),
+        'homologation_ledger_v2031': ('kairos_sheets_features.py', ('HOMOLOGATION_TAB', '_certificate_append(', 'homologate_current_snapshot(')),
         'historical_provenance_v2030': ('templates/portfolio_integral.html', ('historical_reference_date', 'HISTÓRICO NO SPOT')),
         'consolidated_dashboard_v2027': ('templates/portfolio_integral.html', ('id="btc-portfolio-total"', 'data-bsi-chart="archived"', 'data-portfolio-executive="12"', 'class="port-status', 'port-coin-logo')),
         'consolidated_navigation_v2025': ('templates/base.html', ('href="/mode/{{ mode.slug }}"', 'global-nav-link')),

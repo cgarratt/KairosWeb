@@ -32,6 +32,9 @@
           <h4>Salud integral · 3 niveles</h4>
           <p>Servidor / Google Sheets-Binance-Hyperliquid / módulos dependientes. Consulta autenticada y solo lectura.</p>
           <button type="button" id="health-check-all" class="tiny-control">Ejecutar diagnóstico integral</button>
+          <p class="settings-hint">Homologación contable base: valida el snapshot vigente y registra una evidencia nueva sin modificar saldos. No certifica pivotes, BSI ni órdenes remotas.</p>
+          <button type="button" class="tiny-control" id="master-homologate-current">Homologar snapshot actual (administrador)</button>
+          <div id="master-homologate-output" role="status" aria-live="polite">Consulta de solo lectura; la homologación requiere confirmación.</div>
           <div id="health-check-output" role="status" aria-live="polite">Sin ejecutar. /health solo mide disponibilidad del servidor y muestra el último diagnóstico almacenado.</div>
         </section>
       </section>

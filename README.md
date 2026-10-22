@@ -1,6 +1,6 @@
-# KairosWeb v2.0.30 — Observabilidad, conciliación y capital histórico
+# KairosWeb v2.0.32 — Leyenda de allocation y unidades en Balancer
 
-**Aplicación:** `2.0.30` · **Google Sheets schema:** `5.0.0` · **Motor KairosGPT compatible:** v1.3.6.
+**Aplicación:** `2.0.32` · **Google Sheets schema:** `5.0.0` · **Motor KairosGPT compatible:** v1.3.6.
 
 ## Novedades acumuladas sobre KairosWeb v2.0.18
 
@@ -22,7 +22,7 @@
 
 1. Extraer el ZIP **en la raíz del repositorio de KairosWeb**; el contenido se encuentra en la raíz, no en un subdirectorio adicional. Reemplazar los archivos por estos manteniendo las variables de entorno existentes. **No añadir credenciales ni subir `.env`.**
 2. Revisar diferencias, hacer commit y desplegar Render. Este ZIP no ejecuta git push, no crea un GitHub Release y no redepliega por sí mismo.
-3. Comprobar `/health`: `service=KairosWeb`, `version=2.0.30`, `status=UP`, `release_assets.consistent=true` y checks `sales_optimizer_engine`, `sales_optimizer_ui`, `portfolio_unrealized_chart`.
+3. Comprobar `/health`: `service=KairosWeb`, `version=2.0.32`, `status=UP`, `release_assets.consistent=true` y checks `sales_optimizer_engine`, `sales_optimizer_ui`, `portfolio_unrealized_chart`.
 4. Abrir `/mode/ventas` y `/mode/ventas?usdt_pct=55`; comprobar el porcentaje solicitado, prioridades y el comparativo. Confirmar que no hay órdenes reales creadas.
 5. Confirmar `/mode/portafolio` y el gráfico de resultado no realizado; verificar Compras, Forecast, Pivotes y Órdenes fase 1.
 
@@ -30,7 +30,7 @@
 
 - `python -m pytest -q` sobre el release extraído.
 - `node tests/test_sales_optimizer.js` y tests JS adicionales incluidos.
-- `SHA256SUMS.txt` / `RELEASE_MANIFEST_v2.0.30.json` permiten comprobar integridad de archivos del ZIP, excluyendo sus propios metadatos.
+- `SHA256SUMS.txt` / `RELEASE_MANIFEST_v2.0.32.json` permiten comprobar integridad de archivos del ZIP, excluyendo sus propios metadatos.
 
 **Límite:** menos de 100 archivos; se omiten algunos tests de regresión antiguos del paquete distribuible para mantener ese límite (pero se ejecutaron en el checkout completo). Los fuentes de aplicación y assets no se han eliminado.
 
@@ -110,7 +110,7 @@ La sección 7 de Balancer presenta una fila por token con transferencias desde E
 - **Forecast:** dibujar una línea horizontal punteada con el Spot MCP vigente del token seleccionado y su precio. Incluir Spot en la escala vertical; actualizar al cambiar token y al ajustar etapas. Si falta Spot, mostrar N/D y omitir la línea, sin inventar cotización.
 - La línea es referencia informativa sobre un eje de etapas hipotéticas; **no es una onda, pivote ni señal**.
 - `/health` incorpora el marcador `forecast_spot_overlay_v2029` y deja de exigir la tabla eliminada.
-- Paquete local pendiente de despliegue. Master, órdenes y custodia sin cambios. Ver `RELEASE_NOTES_v2.0.30.md`.
+- Paquete local pendiente de despliegue. Master, órdenes y custodia sin cambios. Ver `RELEASE_NOTES_v2.0.31.md`.
 
 
 ## Release v2.0.30 · Diagnóstico y procedencia B05–B08
@@ -121,4 +121,23 @@ La sección 7 de Balancer presenta una fila por token con transferencias desde E
 - Portafolio muestra error estructurado y no reutiliza datos parciales cuando falla el MCP o el cálculo.
 - `13_CONTROL_HOMOLOGACION` se contrasta con `01_CONTROL` y `03_LIQUIDEZ` para detectar referencias históricas stale, sin alterar el MASTER.
 - Capital histórico `08_INTEGRAL` muestra procedencia y referencia de corte; no se confunde con patrimonio Spot.
-- El release empaquetado es candidato listo para GitHub; la verificación HTTP en Render sigue pendiente. Ver `RELEASE_NOTES_v2.0.30.md`.
+- El release empaquetado es candidato listo para GitHub; la verificación HTTP en Render sigue pendiente. Ver `RELEASE_NOTES_v2.0.31.md`.
+
+
+## Release v2.0.31 · Homologación contable automática
+
+- Nueva hoja `25_HOMOLOGACION_HISTORIAL` (creación automática en primera publicación/autorización administrativa). No sobrescribe `13_CONTROL_HOMOLOGACION`.
+- Las publicaciones desde Configuración registran en un único batch el nuevo snapshot y su homologación base validada.
+- Para el snapshot vigente previo al despliegue, Configuración → Estado de conexiones MCP → **Homologar snapshot actual**. Se requiere sesión admin, CSRF y editor Google.
+- Sólo se certifican inventario (12 tokens), targets, custodias y QF/USDT; pivotes, BSI SELL y órdenes remotas siguen pendientes.
+- Los nuevos snapshots publicados por otro cliente de Google Sheets quedan STALE hasta una revalidación explícita.
+- `RELEASE_NOTES_v2.0.31.md` detalla pruebas, seguridad y procedimiento de actualización.
+
+
+## Release v2.0.32 · Presentación allocation y Ventas Balancer
+
+- **Portafolio:** la leyenda de allocation contiene USDT en fila independiente y los otros 12 tokens en dos grupos de **seis por columna** en escritorio, sin barra de desplazamiento vertical. En móvil estrecho, se apilan los dos grupos para mantener legibilidad. Todos los 13 componentes permanecen presentes en el donut y suman el patrimonio total sin duplicar QF.
+- **Balancer → 4. Candidatos de venta:** nueva columna `Unidades estimadas`; presenta las unidades ya calculadas por el motor compartido `overweight_sell_plan` (USDT venta / Spot MCP), limitadas a Exchange libre, reservas SELL y cupos Tier. No calcula ventas adicionales ni cambia balances.
+- **Precisión:** hasta 8 decimales referenciales; sin ajuste a LOT_SIZE, comisiones o pasos de cantidad de cada venue. **Propuesta, no orden**.
+- Ver `RELEASE_NOTES_v2.0.32.md`. `GET /health` debe indicar `2.0.32` y `release_assets.consistent=true`; controles de versión mixtos `allocation_legend_v2032` y `balancer_sell_units_v2032`.
+- No se despliega automáticamente ni se modifican saldos, configuración MASTER, órdenes o custodias.

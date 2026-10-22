@@ -2,7 +2,7 @@
 {% block title %}Kairos | Portafolio{% endblock %}
 {% block head %}
 <style>
-/* KairosWeb v2.0.27 | BSI archive, classification + resilient token logos */
+/* KairosWeb v2.0.32 | Two-column 12-token legend + USDT separate, no scrollbar */
 .port-page{--port-border:var(--line,#dce6f5);--port-ink:var(--text,#122b54);--port-sub:var(--muted,#647994);--port-surface:var(--panel,#fff)}
 .port-page .port-hero{display:flex;align-items:start;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:4px 2px 18px}
 .port-page .port-hero h2{font-size:clamp(24px,3vw,35px);margin:0;color:var(--port-ink)}
@@ -27,7 +27,20 @@
 .integral-donut-caption{text-anchor:middle;dominant-baseline:middle;font-size:10px;fill:var(--port-sub)}
 .port-legend{display:grid;gap:5px;min-width:0}.port-legend-item{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:center;font-size:11px;color:var(--port-ink);border-bottom:1px solid var(--port-border);padding:3px 0}
 .port-legend-item .port-legend-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.port-legend-item .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}.port-legend-item strong{font-variant-numeric:tabular-nums;white-space:nowrap}
-.port-legend-scroll{max-height:274px;overflow:auto;scrollbar-width:thin}.port-legend-item.heading{color:var(--port-sub);font-weight:700}
+/* Allocation: USDT stands alone, then two groups of six tokens each. */
+.port-allocation-legend{min-width:0;width:100%;display:grid;gap:7px}
+.port-alloc-cash{padding:5px 8px;border:1px solid var(--port-border);border-radius:9px;background:var(--surface-secondary,rgba(72,126,187,.09))}
+.port-alloc-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}
+.port-alloc-column{display:grid;grid-template-rows:auto repeat(6,minmax(25px,auto));gap:1px;min-width:0}
+.port-allocation-legend .port-legend-item{grid-template-columns:minmax(0,1fr) auto auto;column-gap:6px;padding:3px 0;font-size:10px}
+.port-allocation-legend .port-legend-item.heading{color:var(--port-sub);font-weight:700}
+.port-allocation-legend .port-legend-name{display:flex;align-items:center;gap:3px}
+.port-allocation-legend .port-legend-name .dot{flex:none;margin-right:2px}
+.port-allocation-legend .coin-tag{gap:3px;min-width:0}
+.port-allocation-legend .port-coin{gap:3px}.port-allocation-legend .port-coin-logo{width:18px;height:18px;flex:none}
+.port-allocation-legend .port-legend-item strong{font-size:10px;letter-spacing:-.01em}
+.port-allocation-legend .port-legend-item{overflow:visible}
+.port-legend-item.heading{color:var(--port-sub);font-weight:700}
 .port-badge{padding:4px 7px;border-radius:8px;background:#edf4fd;font-size:11px;color:#2d6198}
 .port-controls{display:flex;gap:5px;flex-wrap:wrap;align-items:center}.port-control{border:1px solid var(--port-border);background:var(--port-surface);color:var(--port-sub);border-radius:7px;padding:5px 8px;font-size:11px;cursor:pointer}.port-control[aria-pressed=true]{background:#1466cb;color:#fff;border-color:#1466cb}
 .port-chart-surface{height:244px;position:relative}.port-chart-surface svg{width:100%;height:100%;display:block}
@@ -56,9 +69,11 @@
 .port-current-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:12px}.port-current-metrics strong{display:block;color:var(--port-ink);font-size:17px;font-variant-numeric:tabular-nums}.port-current-metrics small{display:block;color:var(--port-sub);font-size:10px}
 .port-page details{margin-top:14px}.port-page details summary{cursor:pointer;color:#1e64a6;font-size:12px;font-weight:700}
 :root[data-theme="dark"] .port-tag,:root[data-theme="dark"] .port-badge{background:#203650;color:#add1fd}:root[data-theme="dark"] .port-donut .integral-donut-base{stroke:#29445d}
-@media(max-width:1080px){.port-donut-layout{grid-template-columns:1fr}.port-donut{width:205px}.port-legend-scroll{max-height:160px}}
-@media(max-width:820px){.port-pair{grid-template-columns:1fr}.port-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.port-donut-layout{grid-template-columns:minmax(160px,220px) minmax(0,1fr)}.port-legend-scroll{max-height:270px}}
-@media(max-width:540px){.port-kpis{gap:7px}.port-kpi{padding:11px}.port-kpi strong{font-size:19px}.port-page .port-card{padding:13px}.port-donut-layout{grid-template-columns:1fr}.port-legend-scroll{max-height:180px}.port-pair{gap:8px}.port-token-chart{min-width:620px}.port-token-scroller{overflow:auto}.integral-pnl-plot{min-width:355px}.port-chart-surface{height:225px}}
+@media(max-width:1080px){.port-donut-layout{grid-template-columns:1fr}.port-donut{width:205px}.port-allocation-donut-layout{grid-template-columns:1fr}}
+@media(max-width:1320px){.port-allocation-donut-layout{grid-template-columns:1fr}.port-allocation-donut-layout .port-donut{width:190px}}
+@media(max-width:820px){.port-pair{grid-template-columns:1fr}.port-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.port-donut-layout{grid-template-columns:minmax(160px,220px) minmax(0,1fr)}.port-allocation-donut-layout{grid-template-columns:minmax(160px,220px) minmax(0,1fr)}}
+@media(max-width:510px){.port-alloc-columns{grid-template-columns:1fr}.port-alloc-column{grid-template-rows:auto repeat(6,minmax(26px,auto))}}
+@media(max-width:540px){.port-kpis{gap:7px}.port-kpi{padding:11px}.port-kpi strong{font-size:19px}.port-page .port-card{padding:13px}.port-donut-layout{grid-template-columns:1fr}.port-allocation-donut-layout{grid-template-columns:1fr}.port-pair{gap:8px}.port-token-chart{min-width:620px}.port-token-scroller{overflow:auto}.integral-pnl-plot{min-width:355px}.port-chart-surface{height:225px}}
 .port-kpi .btc-total{display:block;color:#1466cb;font-size:clamp(17px,1.9vw,25px);font-weight:850;margin:6px 0 3px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .port-kpi .btc-source{font-size:10px;color:var(--port-sub);line-height:1.5}
 .port-kpi-primary{border-color:#a9c9f6;background:linear-gradient(135deg,var(--port-surface),rgba(30,114,211,.055))}
@@ -116,7 +131,7 @@
 {% if homologation and homologation.status != 'CURRENT' %}
 <div class="port-homologation" id="master-homologation-status" data-homologation-status="{{ homologation.status }}">
 <strong>Homologación del MASTER: {{ homologation.status }} · Referencia del control, no certificación vigente</strong>
-<span>13_CONTROL_HOMOLOGACION contrastado con snapshot {{ homologation.checked_against_snapshot }}. {% for issue in homologation.issues %}{{ issue.code }}{% if not loop.last %} · {% endif %}{% endfor %}. No modifica ni reemplaza saldos de 01_CONTROL/02_POSICIONES/03_LIQUIDEZ.</span>
+<span>Fuente {{ homologation.source }} contrastada con snapshot {{ homologation.checked_against_snapshot }}. {% for issue in homologation.issues %}{{ issue.code }}{% if not loop.last %} · {% endif %}{% endfor %}. No modifica ni reemplaza saldos de 01_CONTROL/02_POSICIONES/03_LIQUIDEZ.</span>
 </div>
 {% endif %}
 <header class="port-hero"><div><h2>KAIROS | PORTAFOLIO</h2><p>Inventario publicado: {{ g.kairos_state['control']['fecha_corte'] }} · Spot MCP: {{ spot_observed or 'N/D' }}</p></div><span class="port-tag">SOLO LECTURA · MASTER PUBLICADO 5.0.0</span></header>
@@ -136,8 +151,27 @@
  </article>
  <article class="port-card" data-allocation-chart="13"><div class="port-card-head"><div><h3>Allocation por token (incluye USDT)</h3><p class="sub">Distribución actual del patrimonio completo · datos Spot.</p></div></div>
  {% if allocation %}{% set aacc=namespace(distance=0.0) %}
- <div class="port-donut-layout"><svg class="port-donut" viewBox="0 0 220 220" role="img" aria-label="Allocation de 12 activos y USDT"><circle class="integral-donut-base" cx="110" cy="110" r="72"/><g transform="rotate(-90 110 110)">{% for it in allocation['items'] %}{% set arc=it.pct/100*circumference %}{% if arc>0 %}<circle class="integral-donut-sector" data-allocation-token="{{ it.token }}" cx="110" cy="110" r="72" stroke="{{ it.color }}" stroke-dasharray="{{ '%.5f'|format(arc) }} {{ circumference }}" stroke-dashoffset="{{ '%.5f'|format(-aacc.distance) }}"><title>{{ it.token }}: {{ '${:,.2f}'.format(it.value) }} ({{ '%.2f'|format(it.pct) }}%)</title></circle>{% endif %}{% set aacc.distance=aacc.distance+arc %}{% endfor %}</g><text class="integral-donut-caption" x="110" y="96">Patrimonio actual</text><text class="integral-donut-center" x="110" y="114">{{ '${:,.0f}'.format(allocation.total) }}</text><text class="integral-donut-caption" x="110" y="134">USDT · total</text></svg>
- <div class="port-legend port-legend-scroll" aria-label="Allocation desglosado por token"><div class="port-legend-item heading"><span>Token</span><span>%</span><span>USDT</span></div>{% for it in allocation['items'] %}<div class="port-legend-item"><span class="port-legend-name"><i class="dot" style="background:{{ it.color }}"></i>{{ coin_tag(it.token) }}</span><strong>{{ '%.2f%%'|format(it.pct) }}</strong><strong data-private="money">{{ '{:,.0f}'.format(it.value) }}</strong></div>{% endfor %}</div></div>
+ <div class="port-donut-layout port-allocation-donut-layout"><svg class="port-donut" viewBox="0 0 220 220" role="img" aria-label="Allocation de 12 activos y USDT"><circle class="integral-donut-base" cx="110" cy="110" r="72"/><g transform="rotate(-90 110 110)">{% for it in allocation['items'] %}{% set arc=it.pct/100*circumference %}{% if arc>0 %}<circle class="integral-donut-sector" data-allocation-token="{{ it.token }}" cx="110" cy="110" r="72" stroke="{{ it.color }}" stroke-dasharray="{{ '%.5f'|format(arc) }} {{ circumference }}" stroke-dashoffset="{{ '%.5f'|format(-aacc.distance) }}"><title>{{ it.token }}: {{ '${:,.2f}'.format(it.value) }} ({{ '%.2f'|format(it.pct) }}%)</title></circle>{% endif %}{% set aacc.distance=aacc.distance+arc %}{% endfor %}</g><text class="integral-donut-caption" x="110" y="96">Patrimonio actual</text><text class="integral-donut-center" x="110" y="114">{{ '${:,.0f}'.format(allocation.total) }}</text><text class="integral-donut-caption" x="110" y="134">USDT · total</text></svg>
+ {# All 13 components remain visible. USDT is not counted as one of the 12 crypto tokens. #}
+ {% set cash_items=allocation['items']|selectattr('token','equalto','USDT')|list %}
+ {% set crypto_items=allocation['items']|rejectattr('token','equalto','USDT')|list %}
+ <div class="port-allocation-legend" aria-label="Allocation completo: USDT y doce tokens en dos columnas">
+  <div class="port-alloc-cash" data-allocation-cash="USDT" aria-label="Liquidez física USDT">
+   {% for it in cash_items %}
+   <div class="port-legend-item"><span class="port-legend-name"><i class="dot" style="background:{{ it.color }}"></i>{{ coin_tag(it.token) }}</span><strong>{{ '%.2f%%'|format(it.pct) }}</strong><strong data-private="money">{{ '{:,.0f}'.format(it.value) }}</strong></div>
+   {% endfor %}
+  </div>
+  <div class="port-alloc-columns" data-token-columns="6+6">
+   {% for group in [crypto_items[:6],crypto_items[6:]] %}
+   <div class="port-alloc-column" data-allocation-column="{{ loop.index }}" aria-label="Tokens {{ 1 if loop.first else 7 }} a {{ 6 if loop.first else 12 }}">
+    <div class="port-legend-item heading"><span>Token</span><span>%</span><span>USDT</span></div>
+    {% for it in group %}
+    <div class="port-legend-item" data-allocation-legend-token="{{ it.token }}"><span class="port-legend-name"><i class="dot" style="background:{{ it.color }}"></i>{{ coin_tag(it.token) }}</span><strong>{{ '%.2f%%'|format(it.pct) }}</strong><strong data-private="money">{{ '{:,.0f}'.format(it.value) }}</strong></div>
+    {% endfor %}
+   </div>
+   {% endfor %}
+  </div>
+ </div></div>
  {% else %}<div class="port-empty"><strong>Allocation no disponible</strong>Requiere la valoración completa de los 12 tokens mediante Binance Spot MCP.</div>{% endif %}
  </article>
 </div>

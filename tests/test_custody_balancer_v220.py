@@ -15,7 +15,7 @@ def test_release_ui_has_live_sheet_adapter_and_health_markers():
     root=Path(__file__).resolve().parents[1]
     app=(root/'app.py').read_text()
     html=(root/'templates/balancer.html').read_text()
-    assert "APP_VERSION = '2.0.30'" in app
+    assert "APP_VERSION = '2.0.32'" in app
     assert "g.kairos_state['custody_policy']" in app
     assert "compare_custody(custody_positions" in app
     assert "'custody_comparison':custody_comparison" in app
@@ -218,3 +218,41 @@ def test_b_model_is_responsive_and_accessible():
     assert '@media(max-width:550px)' in TEMPLATE
     assert 'custody-plot' in TEMPLATE
     assert 'custody-more' in TEMPLATE
+
+# v2.0.32: the Balancer sell candidates table displays the already capped SELL
+# units; it does not recompute from a second price source or fabricate fills.
+def test_v2032_balancer_sell_units_column_renders_model_quantities():
+    from pathlib import Path
+    from types import SimpleNamespace
+    from jinja2 import Environment
+    root=Path(__file__).resolve().parents[1]
+    html=(root/'templates/balancer.html').read_text()
+    start=html.index('<section class="panel span-6"><h2>4. Candidatos de venta')
+    end=html.index('</section>',start)+len('</section>')
+    snippet=html[start:end]
+    payload=SimpleNamespace(sells=[
+        {'token':'HYPE','value':2653.30,'weight':.23,'target':.10,'units':32.5},
+        {'token':'HBAR','value':1405.90,'weight':.069,'target':.05,'units':16843.17120163},
+    ])
+    markup=Environment().from_string(snippet).render(payload=payload)
+    assert '<th>Unidades estimadas</th>' in markup
+    assert '32.5' in markup and '16,843.17120163' in markup
+    assert markup.count('data-private="units"')==2
+    assert 'TOTAL VENTAS USDT' in markup and 'SIMULACIÓN' in markup
+    assert '2,653.30' not in markup  # USD reference remains rounded visually.
+    assert '4,059' in markup
+
+
+def test_v2032_balancer_units_show_dash_when_zero_and_never_sum_tokens():
+    from pathlib import Path
+    from types import SimpleNamespace
+    from jinja2 import Environment
+    root=Path(__file__).resolve().parents[1]
+    html=(root/'templates/balancer.html').read_text()
+    start=html.index('<section class="panel span-6"><h2>4. Candidatos de venta')
+    end=html.index('</section>',start)+len('</section>')
+    payload=SimpleNamespace(sells=[{'token':'HYPE','value':0,'weight':.23,'target':.1,'units':0}])
+    markup=Environment().from_string(html[start:end]).render(payload=payload)
+    assert '>—</td>' in markup
+    assert '<th>Unidades estimadas</th>' in markup
+    assert '<td>—</td><td>SIMULACIÓN</td>' in markup

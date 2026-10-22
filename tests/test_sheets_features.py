@@ -104,7 +104,8 @@ class WriteTransactionTests(unittest.TestCase):
             newid[0]=history[0]['appendCells']['rows'][0]['values'][0]['userEnteredValue']['stringValue']
             return {'spreadsheetId':'TEST'}
         def reread(force=False):
-            return {'control':{'snapshot_id':newid[0]}}
+            return {'control':{'snapshot_id':newid[0]},
+                    'homologation':{'status':'CURRENT','source':'25_HOMOLOGACION_HISTORIAL'}}
         with patch('kairos_sheets_features._remote_data',return_value=master), \
              patch('kairos_sheets_features._sheet_ids',return_value=sheets), \
              patch('kairos_sheets_features._api',side_effect=stub_api), \
@@ -115,7 +116,8 @@ class WriteTransactionTests(unittest.TestCase):
                      'evidence':'Aprobación de objetivos para auditoría'})
         assert len(calls)==1 and result['status']=='OK'
         sheetids=[r['appendCells']['sheetId'] for r in calls[0] if 'appendCells' in r]
-        assert set(sheetids)=={102,103}
+        assert set(sheetids)=={102,103,2005002501}
+        assert any('addSheet' in x and x['addSheet']['properties']['title']=='25_HOMOLOGACION_HISTORIAL' for x in calls[0])
         assert result['previous_snapshot_id']=='TEST-001'
         assert result['snapshot_id']==newid[0]
 

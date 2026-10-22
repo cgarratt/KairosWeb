@@ -17,7 +17,8 @@ from urllib.parse import quote
 
 from forecast_fibo_policy import (STAGE_KEYS, DEFAULTS, stringify_weights, parse_weights, ForecastAllocationError,
     TRANCHE_KEYS, TRANCHES, ALL_TRANCHE_KEYS, STAGE_FOR_KEY, validate_weights, defaults_from_master)
-from google_sheets_master import SHEET_ID_DEFAULT, SHEETS, SheetDataError, parse_master, _remote_data
+from google_sheets_master import (SHEET_ID_DEFAULT, SHEETS, SheetDataError, parse_master, _remote_data,
+    HOMOLOGATION_HEADERS, HOMOLOGATION_HISTORY_RANGE, homologation_certificate)
 from wave_pivots import WAVES, PRICE_COLS, DATE_COLS, STATE_COLS, HEADERS, wave_row, date_iso, WavePivotError, CL_STATUS_COL, CL_STATES, PIVOT_STATES, normalized_status
 from cl_validation import verify_review
 
@@ -680,6 +681,60 @@ def settings_data():
             'blocked':{'BSI_SELL':'No homologado','TRADINGBOT':'WATCH', 'PIVOTS':'Certificación manual pendiente'}}
 
 
+HOMOLOGATION_TAB = '25_HOMOLOGACION_HISTORIAL'
+
+
+def _homologation_sheet_requests(sheetids):
+    """Create the ledger only during an authorized write, never on page load."""
+    if HOMOLOGATION_TAB in sheetids:
+        return [],sheetids[HOMOLOGATION_TAB]
+    used=set(sheetids.values())
+    sid=2005002501
+    while sid in used:sid+=1
+    return [{'addSheet':{'properties':{'sheetId':sid,'title':HOMOLOGATION_TAB,
+              'gridProperties':{'rowCount':2000,'columnCount':15,'frozenRowCount':1}}}},
+            {'updateCells':{'start':{'sheetId':sid,'rowIndex':0,'columnIndex':0},
+              'rows':[{'values':[_sval(v) for v in HOMOLOGATION_HEADERS]}],
+              'fields':'userEnteredValue'}}],sid
+
+
+def _certificate_append(sheetid,validated,snapshot_id,published_utc,certified_utc):
+    cert=homologation_certificate(validated,snapshot_id,published_utc,certified_utc)
+    return {'appendCells':{'sheetId':sheetid,
+            'rows':[{'values':[_sval(v) for v in cert]}], 'fields':'userEnteredValue'}}
+
+
+def homologate_current_snapshot(expected_snapshot_id):
+    """Admin-only caller: independently validate current snapshot; append-only and idempotent.
+
+    Never writes balances or replaces an old 13_CONTROL historical PASS.
+    """
+    if not isinstance(expected_snapshot_id,str) or not expected_snapshot_id.strip():
+        raise SettingsError('expected_snapshot_id requerido')
+    with WRITE_LOCK:
+        raw=_remote_data()
+        current=parse_master(raw)
+        ctrl=current['control']
+        if expected_snapshot_id!=ctrl['snapshot_id']:
+            raise SettingsError('CONFLICTO: el snapshot cambió, recarga antes de homologar')
+        if current['homologation']['status']=='CURRENT' and current['homologation']['source']==HOMOLOGATION_TAB:
+            return {'status':'OK','already_homologated':True,'snapshot_id':expected_snapshot_id,
+                    'certification_scope':'BASE_CONTABLE','pending_controls':current['homologation']['pending_controls']}
+        sheetids=_sheet_ids()
+        requests,sid=_homologation_sheet_requests(sheetids)
+        now=datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
+        requests.append(_certificate_append(sid,current,expected_snapshot_id,ctrl['publicado_utc'],now))
+        _api('POST',':batchUpdate',write=True,payload={'requests':requests})
+        from google_sheets_master import invalidate_cache, get_state
+        invalidate_cache()
+        verified=get_state(force=True)
+        if verified['control']['snapshot_id']!=expected_snapshot_id or verified['homologation']['status']!='CURRENT' or verified['homologation']['source']!=HOMOLOGATION_TAB:
+            raise SettingsError('Homologación escrita pero no certificada en lectura posterior; verificar MASTER')
+        return {'status':'OK','already_homologated':False,'snapshot_id':expected_snapshot_id,
+                'certified_utc':now,'certification_scope':'BASE_CONTABLE',
+                'pending_controls':verified['homologation']['pending_controls']}
+
+
 def save_changes(data):
     """One atomic Sheets batch. Preview again under lock, reject stale snapshot ID."""
     expected=data.get('expected_snapshot_id');category=data.get('section');entries=data.get('entries')
@@ -698,6 +753,8 @@ def save_changes(data):
         needed.update(('01_CONTROL','10_HISTORIAL','18_SETTINGS_AUDITORIA'))
         if not needed.issubset(sheetids):raise SettingsError('Falta una pestaña obligatoria')
         requests=[]
+        ledger_requests,homologation_sid=_homologation_sheet_requests(sheetids)
+        requests.extend(ledger_requests)
         # AA is an optional CL status column. Expand atomically with the first
         # authorized pivot publication; never change Google Sheets on a GET.
         if any(name=='pivots' and col>=26 for name,row,col,value in writes):
@@ -743,13 +800,17 @@ def save_changes(data):
         requests.append({'appendCells':{'sheetId':sheetids['18_SETTINGS_AUDITORIA'],
                          'rows':[{'values':[_sval(v) for v in record]} for record in audit_entries],
                          'fields':'userEnteredValue'}})
+        # New snapshot and accounting homologation in one atomic Sheets transaction.
+        requests.append(_certificate_append(homologation_sid,newstate,new_snapshot,
+                                            now.isoformat().replace('+00:00','Z'),
+                                            now.isoformat().replace('+00:00','Z')))
         _api('POST',':batchUpdate',write=True,payload={'requests':requests})
         from google_sheets_master import invalidate_cache, get_state
         invalidate_cache()
         # Publication is not claimed successful until the canonical reader validates it.
         verified=get_state(force=True)
-        if verified['control']['snapshot_id']!=new_snapshot:
+        if verified['control']['snapshot_id']!=new_snapshot or verified['homologation']['status']!='CURRENT':
             raise SettingsError('Publicación enviada pero nueva versión NO verificada; revisar Google Sheets')
         return {'status':'OK','snapshot_id':new_snapshot,'previous_snapshot_id':oldid,'section':category,
                 'written_fields':len(writes),'published_utc':snapshot_row[2],
-                'warning':'Cambios publicados; datos externos/fills no inferidos. Revisar nueva conciliación del snapshot.'}
+                'warning':'Nueva publicación y homologación contable base verificadas; pivotes, BSI y operaciones remotas continúan sujetos a sus propios controles.'}

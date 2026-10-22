@@ -260,7 +260,7 @@ def test_portfolio_render_failure_discards_partial_market_values():
         'market_cache_status':lambda:{'last_valid_observed_at':'2026-10-21T22:00:00Z'},
         'uuid':uuid,'datetime':datetime,'timezone':timezone,
         'app':SimpleNamespace(logger=logging.getLogger('kairos.tests')),
-        'APP_VERSION':'2.0.30',
+        'APP_VERSION':'2.0.32',
     }
     exec(compile(ast.fix_missing_locations(ast.Module(body=[node],type_ignores=[])), '<portfolio>', 'exec'),ns)
     output=ns['integral_portfolio_page']()
@@ -273,3 +273,32 @@ def test_portfolio_render_failure_discards_partial_market_values():
     assert diagnostic['status']=='DATA_ERROR'
     assert diagnostic['snapshot_id']=='TEST-001'
     assert 'secret' not in str(diagnostic)
+
+# v2.0.32: USDT must remain a 13th component while crypto legend uses 6+6.
+def test_v2032_allocation_legend_twelve_crypto_six_per_column_and_usdt_once():
+    from types import SimpleNamespace
+    import re
+    template=(ROOT/'templates/portfolio_integral.html').read_text()
+    html=template[template.index('{% macro coin_tag'):template.index('<div class="port-page">')]
+    part=template[template.index('<article class="port-card" data-allocation-chart="13"'):template.index('<!-- Fila 2:',template.index('data-allocation-chart="13"'))]
+    amounts={'BTC':130,'ETH':120,'SOL':110,'LINK':100,'HYPE':90,'HBAR':80,
+             'SUI':70,'ONDO':60,'PUMP':50,'PLUME':40,'VIRTUAL':30,'PEPE':20}
+    rows=[{'token':t,'value':v} for t,v in amounts.items()]
+    allocations=portfolio_allocation(rows,200)
+    env=Environment(loader=FileSystemLoader(ROOT/'templates'))
+    fragment=env.from_string(html+part).render(allocation=allocations,circumference=452.389342,
+                                              g=SimpleNamespace())
+    assert fragment.count('data-allocation-token=')==13
+    assert fragment.count('data-allocation-cash="USDT"')==1
+    assert fragment.count('data-allocation-legend-token=')==12
+    assert 'data-token-columns="6+6"' in fragment
+    assert fragment.count('class="port-alloc-column"')==2
+    left=fragment.index('data-allocation-column="1"')
+    right=fragment.index('data-allocation-column="2"')
+    assert fragment[left:right].count('data-allocation-legend-token=')==6
+    assert fragment[right:].count('data-allocation-legend-token=')==6
+    assert 'class="port-legend port-legend-scroll"' not in fragment
+    css=template[template.index('<style>'):template.index('</style>')]
+    assert '.port-alloc-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))' in css
+    assert not re.search(r'\.port-allocation-legend[^}]*overflow\s*:\s*auto',css)
+    assert abs(sum(x['pct'] for x in allocations['items'])-100)<1e-8

@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from urllib.parse import quote
 
 HOMOLOGATION_RANGE = "'13_CONTROL_HOMOLOGACION'!A4:D20"
+HOMOLOGATION_HISTORY_RANGE = "'25_HOMOLOGACION_HISTORIAL'!A1:O2000"
 SHEET_ID_DEFAULT = '1_tG5FK_u0biVZm2iXaK6fJi1enBYJYLAG6txkpTgsy8'
 SHEETS = {
     'control': "'01_CONTROL'!A4:C31",
@@ -68,6 +69,7 @@ def _map_rows(response):
         result[k]=v
     # Optional diagnostic evidence; missing records do not rewrite or certify balances.
     result['homologation'] = response.get(HOMOLOGATION_RANGE, [])
+    result['homologation_history'] = response.get(HOMOLOGATION_HISTORY_RANGE, [])
     return result
 
 
@@ -79,12 +81,76 @@ def _legacy_cash_number(value):
     return int(digits) if digits.isdigit() else None
 
 
-def assess_homologation(control, rows, liquidity):
+HOMOLOGATION_HEADERS = [
+    'snapshot_id','fecha_corte','publicado_utc','homologado_utc','schema_version',
+    'tokens','targets','custodia','liquidez_qf','usdt_fisico','qf','usdt_operativo',
+    'pivotes','bsi','certificacion',
+]
+
+
+def homologation_certificate(state, snapshot_id, published_utc, certified_utc):
+    """Validated accounting-only evidence; NEVER certifies remote fills/pivots/BSI."""
+    snap=state['snapshot']
+    if len(state['tokens'])!=12 or abs(sum(state['targets'].values())-1)>1e-7:
+        raise SheetDataError('homologation: invalid token universe/targets')
+    if set(state['custody_policy'])!={'T1','T2','T3'}:
+        raise SheetDataError('homologation: incomplete custody policy')
+    if any(k not in state['validation'] or state['validation'][k]!='OK'
+           for k in ('12 tokens Kairos presentes','Targets cripto suman 100%',
+                     'Custodia suma unidades','Total USDT conciliado','Reserva QF sin duplicar')):
+        raise SheetDataError('homologation: pending critical validations')
+    cash=float(snap['physical_total_USDT'])
+    qf=float(snap['trading_real_fixed_USDT'])
+    operating=float(snap['kairos_operating_USDT_before_commitments'])
+    if qf<0 or operating<0 or abs(cash-qf-operating)>.05:
+        raise SheetDataError('homologation: QF cash not reconciled')
+    return [snapshot_id,str(state['control']['fecha_corte']),published_utc,certified_utc,
+            '5.0.0','PASS','PASS','PASS','PASS',round(cash,8),round(qf,8),round(operating,8),
+            'PENDIENTE_CERTIFICACION','BSI_SELL_BLOQUEADO','BASE_CONTABLE_VALIDADA']
+
+
+def _review_history(control, rows, cash, qf):
+    """Only the latest ledger entry is authoritative; an old PASS is never carried forward."""
+    records=[r for r in (rows or [])[1:] if r and r[0]]
+    if not records:return None
+    newest=records[-1]
+    snapshot=str(_cell(newest,0,'') or '')
+    issues=[]
+    if snapshot != str(control['snapshot_id']):
+        issues.append({'code':'SNAPSHOT_REFERENCE_STALE','control':'25_HOMOLOGACION_HISTORIAL',
+                       'detail':'La última homologación corresponde a otra publicación.'})
+    if str(_cell(newest,1,'')) != str(control['fecha_corte']) or str(_cell(newest,2,'')) != str(control['publicado_utc']):
+        issues.append({'code':'PUBLICATION_IDENTITY_MISMATCH','control':'25_HOMOLOGACION_HISTORIAL',
+                       'detail':'Corte o momento de publicación diferente.'})
+    if str(_cell(newest,4,''))!='5.0.0' or any(str(_cell(newest,i,''))!='PASS' for i in (5,6,7,8)):
+        issues.append({'code':'HOMOLOGATION_VALIDATION_INCOMPLETE','control':'25_HOMOLOGACION_HISTORIAL',
+                       'detail':'No están aprobados todos los controles contables obligatorios.'})
+    try:
+        values=[float(_cell(newest,i,'')) for i in (9,10,11)]
+        if any(not math.isfinite(v) for v in values) or abs(values[0]-cash)>.05 or abs(values[1]-qf)>.05 or abs(values[2]-(cash-qf))>.05:
+            raise ValueError('mismatch')
+    except (ValueError,TypeError):
+        issues.append({'code':'LIQUIDITY_REFERENCE_STALE','control':'25_HOMOLOGACION_HISTORIAL',
+                       'detail':'Evidencia de USDT/QF no coincide con publicación.'})
+    if str(_cell(newest,14,''))!='BASE_CONTABLE_VALIDADA':
+        issues.append({'code':'HOMOLOGATION_SCOPE_UNVERIFIED','control':'25_HOMOLOGACION_HISTORIAL',
+                       'detail':'Alcance de la certificación no válido.'})
+    return {'status':'CURRENT' if not issues else 'STALE',
+            'checked_against_snapshot':control['snapshot_id'],'issues':issues,
+            'read_only':True,'source':'25_HOMOLOGACION_HISTORIAL',
+            'certified_utc':_cell(newest,3),'certification_scope':'BASE_CONTABLE',
+            'pending_controls':['PIVOTES_CERTIFICACION', 'BSI_SELL_BASELINE_HWM', 'LIBRO_EXCHANGE_REMOTO'],
+            'history_count':len(records)}
+
+
+def assess_homologation(control, rows, liquidity, history_rows=None, qf=0):
     """Read-only certification freshness audit; historical notes never replace published values.
 
     PASS in an old 13_CONTROL row is not proof of the current 01_CONTROL.
     Missing/partial homologation is UNKNOWN (not a forced Sheet contract error).
     """
+    current=_review_history(control,history_rows,liquidity,qf)
+    if current is not None:return current
     rows=list(rows or [])
     if not rows or len(rows)<2:
         return {'status':'NOT_VERIFIED','checked_against_snapshot':control['snapshot_id'],
@@ -284,7 +350,7 @@ def parse_master(raw):
     for key in ('12 tokens Kairos presentes','Targets cripto suman 100%','Custodia suma unidades','Total USDT conciliado','Reserva QF sin duplicar'):
         if validation.get(key)!='OK':raise SheetDataError(f'11_VALIDACIONES: {key} not OK')
     if validation.get('Estado publicación')!='PUBLICADO':raise SheetDataError('11_VALIDACIONES: publication mismatch')
-    homologation=assess_homologation(ctrl,blocks['homologation'],liquidity)
+    homologation=assess_homologation(ctrl,blocks['homologation'],liquidity,blocks['homologation_history'],qf)
     snapshot={'holdings_total':holdings,'custody_core_blocked__core_strategic__exchange':custody,
               'physical_total_USDT':liquidity,'trading_real_fixed_USDT':qf,
               'kairos_operating_USDT_before_commitments':operating,
@@ -334,6 +400,17 @@ def _remote_data():
                 raise SheetDataError('Google Sheets incomplete batchGet')
             result={a1:r.get('values',[]) for a1,r in zip(SHEETS.values(),items)}
             if len(items)>len(SHEETS):result[HOMOLOGATION_RANGE]=items[-1].get('values',[])
+            # New append-only ledger is optional for installations older than v2.0.31.
+            # Never mutate a Sheet on GET; 404/400 indicates tab not created yet.
+            history_response=session.get(url,params=[('ranges',HOMOLOGATION_HISTORY_RANGE),
+                                                        ('valueRenderOption','UNFORMATTED_VALUE')],timeout=20)
+            if history_response.status_code==200:
+                history=history_response.json().get('valueRanges') or []
+                result[HOMOLOGATION_HISTORY_RANGE]=(history[0].get('values',[]) if history else [])
+            elif history_response.status_code in (400,404):
+                result[HOMOLOGATION_HISTORY_RANGE]=[]
+            else:
+                raise SheetDataError(f'Google Sheets HTTP {history_response.status_code}')
             return result
         raise SheetDataError('Google Sheets unavailable')
     finally:
