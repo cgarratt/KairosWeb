@@ -1,6 +1,6 @@
-# KairosWeb v2.0.34 — Objetivos de Liquidez y ReservaTrading
+# KairosWeb v2.0.35 — Distribución actual del capital
 
-**Aplicación:** `2.0.34` · **Google Sheets schema:** `5.0.0` · **Motor KairosGPT compatible:** v1.3.6.
+**Aplicación:** `2.0.35` · **Google Sheets schema:** `5.0.0` · **Motor KairosGPT compatible:** v1.3.6.
 
 ## Novedades acumuladas sobre KairosWeb v2.0.18
 
@@ -22,7 +22,7 @@
 
 1. Extraer el ZIP **en la raíz del repositorio de KairosWeb**; el contenido se encuentra en la raíz, no en un subdirectorio adicional. Reemplazar los archivos por estos manteniendo las variables de entorno existentes. **No añadir credenciales ni subir `.env`.**
 2. Revisar diferencias, hacer commit y desplegar Render. Este ZIP no ejecuta git push, no crea un GitHub Release y no redepliega por sí mismo.
-3. Comprobar `/health`: `service=KairosWeb`, `version=2.0.34`, `status=UP`, `release_assets.consistent=true` y checks `sales_optimizer_engine`, `sales_optimizer_ui`, `portfolio_unrealized_chart`.
+3. Comprobar `/health`: `service=KairosWeb`, `version=2.0.35`, `status=UP`, `release_assets.consistent=true` y checks `sales_optimizer_engine`, `sales_optimizer_ui`, `portfolio_unrealized_chart`.
 4. Abrir `/mode/ventas` y `/mode/ventas?usdt_pct=55`; comprobar el porcentaje solicitado, prioridades y el comparativo. Confirmar que no hay órdenes reales creadas.
 5. Confirmar `/mode/portafolio` y el gráfico de resultado no realizado; verificar Compras, Forecast, Pivotes y Órdenes fase 1.
 
@@ -162,3 +162,12 @@ La sección 7 de Balancer presenta una fila por token con transferencias desde E
 - La política operativa `STRUCTURAL_USDT_TARGET` (por defecto publicado 40%) **es un parámetro independiente**, ya editable en Configuración → Parámetros → Portafolio. Cambiar porcentajes históricos de `08_INTEGRAL` no modifica Balancer ni Ventas.
 - Cada cambio requiere sesión admin, evidencia/justificación, `expected_snapshot_id`, una nueva publicación Google Sheets atómica, entrada de auditoría y certificado contable del snapshot. No se generan órdenes ni transferencias.
 - No se modificó el MASTER real durante la creación del ZIP. Los nuevos porcentajes deben ser indicados y publicados por el administrador.
+
+
+## Release v2.0.35 · Donut de capital actual (Spot)
+
+- **Portafolio, primer donut:** reemplaza “Composición del capital histórico” por **“Distribución actual del capital”**, calculada exclusivamente de `02_POSICIONES` y `03_LIQUIDEZ` del último snapshot `PUBLICADO` con cotizaciones Binance Spot MCP vigentes.
+- **Cuatro componentes sin solapamiento:** (1) HODL + Core (unidades × Spot), (2) Exchange (unidades × Spot), (3) Liquidez operativa (USDT físico menos Quantfury), (4) ReservaTrading QF real. Pérdidas realizadas y objetivos de `08_INTEGRAL` no se suman ni sustituyen saldos presentes.
+- El donut utiliza **el mismo patrimonio total** que “Allocation por token (incluye USDT)”. Una prueba explícita rechaza discrepancias de totales, unidades por custodia, precios incompletos o QF fuera del USDT físico. Con DATA ERROR la vista indica N/D en vez de mostrar histórico obsoleto.
+- La leyenda incluye USDT y porcentajes actuales; se conserva el segundo donut de 13 componentes, P&L, BSI archivado, Ventas y el resto de módulos. Sin movimientos reales ni edición del MASTER.
+- Nueva verificación `/health`: `current_capital_donut_v2035`. La comprobación HTTP real de Render requiere desplegar el ZIP.

@@ -66,6 +66,56 @@ ALLOCATION_COLORS = {'USDT':'#2080ed','BTC':'#ed9e34','ETH':'#7551d9',
                      'PUMP':'#e98b7d','PLUME':'#29b7bb','VIRTUAL':'#ae65e9','PEPE':'#bfa752'}
 
 
+def current_capital_distribution(rows, physical_usdt, qf_real, *, portfolio_total=None):
+    """Four disjoint, current Spot-valued capital segments.
+
+    Inputs must come from the same validated PUBLICADO snapshot and Binance
+    Spot observation as portfolio_allocation. QF is already part of physical
+    USDT; never add it to that value again. Fail closed on missing/inconsistent
+    custody instead of drawing a plausible but incorrect donut.
+    """
+    cash=_finite(physical_usdt)
+    reserve=_finite(qf_real)
+    if cash is None or reserve is None or reserve > cash:
+        raise ValueError('Liquidez física/QF no conciliada')
+    if len(rows)!=12:
+        raise ValueError('Se requieren 12 tokens para distribución de capital')
+    holdings_value=0.0
+    exchange_value=0.0
+    for row in rows:
+        price=_finite(row.get('price'), positive=True)
+        hodl=_finite(row.get('hodl_units'))
+        core=_finite(row.get('core_units'))
+        exchange=_finite(row.get('exchange_units'))
+        reported=_finite(row.get('value'))
+        total_units=_finite(row.get('units'))
+        if any(v is None for v in (price,hodl,core,exchange,reported,total_units)):
+            raise ValueError('Custodia o Spot de token incompleto')
+        if not _math.isclose(hodl+core+exchange,total_units,rel_tol=1e-9,abs_tol=1e-7):
+            raise ValueError('Custodia no concilia unidades de token')
+        value=(hodl+core+exchange)*price
+        if not _math.isclose(value,reported,rel_tol=1e-9,abs_tol=0.01):
+            raise ValueError('Valor de token no concilia con Spot')
+        holdings_value+=(hodl+core)*price
+        exchange_value+=exchange*price
+    values=(('hodl_core','HODL + Core',holdings_value),
+            ('exchange','Exchange',exchange_value),
+            ('liquidity','Liquidez operativa',cash-reserve),
+            ('trading','ReservaTrading QF',reserve))
+    total=sum(v for _,_,v in values)
+    if not math.isfinite(total) or total <= 0:
+        raise ValueError('Patrimonio actual inválido')
+    if portfolio_total is not None:
+        expected=_finite(portfolio_total)
+        if expected is None or not _math.isclose(total,expected,rel_tol=1e-9,abs_tol=0.01):
+            raise ValueError('Distribución por custodia no concilia con patrimonio')
+    return {'total':total,
+            'items':[{'key':k,'name':label,'value':v,'pct':v/total*100}
+                     for k,label,v in values],
+            'basis':'02_POSICIONES + 03_LIQUIDEZ + Binance Spot MCP',
+            'qf_included_once':True}
+
+
 def portfolio_allocation(rows, physical_usdt):
     """13 mutually-exclusive current amounts, including *physical* USDT once.
 

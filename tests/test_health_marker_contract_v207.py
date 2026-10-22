@@ -47,6 +47,7 @@ def test_portfolio_diagnostic_template_has_no_raw_exception():
     assert 'portfolio_diagnostic.origin' in template
     assert 'portfolio_diagnostic.error_id' in template
     assert 'portfolio_diagnostic.last_valid_spot_utc' in template
-    assert 'historical_reference_date' in template
-    assert 'HISTÓRICO NO SPOT' in template
+    assert 'Distribución actual del capital' in template
+    assert "capital_distribution['items']" in template
+    assert 'HISTÓRICO NO SPOT' not in template
     assert 'homologation.status' in template

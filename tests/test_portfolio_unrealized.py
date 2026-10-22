@@ -109,7 +109,7 @@ def test_portfolio_route_wired_to_live_dashboard_and_health():
     assert "'portfolio_unrealized_calc':" in script
 
 
-from portfolio_unrealized import portfolio_allocation, category_allocation, pri_valuation_history
+from portfolio_unrealized import portfolio_allocation, category_allocation, pri_valuation_history, current_capital_distribution
 
 
 def test_allocation_13_components_cash_once_sorted():
@@ -167,8 +167,7 @@ def test_template_full_render_with_certified_sample_and_missing_values():
            'value':i+1.0,'weight':(i+1)/78,'target':.05,'tier':('T1' if i<5 else 'T2' if i<10 else 'T3'),
            'hodl_units':0.,'core_units':0.,'exchange_units':1.,'drift_pp':([-2.0,0.0,4.0][i%3]),'status':(['INFRA','NEUTRAL','SOBRE'][i%3])} for i,t in enumerate(tokens)]
     ctx={'g':SimpleNamespace(kairos_state={'control':{'fecha_corte':'2026-10-19'}}),
-         'base':150000.0,'segments':[{'key':'hodl_core','actual_usdt':100000.0,'target_usdt':100000.0,'name':'HODL + Core'},
-                                    {'key':'lost','actual_usdt':50000.0,'target_usdt':50000.0,'name':'Lost'}],
+         'capital_distribution':current_capital_distribution(rows, 200, 100, portfolio_total=sum(r['value'] for r in rows)+200),
          'spot':{'total':sum(r['value'] for r in rows)+200,'liquidity':100,'trading':100},
          'spot_observed':'2026-10-21T11:00:00Z','pnl_report':summarize_unrealized(rows),
          'allocation':portfolio_allocation(rows,200),'categories':category_allocation(rows),
@@ -188,6 +187,10 @@ def test_template_full_render_with_certified_sample_and_missing_values():
     assert markup.count('class="port-coin"')>=25
     assert '<details' not in markup
     assert 'Seguimiento del portafolio' in markup
+    assert 'Distribución actual del capital' in markup
+    assert markup.count('data-capital-legend=')==4
+    assert '08_INTEGRAL' not in markup
+    assert 'Lost · realizado' not in markup
     assert 'id="btc-portfolio-total"' in markup
     assert '₿ 278.00000000' in markup
     assert markup.count('<td data-private="money">') >= 12
@@ -302,3 +305,32 @@ def test_v2032_allocation_legend_twelve_crypto_six_per_column_and_usdt_once():
     assert '.port-alloc-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))' in css
     assert not re.search(r'\.port-allocation-legend[^}]*overflow\s*:\s*auto',css)
     assert abs(sum(x['pct'] for x in allocations['items'])-100)<1e-8
+
+
+def test_current_capital_distribution_spot_cash_qf_once_and_fail_closed():
+    rows=[{'token':str(i),'hodl_units':2.,'core_units':3.,'exchange_units':5.,
+           'units':10.,'price':i+1.,'value':10.*(i+1.)} for i in range(12)]
+    result=current_capital_distribution(rows,physical_usdt=22545.,qf_real=4225.,portfolio_total=23325.)
+    assert [x['key'] for x in result['items']]==['hodl_core','exchange','liquidity','trading']
+    assert [x['value'] for x in result['items']]==[390.,390.,18320.,4225.]
+    assert result['total']==23325.
+    assert sum(x['pct'] for x in result['items'])==pytest.approx(100)
+    assert result['qf_included_once']
+    for qf in (-1.,22546.,float('nan')):
+        with pytest.raises(ValueError):
+            current_capital_distribution(rows,22545.,qf)
+    with pytest.raises(ValueError,match='concilia'):
+        current_capital_distribution(rows,22545.,4225.,portfolio_total=24000.)
+    broken=[dict(r) for r in rows]
+    broken[0]['exchange_units']=6.
+    with pytest.raises(ValueError,match='Custodia'):
+        current_capital_distribution(broken,22545.,4225.)
+
+
+def test_current_donut_not_historical_or_rendered_on_missing_spot():
+    html=(ROOT/'templates/portfolio_integral.html').read_text()
+    assert '08_INTEGRAL_HISTORICO' not in html
+    assert 'HISTÓRICO NO SPOT' not in html
+    assert 'data-source="02_POSICIONES_03_LIQUIDEZ_BINANCE_SPOT"' in html
+    assert 'capital_distribution and spot' in html
+    assert 'Distribución actual N/D' in html

@@ -25,7 +25,7 @@ from werkzeug.local import LocalProxy
 from werkzeug.exceptions import HTTPException
 from google_sheets_master import get_state, SheetDataError, public_failure_code, cache_status as sheet_cache_status
 from hype_weekly import aggregate_weeks, HypeHistoryError
-from portfolio_unrealized import summarize_unrealized, portfolio_allocation, category_allocation, pri_valuation_history, btc_equivalent
+from portfolio_unrealized import summarize_unrealized, portfolio_allocation, category_allocation, pri_valuation_history, btc_equivalent, current_capital_distribution
 from custody_balancer import compare_custody, CustodyError
 from orders_inbox import drift_tone, tradingbot_tokens
 from kairos_sheets_features import (
@@ -34,7 +34,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.34'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.35'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -970,13 +970,9 @@ def home():
 
 @app.route('/mode/portafolio')
 def integral_portfolio_page():
-    # Strategic historical ledger, deliberately independent of live crypto valuation.
-    values = dict(INTEGRAL)
-    base = values['historical_capital_usdt']
-    segments = values['segments']
-    alive = sum(x['actual_usdt'] for x in segments if x['key'] != 'lost')
-    lost = next(x['actual_usdt'] for x in segments if x['key'] == 'lost')
-    gain_to_recover = (base / alive - 1) * 100 if alive > 0 else None
+    # Both donuts describe the same current Spot-valued physical patrimony.
+    # Historic 08_INTEGRAL/Lost stays archival and is never added to the donut.
+    capital_distribution = None
     # Retrospective pricing chart intentionally retired by user's design approval.
     # Historical BSI is displayed for information only; no SELL signal.
     spot_breakdown = None
@@ -999,14 +995,17 @@ def integral_portfolio_page():
         candidate_pnl = summarize_unrealized(candidate_rows)
         candidate_allocation = portfolio_allocation(candidate_rows,live['usdt_total'])
         candidate_categories = category_allocation(candidate_rows)
-        core_value = sum((r['hodl_units']+r['core_units'])*r['price'] for r in candidate_rows)
-        exchange_value = sum(r['exchange_units']*r['price'] for r in candidate_rows)
-        cash_total = live['usdt_total']
-        qf = live['trading_reserve']
-        candidate_spot = {'core':core_value,'exchange':exchange_value,
-                          'liquidity':cash_total-qf,'trading':qf,
-                          'total':live['total_value'],'source':'Binance MCP + Google Sheets PUBLICADO'}
+        capital_candidate = current_capital_distribution(
+            candidate_rows, live['usdt_total'], live['trading_reserve'],
+            portfolio_total=live['total_value'])
+        if not math.isclose(capital_candidate['total'],candidate_allocation['total'],rel_tol=1e-9,abs_tol=0.01):
+            raise ValueError('Allocation y capital por custodia no concilian')
+        category_values={item['key']:item['value'] for item in capital_candidate['items']}
+        candidate_spot = {'core':category_values['hodl_core'],'exchange':category_values['exchange'],
+                          'liquidity':category_values['liquidity'],'trading':category_values['trading'],
+                          'total':capital_candidate['total'],'source':'Binance MCP + Google Sheets PUBLICADO'}
         spot_breakdown,spot_observed,pnl_report = candidate_spot,observed,candidate_pnl
+        capital_distribution=capital_candidate
         allocation,categories,portfolio_rows=candidate_allocation,candidate_categories,candidate_rows
         btc_reference_price,btc_total=live['btc_usdt_spot'],live['total_btc_equivalent']
         bsi_archive=live['bsi_historical']
@@ -1023,16 +1022,13 @@ def integral_portfolio_page():
                               'fecha_corte':g.kairos_state['control']['fecha_corte'],
                               'last_valid_spot_utc':market_cache_status()['last_valid_observed_at'],
                               'message':'Valoración actual no disponible. No se muestran cifras Spot parciales ni se reutiliza una cotización anterior.'}
-    return render_template('portfolio_integral.html', master=APP_VERSION, segments=segments,
-                           base=base, alive=alive, lost=lost, gain_to_recover=gain_to_recover,
+    return render_template('portfolio_integral.html', master=APP_VERSION,
+                           capital_distribution=capital_distribution,
                            spot=spot_breakdown, spot_observed=spot_observed, pnl_report=pnl_report,
                            allocation=allocation, categories=categories, portfolio_rows=portfolio_rows,
                            btc_total=btc_total, btc_reference_price=btc_reference_price,
                            bsi_archive=bsi_archive, portfolio_diagnostic=portfolio_diagnostic,
-                           homologation=g.kairos_state.get('homologation'),
-                           historical_reference_date=values.get('reference_date_label'),
-                           source_note=values['source_note'], total_recorded=sum(x['actual_usdt'] for x in segments),
-                           total_target=sum(x['target_usdt'] for x in segments))
+                           homologation=g.kairos_state.get('homologation'))
 
 @app.route('/mode/ordenes')
 def orders_inbox_page():
@@ -1612,7 +1608,7 @@ def _deployed_asset_status():
         'homologation_diagnostics_v2033': ('app.py', ('/api/settings/homologation-status', 'HOM_WRITER_MISSING', 'write_may_have_committed')),
         'capital_targets_ui_v2034': ('templates/settings.html', ('data-tab="capital_targets"', 'Objetivos de liquidez y ReservaTrading (%)')),
         'capital_targets_engine_v2034': ('kairos_sheets_features.py', ("elif category=='capital_targets'", 'CAPITAL_TARGET_SEGMENTS', 'sumar 100%')),
-        'historical_provenance_v2030': ('templates/portfolio_integral.html', ('historical_reference_date', 'HISTÓRICO NO SPOT')),
+        'current_capital_donut_v2035': ('templates/portfolio_integral.html', ('Distribución actual del capital', 'data-source="02_POSICIONES_03_LIQUIDEZ_BINANCE_SPOT"', "capital_distribution['items']", 'ReservaTrading QF')),
         'consolidated_dashboard_v2027': ('templates/portfolio_integral.html', ('id="btc-portfolio-total"', 'data-bsi-chart="archived"', 'data-portfolio-executive="12"', 'class="port-status', 'port-coin-logo')),
         'consolidated_navigation_v2025': ('templates/base.html', ('href="/mode/{{ mode.slug }}"', 'global-nav-link')),
         'portfolio_allocation_v2022': ('portfolio_unrealized.py', ('def portfolio_allocation(', 'def category_allocation(', 'def pri_valuation_history(')),

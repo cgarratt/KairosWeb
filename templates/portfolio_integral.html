@@ -142,13 +142,31 @@
  <div class="port-kpi"><small>Liquidez física</small><strong data-private="money">{{ '${:,.2f}'.format(spot.liquidity+spot.trading) if spot else 'N/D' }}</strong><span>QF incluido una sola vez</span></div>
  <div class="port-kpi"><small>Cripto invertido</small><strong data-private="money">{{ '${:,.2f}'.format(spot.total-spot.liquidity-spot.trading) if spot else 'N/D' }}</strong><span>Manga cripto · {{ '%.2f%%'|format((spot.total-spot.liquidity-spot.trading)/spot.total*100) if spot and spot.total else 'N/D' }} del patrimonio</span></div>
 </div>
-<!-- Fila 1: donut histórico, donut allocation 12 tokens + USDT -->
+<!-- Fila 1: current capital by custody, current allocation 12 tokens + USDT -->
 <div class="port-pair" data-layout-row="1">
- <article class="port-card" data-capital-chart="donut" data-source="08_INTEGRAL_HISTORICO"><div class="port-card-head"><div><h3>Composición del capital histórico</h3><p class="sub">Referencia contable de 08_INTEGRAL · corte {{ historical_reference_date or 'N/D' }}. No representa patrimonio Spot actual.</p></div><span class="port-archive-label">HISTÓRICO NO SPOT</span></div>
- {% set colors=['#174a99','#397ac9','#27a88c','#e7a047','#c74a64'] %}{% set circumference=452.389342 %}{% set acc=namespace(distance=0.0) %}
- <div class="port-donut-layout"><svg class="port-donut" viewBox="0 0 220 220" role="img" aria-label="Composición del capital histórico"><circle class="integral-donut-base" cx="110" cy="110" r="72"/><g transform="rotate(-90 110 110)">{% for s in segments %}{% set arc=(s.actual_usdt/base*circumference) if base else 0 %}{% if arc>0 %}<circle class="integral-donut-sector" data-segment="{{ s.key }}" cx="110" cy="110" r="72" stroke="{{ colors[loop.index0] }}" stroke-dasharray="{{ '%.5f'|format(arc) }} {{ circumference }}" stroke-dashoffset="{{ '%.5f'|format(-acc.distance) }}"><title>{{ s.name }} · {{ '%.1f%%'|format(s.actual_usdt/base*100) }}</title></circle>{% endif %}{% set acc.distance=acc.distance+arc %}{% endfor %}</g><text class="integral-donut-caption" x="110" y="96">Capital histórico</text><text class="integral-donut-center" x="110" y="114">{{ '${:,.0f}'.format(base) }}</text><text class="integral-donut-caption" x="110" y="134">USDT · base</text></svg>
- <div class="port-legend">{% for s in segments %}<div class="port-legend-item"><span class="port-legend-name"><i class="dot" style="background:{{ colors[loop.index0] }}"></i>{{ s.name }}</span><strong>{{ '%.1f%%'|format(s.actual_usdt/base*100) }}</strong><strong data-private="money">{{ '${:,.0f}'.format(s.actual_usdt) }}</strong></div>{% endfor %}</div></div>
- <p class="port-foot">Fuente: 08_INTEGRAL · referencia contable {{ historical_reference_date or 'N/D' }}; datos no actualizados automáticamente con las cotizaciones Spot. LOST no se agrega al patrimonio vivo. La valoración vigente se presenta únicamente en “Allocation por token”.</p>
+ <article class="port-card" data-capital-chart="donut" data-source="02_POSICIONES_03_LIQUIDEZ_BINANCE_SPOT">
+  <div class="port-card-head"><div><h3>Distribución actual del capital</h3><p class="sub">Patrimonio actual por custodia y liquidez · corte {{ g.kairos_state['control']['fecha_corte'] }} · Spot {{ spot_observed or 'N/D' }}.</p></div></div>
+  {% set colors=['#174a99','#397ac9','#27a88c','#e7a047'] %}
+  {% set circumference=452.389342 %}{% set acc=namespace(distance=0.0) %}
+  {% if capital_distribution and spot %}
+  <div class="port-donut-layout">
+    <svg class="port-donut" viewBox="0 0 220 220" role="img" aria-label="Distribución actual del capital por custodia, liquidez y trading">
+     <circle class="integral-donut-base" cx="110" cy="110" r="72"/>
+     <g transform="rotate(-90 110 110)">{% for s in capital_distribution['items'] %}
+       {% set arc=s.pct/100*circumference %}
+       {% if arc>0 %}<circle class="integral-donut-sector" data-segment="{{ s.key }}" cx="110" cy="110" r="72" stroke="{{ colors[loop.index0] }}" stroke-dasharray="{{ '%.5f'|format(arc) }} {{ circumference }}" stroke-dashoffset="{{ '%.5f'|format(-acc.distance) }}"><title>{{ s.name }} · {{ '%.2f%%'|format(s.pct) }} · {{ '${:,.2f}'.format(s.value) }}</title></circle>{% endif %}
+       {% set acc.distance=acc.distance+arc %}
+     {% endfor %}</g>
+     <text class="integral-donut-caption" x="110" y="96">Patrimonio actual</text>
+     <text class="integral-donut-center" x="110" y="114" data-private="money">{{ '${:,.0f}'.format(capital_distribution.total) }}</text>
+     <text class="integral-donut-caption" x="110" y="134">USDT · Spot</text>
+    </svg>
+    <div class="port-legend">{% for s in capital_distribution['items'] %}
+      <div class="port-legend-item" data-capital-legend="{{ s.key }}"><span class="port-legend-name"><i class="dot" style="background:{{ colors[loop.index0] }}"></i>{{ s.name }}</span><strong>{{ '%.2f%%'|format(s.pct) }}</strong><strong data-private="money">{{ '${:,.0f}'.format(s.value) }}</strong></div>
+    {% endfor %}</div>
+  </div>
+  <p class="port-foot">Fuente: MASTER PUBLICADO 02_POSICIONES y 03_LIQUIDEZ + Binance Spot MCP. HODL/Core y Exchange se valorizan a Spot; liquidez operativa = USDT físico − QF. ReservaTrading QF está incluida una sola vez. No se incluyen pérdidas históricas realizadas ni objetivos.</p>
+  {% else %}<div class="port-empty"><strong>Distribución actual N/D</strong>Sin inventario PUBLICADO y precios Spot completos no se muestra composición de capital ni valores históricos como sustituto.</div>{% endif %}
  </article>
  <article class="port-card" data-allocation-chart="13"><div class="port-card-head"><div><h3>Allocation por token (incluye USDT)</h3><p class="sub">Distribución actual del patrimonio completo · datos Spot.</p></div></div>
  {% if allocation %}{% set aacc=namespace(distance=0.0) %}
