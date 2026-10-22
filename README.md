@@ -1,6 +1,6 @@
-# KairosWeb v2.0.29 — Ventas compactas + Spot en trayectoria de Forecast
+# KairosWeb v2.0.30 — Observabilidad, conciliación y capital histórico
 
-**Aplicación:** `2.0.29` · **Google Sheets schema:** `5.0.0` · **Motor KairosGPT compatible:** v1.3.6.
+**Aplicación:** `2.0.30` · **Google Sheets schema:** `5.0.0` · **Motor KairosGPT compatible:** v1.3.6.
 
 ## Novedades acumuladas sobre KairosWeb v2.0.18
 
@@ -22,7 +22,7 @@
 
 1. Extraer el ZIP **en la raíz del repositorio de KairosWeb**; el contenido se encuentra en la raíz, no en un subdirectorio adicional. Reemplazar los archivos por estos manteniendo las variables de entorno existentes. **No añadir credenciales ni subir `.env`.**
 2. Revisar diferencias, hacer commit y desplegar Render. Este ZIP no ejecuta git push, no crea un GitHub Release y no redepliega por sí mismo.
-3. Comprobar `/health`: `service=KairosWeb`, `version=2.0.29`, `status=UP`, `release_assets.consistent=true` y checks `sales_optimizer_engine`, `sales_optimizer_ui`, `portfolio_unrealized_chart`.
+3. Comprobar `/health`: `service=KairosWeb`, `version=2.0.30`, `status=UP`, `release_assets.consistent=true` y checks `sales_optimizer_engine`, `sales_optimizer_ui`, `portfolio_unrealized_chart`.
 4. Abrir `/mode/ventas` y `/mode/ventas?usdt_pct=55`; comprobar el porcentaje solicitado, prioridades y el comparativo. Confirmar que no hay órdenes reales creadas.
 5. Confirmar `/mode/portafolio` y el gráfico de resultado no realizado; verificar Compras, Forecast, Pivotes y Órdenes fase 1.
 
@@ -30,7 +30,7 @@
 
 - `python -m pytest -q` sobre el release extraído.
 - `node tests/test_sales_optimizer.js` y tests JS adicionales incluidos.
-- `SHA256SUMS.txt` / `RELEASE_MANIFEST_v2.0.29.json` permiten comprobar integridad de archivos del ZIP, excluyendo sus propios metadatos.
+- `SHA256SUMS.txt` / `RELEASE_MANIFEST_v2.0.30.json` permiten comprobar integridad de archivos del ZIP, excluyendo sus propios metadatos.
 
 **Límite:** menos de 100 archivos; se omiten algunos tests de regresión antiguos del paquete distribuible para mantener ese límite (pero se ejecutaron en el checkout completo). Los fuentes de aplicación y assets no se han eliminado.
 
@@ -63,7 +63,7 @@ Incluye el módulo de custodia 2.0.20 y corrige el renderizado de Balancer cuand
 - La curva de rentabilidad retrospectiva y su endpoint `/api/portfolio-repricing` fueron **retirados** de Portafolio por petición del usuario; no se disparan consultas 1D para esa vista.
 - `/mode/portafolio` ya no genera curvas históricas. La segunda fila muestra BSI 4H archivado y resultado no realizado por token.
 - `/mode/ordenes` mantiene independiente el Balancer ordinario del filtro 1W de Compras. Si falla solo la estructura semanal, los niveles de compra quedan N/D y los cálculos de Balance pueden continuar como **propuestas no ejecutables**. Si faltan Sheets válidos, 12 precios Spot o la valoración Balancer, muestra `DATA ERROR` y la etapa/ID diagnóstico; no usa inventarios del ZIP.
-- `/health`: version `2.0.29`, chequeos de integridad para el nuevo motor e interfaz.
+- `/health`: version `2.0.30`, chequeos de integridad para el nuevo motor e interfaz.
 - No se ejecutan, cancelan, envían o simulan fills de órdenes. No se actualiza el MASTER.
 
 ### Validación de esta entrega
@@ -110,4 +110,15 @@ La sección 7 de Balancer presenta una fila por token con transferencias desde E
 - **Forecast:** dibujar una línea horizontal punteada con el Spot MCP vigente del token seleccionado y su precio. Incluir Spot en la escala vertical; actualizar al cambiar token y al ajustar etapas. Si falta Spot, mostrar N/D y omitir la línea, sin inventar cotización.
 - La línea es referencia informativa sobre un eje de etapas hipotéticas; **no es una onda, pivote ni señal**.
 - `/health` incorpora el marcador `forecast_spot_overlay_v2029` y deja de exigir la tabla eliminada.
-- Paquete local pendiente de despliegue. Master, órdenes y custodia sin cambios. Ver `RELEASE_NOTES_v2.0.29.md`.
+- Paquete local pendiente de despliegue. Master, órdenes y custodia sin cambios. Ver `RELEASE_NOTES_v2.0.30.md`.
+
+
+## Release v2.0.30 · Diagnóstico y procedencia B05–B08
+
+- `/health`: servidor y hashes locales sin consulta remota; último diagnóstico de dependencias en caché, con marca de hora y estado explícito `NOT_CHECKED` si aún no se ha ejecutado.
+- `Configuración → Estado de conexiones MCP → Ejecutar diagnóstico integral`: visualiza servidor, proveedores y estado de dependencia de los módulos. La consulta requiere autenticación HTTP Basic existente.
+- `/api/health/diagnostics`: **autenticado**. Comprobación read-only de Sheets, Binance y Hyperliquid y mapa de módulos por dependencias. No es homologación de orden real ni prueba funcional end-to-end.
+- Portafolio muestra error estructurado y no reutiliza datos parciales cuando falla el MCP o el cálculo.
+- `13_CONTROL_HOMOLOGACION` se contrasta con `01_CONTROL` y `03_LIQUIDEZ` para detectar referencias históricas stale, sin alterar el MASTER.
+- Capital histórico `08_INTEGRAL` muestra procedencia y referencia de corte; no se confunde con patrimonio Spot.
+- El release empaquetado es candidato listo para GitHub; la verificación HTTP en Render sigue pendiente. Ver `RELEASE_NOTES_v2.0.30.md`.

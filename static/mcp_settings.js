@@ -5,6 +5,7 @@
   const msg=document.getElementById('mcp-message');
   const lang=new Intl.DateTimeFormat('es-PE',{dateStyle:'short',timeStyle:'medium',timeZone:'America/Lima'});
   const providers=['binance','hyperliquid'];
+  const deepButton=document.getElementById('health-check-all'),deepOutput=document.getElementById('health-check-output');
   let working=new Set();
   function render(provider,result){
     const card=panel.querySelector(`[data-provider="${provider}"]`);
@@ -45,6 +46,23 @@
     }finally{
       working.delete(provider);for(const button of card.querySelectorAll('button'))button.disabled=false;
     }
+  }
+  if(deepButton&&deepOutput){
+    deepButton.addEventListener('click',async()=>{
+      deepButton.disabled=true;
+      deepOutput.textContent='Verificando las tres dependencias…';
+      try{
+        const resp=await fetch('/api/health/diagnostics',{credentials:'same-origin',cache:'no-store'});
+        const data=await resp.json();
+        const providers=data.operational_providers||{},modules=data.functional_modules||{};
+        // textContent only: never interpret provider response as HTML.
+        const providerText=['sheets','binance','hyperliquid'].map(p=>p+': '+(providers[p]?.status||'SIN_VERIFICAR')).join(' · ');
+        const moduleText=Object.keys(modules).sort().map(m=>m+': '+modules[m].status).join(' · ');
+        deepOutput.textContent='Servidor: '+(data.server?.status||'N/D')+' | Proveedores: '+providerText+' | Módulos (solo dependencias): '+moduleText+' | UTC: '+(data.checked_utc||'N/D')+(resp.ok?'':' | Requiere revisión');
+      }catch(err){
+        deepOutput.textContent='DATA_ERROR: no fue posible completar el diagnóstico; revisar conexión y logs privados.';
+      }finally{deepButton.disabled=false;}
+    });
   }
   panel.addEventListener('click',event=>{
     const button=event.target.closest('button[data-provider]');if(!button)return;

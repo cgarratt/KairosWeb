@@ -145,3 +145,47 @@ class SheetsContract(unittest.TestCase):
         with self.assertRaisesRegex(gs.SheetDataError,'synchronized'):gs.parse_master(raw)
 
 if __name__=='__main__':unittest.main()
+
+# B07/B08: verification is tied to current publication and does not rewrite inventories.
+def test_homologation_marks_previous_snapshot_and_cash_stale():
+    raw=fake_master()
+    raw[gs.HOMOLOGATION_RANGE]=[
+        ['Control','Resultado','Fuente primaria / brecha'],
+        ['01_CONTROL PUBLICADO','PASS','KAIROS-OLD-SNAPSHOT'],
+        ['03_LIQUIDEZ QF UNA VEZ','PASS','USDT físico 28130 / QF 7225'],
+    ]
+    result=gs.parse_master(raw)
+    review=result['homologation']
+    assert review['status']=='STALE'
+    assert review['checked_against_snapshot']=='TEST-001'
+    assert {i['code'] for i in review['issues']}=={'SNAPSHOT_REFERENCE_STALE','LIQUIDITY_REFERENCE_STALE'}
+    assert result['snapshot']['physical_total_USDT']==50
+
+
+def test_homologation_current_control_is_not_stale():
+    raw=fake_master()
+    raw[gs.HOMOLOGATION_RANGE]=[
+        ['Control','Resultado','Fuente primaria / brecha'],
+        ['01_CONTROL PUBLICADO','PASS','TEST-001'],
+        ['03_LIQUIDEZ QF UNA VEZ','PASS','USDT físico 50 / QF 10'],
+    ]
+    review=gs.parse_master(raw)['homologation']
+    assert review['status']=='CURRENT'
+    assert review['issues']==[]
+
+
+def test_homologation_missing_is_unverified_and_not_certified():
+    raw=fake_master()
+    review=gs.parse_master(raw)['homologation']
+    assert review['status']=='NOT_VERIFIED'
+    assert review['issues'][0]['code']=='HOMOLOGATION_UNAVAILABLE'
+
+
+def test_historical_reference_keeps_provenance_without_inventing_year():
+    raw=fake_master()
+    rows=raw[gs.SHEETS['integral']]
+    rows[-1].extend([None]*(6-len(rows[-1])))
+    rows[-1][5]='Referencia integral del 16/10; actualizar tras reconciliar'
+    result=gs.parse_master(raw)
+    assert result['integral']['reference_date_label']=='16/10 (año no indicado en la hoja)'
+    assert result['integral']['source_note'].startswith('Google Sheets 08_INTEGRAL')

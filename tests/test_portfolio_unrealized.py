@@ -103,7 +103,7 @@ def test_chart_missing_cost_displays_nd_not_total():
 
 def test_portfolio_route_wired_to_live_dashboard_and_health():
     script=(ROOT/'app.py').read_text()
-    assert "pnl_report = summarize_unrealized(portfolio_rows)" in script
+    assert "candidate_pnl = summarize_unrealized(candidate_rows)" in script
     assert 'pnl_report=pnl_report' in script
     assert "'portfolio_unrealized_chart':" in script
     assert "'portfolio_unrealized_calc':" in script
@@ -240,3 +240,36 @@ def test_historical_scenario_not_written_to_pri_and_orders_source_separated():
     assert 'structural_note=' in source
     assert "stage='Balance de portafolio'" in source
     assert 'No se pudo verificar '+'' in 'No se pudo verificar '
+
+
+def test_portfolio_render_failure_discards_partial_market_values():
+    import ast, copy, logging, uuid
+    from datetime import datetime,timezone
+    from types import SimpleNamespace
+    src=ast.parse((ROOT/'app.py').read_text())
+    node=copy.deepcopy(next(n for n in src.body if isinstance(n,ast.FunctionDef) and n.name=='integral_portfolio_page'))
+    node.decorator_list=[]
+    ns={
+        'INTEGRAL':{'historical_capital_usdt':150,'segments':[{'key':'hodl_core','actual_usdt':80,'target_usdt':60},{'key':'lost','actual_usdt':20,'target_usdt':0}],
+                    'source_note':'08_INTEGRAL HISTORICO','reference_date_label':'16/10 (año no indicado en la hoja)'},
+        'load_live_dashboard':lambda:('2026-10-22T00:00:00Z',{'rows':[{'token':'BTC'}]}),
+        'summarize_unrealized':lambda r:(_ for _ in ()).throw(ValueError('hidden raw exception with a secret')),
+        'render_template':lambda name,**context:context,
+        'g':SimpleNamespace(kairos_state={'control':{'snapshot_id':'TEST-001','fecha_corte':'2026-10-19'},
+                                         'homologation':{'status':'STALE'}}),
+        'market_cache_status':lambda:{'last_valid_observed_at':'2026-10-21T22:00:00Z'},
+        'uuid':uuid,'datetime':datetime,'timezone':timezone,
+        'app':SimpleNamespace(logger=logging.getLogger('kairos.tests')),
+        'APP_VERSION':'2.0.30',
+    }
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[node],type_ignores=[])), '<portfolio>', 'exec'),ns)
+    output=ns['integral_portfolio_page']()
+    assert output['spot'] is None
+    assert output['pnl_report'] is None
+    assert output['portfolio_rows']==[]
+    assert output['btc_total'] is None
+    diagnostic=output['portfolio_diagnostic']
+    assert diagnostic['origin']=='PORTFOLIO_CALCULATION'
+    assert diagnostic['status']=='DATA_ERROR'
+    assert diagnostic['snapshot_id']=='TEST-001'
+    assert 'secret' not in str(diagnostic)

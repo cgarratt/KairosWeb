@@ -28,6 +28,12 @@
           <article class="mcp-health-card" data-provider="hyperliquid"><h4>Hyperliquid MCP</h4><p>HYPE Spot macro HYPE/USDC</p><p class="mcp-health-state">Sin verificar</p><p class="mcp-health-checked"></p><button class="tiny-control mcp-check" data-provider="hyperliquid" type="button">Verificar conexión</button> <button class="tiny-control mcp-refresh" data-provider="hyperliquid" type="button">Refrescar conexión</button></article>
         </div>
         <div class="settings-msg" id="mcp-message" role="status">Pruebas MCP independientes; no cambian el Master.</div>
+        <section id="health-deep-panel" class="mcp-health-card" style="margin-top:14px" aria-label="Diagnóstico integral">
+          <h4>Salud integral · 3 niveles</h4>
+          <p>Servidor / Google Sheets-Binance-Hyperliquid / módulos dependientes. Consulta autenticada y solo lectura.</p>
+          <button type="button" id="health-check-all" class="tiny-control">Ejecutar diagnóstico integral</button>
+          <div id="health-check-output" role="status" aria-live="polite">Sin ejecutar. /health solo mide disponibilidad del servidor y muestra el último diagnóstico almacenado.</div>
+        </section>
       </section>
       <div id="settings-pivot-matrix" class="settings-pivot-matrix" hidden></div>
       <div id="settings-data" class="settings-fields">Cargando datos…</div>

@@ -10,6 +10,7 @@ import uuid
 import logging
 import hashlib
 import hmac
+from concurrent.futures import ThreadPoolExecutor
 import httpx
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -33,7 +34,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.29'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.30'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -104,7 +105,7 @@ def bind_published_sheet():
     # The health and diagnostics endpoints remain reachable during source outages.
     independent={'/health','/api/mcp-status','/api/mcp-config-check','/api/mcp-diagnostics',
                  '/api/alerts/unread','/api/alerts/read','/api/alerts/read-all',
-                 '/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status', '/api/mcp-refresh'}
+                 '/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status', '/api/mcp-refresh', '/api/health/diagnostics'}
     if request.path in independent or request.path in ('/admin/login','/api/admin/session') or request.path=='/settings' or request.path.startswith('/static/'):
         return None
     try:
@@ -987,30 +988,49 @@ def integral_portfolio_page():
     btc_total = None
     btc_reference_price = None
     bsi_archive = None
+    portfolio_diagnostic = None
+    attempt_utc = datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
+    stage = 'BINANCE_SPOT_MCP'
     try:
-        spot_observed, live = load_live_dashboard()
-        portfolio_rows=live['rows']
-        btc_reference_price=live['btc_usdt_spot']
-        btc_total=live['total_btc_equivalent']
-        bsi_archive=live['bsi_historical']
-        pnl_report = summarize_unrealized(portfolio_rows)
-        allocation=portfolio_allocation(portfolio_rows,live['usdt_total'])
-        categories=category_allocation(portfolio_rows)
-        core_value = sum((r['hodl_units']+r['core_units'])*r['price'] for r in portfolio_rows)
-        exchange_value = sum(r['exchange_units']*r['price'] for r in portfolio_rows)
+        observed, live = load_live_dashboard()
+        stage = 'PORTFOLIO_VALUATION'
+        # All-or-nothing rendering: no totals/graphs from a partially constructed valuation.
+        candidate_rows = live['rows']
+        candidate_pnl = summarize_unrealized(candidate_rows)
+        candidate_allocation = portfolio_allocation(candidate_rows,live['usdt_total'])
+        candidate_categories = category_allocation(candidate_rows)
+        core_value = sum((r['hodl_units']+r['core_units'])*r['price'] for r in candidate_rows)
+        exchange_value = sum(r['exchange_units']*r['price'] for r in candidate_rows)
         cash_total = live['usdt_total']
         qf = live['trading_reserve']
-        spot_breakdown = {'core':core_value,'exchange':exchange_value,
+        candidate_spot = {'core':core_value,'exchange':exchange_value,
                           'liquidity':cash_total-qf,'trading':qf,
                           'total':live['total_value'],'source':'Binance MCP + Google Sheets PUBLICADO'}
+        spot_breakdown,spot_observed,pnl_report = candidate_spot,observed,candidate_pnl
+        allocation,categories,portfolio_rows=candidate_allocation,candidate_categories,candidate_rows
+        btc_reference_price,btc_total=live['btc_usdt_spot'],live['total_btc_equivalent']
+        bsi_archive=live['bsi_historical']
     except Exception as exc:
-        app.logger.info('Integral portfolio live pricing unavailable: %s',type(exc).__name__)
+        origin='BINANCE_SPOT_MCP' if stage=='BINANCE_SPOT_MCP' else 'PORTFOLIO_CALCULATION'
+        info=diagnostic_error(exc,'portfolio') if stage=='BINANCE_SPOT_MCP' else None
+        error_id=info['error_id'] if info else uuid.uuid4().hex[:10]
+        category=info['code'] if info else 'CALCULATION_ERROR'
+        app.logger.error('Portfolio unavailable id=%s origin=%s category=%s class=%s snapshot=%s',
+                         error_id,origin,category,type(exc).__name__,g.kairos_state['control']['snapshot_id'])
+        portfolio_diagnostic={'status':'DATA_ERROR','origin':origin,'category':category,
+                              'error_id':error_id,'checked_utc':attempt_utc,
+                              'snapshot_id':g.kairos_state['control']['snapshot_id'],
+                              'fecha_corte':g.kairos_state['control']['fecha_corte'],
+                              'last_valid_spot_utc':market_cache_status()['last_valid_observed_at'],
+                              'message':'Valoración actual no disponible. No se muestran cifras Spot parciales ni se reutiliza una cotización anterior.'}
     return render_template('portfolio_integral.html', master=APP_VERSION, segments=segments,
                            base=base, alive=alive, lost=lost, gain_to_recover=gain_to_recover,
                            spot=spot_breakdown, spot_observed=spot_observed, pnl_report=pnl_report,
                            allocation=allocation, categories=categories, portfolio_rows=portfolio_rows,
                            btc_total=btc_total, btc_reference_price=btc_reference_price,
-                           bsi_archive=bsi_archive,
+                           bsi_archive=bsi_archive, portfolio_diagnostic=portfolio_diagnostic,
+                           homologation=g.kairos_state.get('homologation'),
+                           historical_reference_date=values.get('reference_date_label'),
                            source_note=values['source_note'], total_recorded=sum(x['actual_usdt'] for x in segments),
                            total_target=sum(x['target_usdt'] for x in segments))
 
@@ -1538,6 +1558,12 @@ def _deployed_asset_status():
         'alerts_bell': ('static/alert_bell.js', ('alert-timeframe', '/api/alerts/read', 'event-bull', 'event-bear')),
         'integral_donut': ('templates/portfolio_integral.html', ('data-capital-chart="donut"', 'integral-donut-sector')),
         'portfolio_layout_v2022': ('templates/portfolio_integral.html', ('data-layout-row="1"','data-layout-row="2"','data-layout-row="3"','data-layout-row="4"')),
+        'health_three_tiers_v2030': ('app.py', ("@app.route('/api/health/diagnostics')", 'operational_providers', 'functional_modules')),
+        'health_diagnostics_ui_v2030': ('templates/settings.html', ('id="health-deep-panel"', 'id="health-check-all"')),
+        'health_diagnostics_js_v2030': ('static/mcp_settings.js', ('/api/health/diagnostics', 'health-check-output')),
+        'portfolio_error_contract_v2030': ('templates/portfolio_integral.html', ('id="portfolio-diagnostic"','portfolio_diagnostic')),
+        'homologation_contract_v2030': ('google_sheets_master.py', ('HOMOLOGATION_RANGE', 'assess_homologation(', 'SNAPSHOT_REFERENCE_STALE')),
+        'historical_provenance_v2030': ('templates/portfolio_integral.html', ('historical_reference_date', 'HISTÓRICO NO SPOT')),
         'consolidated_dashboard_v2027': ('templates/portfolio_integral.html', ('id="btc-portfolio-total"', 'data-bsi-chart="archived"', 'data-portfolio-executive="12"', 'class="port-status', 'port-coin-logo')),
         'consolidated_navigation_v2025': ('templates/base.html', ('href="/mode/{{ mode.slug }}"', 'global-nav-link')),
         'portfolio_allocation_v2022': ('portfolio_unrealized.py', ('def portfolio_allocation(', 'def category_allocation(', 'def pri_valuation_history(')),
@@ -1592,12 +1618,90 @@ def _deployed_asset_status():
             'files': files}
 
 
+# B05: health has separate tiers. /health remains a cheap liveness check for Render.
+# An authenticated, explicit diagnostic request performs live provider calls.
+_DEPENDENCY_LOCK=threading.Lock()
+_DEPENDENCY_LAST={'checked_utc':None,'providers':{},'modules':{},'status':'NOT_CHECKED'}
+
+
+def _live_provider_probe(provider):
+    if provider=='sheets':
+        try:
+            state=get_state(force=True)
+            return {'status':'OK','snapshot_id':state['control']['snapshot_id'],
+                    'schema_version':state['control']['schema_version'],
+                    'homologation':state.get('homologation',{}).get('status','NOT_VERIFIED')}
+        except Exception as exc:
+            return {'status':'DATA_ERROR','category':public_failure_code(exc)}
+    spec={'binance':('BINANCE_MCP_URL','get_kairos_spot_prices'),
+          'hyperliquid':('HYPERLIQUID_MCP_URL','get_hype_spot_market')}
+    env,tool=spec[provider]
+    if not os.getenv(env,'').strip():
+        return {'status':'NOT_CONFIGURED','category':'MCP_URL_MISSING'}
+    try:
+        # One direct request (no cascading gateway retries); no remote order/fill access.
+        data=asyncio.run(call_mcp(env,tool,{}))
+        if data.get('status')!='OK':raise RuntimeError('non-OK MCP response')
+        if provider=='binance':
+            rows=data.get('records') or []
+            symbols={str(x.get('symbol')) for x in rows if isinstance(x,dict)}
+            expected={('PUMP' if t=='PUMPFUN' else t)+'USDT' for t in (
+                'BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMPFUN','PLUME','VIRTUAL','PEPE')}
+            if len(rows)!=12 or symbols!=expected:raise RuntimeError('incomplete MCP coverage')
+        return {'status':'OK','source':provider,'checked_utc':datetime.now(timezone.utc).isoformat()}
+    except Exception as exc:
+        diag=diagnostic_error(exc,provider)
+        return {'status':'DATA_ERROR','category':diag['code'],'error_id':diag['error_id']}
+
+
+def _module_dependency_states(providers):
+    dependencies={
+        'portafolio':('sheets','binance'),
+        'balancer':('sheets','binance'),
+        'compras':('sheets','binance','hyperliquid'),
+        'ventas':('sheets','binance'),
+        'forecast':('sheets','binance','hyperliquid'),
+        'ordenes':('sheets','binance','hyperliquid'),
+        'tradingbot':('sheets','binance'),
+        'configuracion':('sheets',),
+    }
+    return {name:{'status':'DEPENDENCIES_OK' if all(providers.get(d,{}).get('status')=='OK' for d in deps)
+                  else 'BLOCKED_OR_PARTIAL','dependencies':list(deps),
+                  'scope':'DEPENDENCY_READINESS_ONLY_NOT_END_TO_END'}
+            for name,deps in dependencies.items()}
+
+
+@app.route('/api/health/diagnostics')
+def health_diagnostics():
+    checked=datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures={name:pool.submit(_live_provider_probe,name) for name in ('sheets','binance','hyperliquid')}
+        providers={name:future.result() for name,future in futures.items()}
+    modules=_module_dependency_states(providers)
+    assets=_deployed_asset_status()
+    status='OK' if assets['consistent'] and all(p['status']=='OK' for p in providers.values()) else 'DEGRADED'
+    with _DEPENDENCY_LOCK:
+        _DEPENDENCY_LAST.update(checked_utc=checked,providers=providers,modules=modules,status=status)
+    return jsonify({'status':status,'checked_utc':checked,
+                    'server':{'status':'UP' if assets['consistent'] else 'DEGRADED',
+                              'version':APP_VERSION,'release_assets_consistent':assets['consistent']},
+                    'operational_providers':providers,'functional_modules':modules,
+                    'note':'Módulos: evaluación de dependencias, NO prueba funcional extremo a extremo. Sin órdenes ni escrituras.'}), (200 if status=='OK' else 503)
+
+
 @app.route('/health')
 def health():
     assets = _deployed_asset_status()
+    with _DEPENDENCY_LOCK:
+        last=dict(_DEPENDENCY_LAST)
     response = {'status': 'UP' if assets['consistent'] else 'DEGRADED',
                 'service': 'KairosWeb', 'version': APP_VERSION,
-                'release_assets': assets, 'sheets_status': sheet_cache_status()}
+                'server':{'status':'UP' if assets['consistent'] else 'DEGRADED'},
+                'operational_providers':{k:v.get('status','NOT_CHECKED') for k,v in last['providers'].items()},
+                'functional_modules':{k:v.get('status','NOT_CHECKED') for k,v in last['modules'].items()},
+                'last_deep_check_utc':last['checked_utc'],
+                'deep_check_status':last['status'], 'release_assets': assets,
+                'sheets_status': sheet_cache_status()}
     return jsonify(response), (200 if assets['consistent'] else 503)
 
 @app.route('/api/portfolio')
@@ -1732,6 +1836,7 @@ def google_sheets_status():
                         'o5_proceeds_split':{'BTC':state['parameters']['O5_BTC_PROCEEDS_FRACTION']['value'],
                                               'USDT':state['parameters']['O5_USDT_PROCEEDS_FRACTION']['value']},
                         'bsi_sell':'BLOQUEADO', 'tradingbot':'WATCH',
+                        'homologation':state.get('homologation',{}),
                         'cache':sheet_cache_status()})
     except Exception as exc:
         app.logger.error('Sheets status failure category=%s type=%s',public_failure_code(exc),type(exc).__name__)

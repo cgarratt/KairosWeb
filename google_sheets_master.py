@@ -6,11 +6,13 @@ Snapshot publication and per-field parameter status are independent gates.
 import json
 import math
 import os
+import re
 import threading
 import time
 from datetime import datetime, timezone
 from urllib.parse import quote
 
+HOMOLOGATION_RANGE = "'13_CONTROL_HOMOLOGACION'!A4:D20"
 SHEET_ID_DEFAULT = '1_tG5FK_u0biVZm2iXaK6fJi1enBYJYLAG6txkpTgsy8'
 SHEETS = {
     'control': "'01_CONTROL'!A4:C31",
@@ -64,7 +66,50 @@ def _map_rows(response):
         if not isinstance(v,list):
             raise SheetDataError(f'{k}: missing Google Sheets range')
         result[k]=v
+    # Optional diagnostic evidence; missing records do not rewrite or certify balances.
+    result['homologation'] = response.get(HOMOLOGATION_RANGE, [])
     return result
+
+
+def _legacy_cash_number(value):
+    text=str(value or '')
+    match=re.search(r'USDT f[íi]sico\s+([0-9.,]+)',text,re.IGNORECASE)
+    if not match:return None
+    digits=match.group(1).replace(',', '').replace('.', '')
+    return int(digits) if digits.isdigit() else None
+
+
+def assess_homologation(control, rows, liquidity):
+    """Read-only certification freshness audit; historical notes never replace published values.
+
+    PASS in an old 13_CONTROL row is not proof of the current 01_CONTROL.
+    Missing/partial homologation is UNKNOWN (not a forced Sheet contract error).
+    """
+    rows=list(rows or [])
+    if not rows or len(rows)<2:
+        return {'status':'NOT_VERIFIED','checked_against_snapshot':control['snapshot_id'],
+                'issues':[{'code':'HOMOLOGATION_UNAVAILABLE','control':'13_CONTROL_HOMOLOGACION',
+                           'detail':'No fue posible verificar los controles históricos contra la publicación vigente.'}],
+                'read_only':True,'source':'13_CONTROL_HOMOLOGACION'}
+    issues=[]
+    for row in rows[1:]:
+        if not row or not row[0]:continue
+        label=str(row[0]); verdict=str(_cell(row,1,'')).upper(); evidence=str(_cell(row,2,'') or '')
+        if label=='01_CONTROL PUBLICADO' and verdict=='PASS':
+            if control['snapshot_id'] not in evidence:
+                issues.append({'code':'SNAPSHOT_REFERENCE_STALE','control':label,
+                               'detail':'El PASS histórico no corresponde al snapshot publicado actualmente.'})
+        if label=='03_LIQUIDEZ QF UNA VEZ' and verdict=='PASS':
+            quoted=_legacy_cash_number(evidence)
+            if quoted is None:
+                issues.append({'code':'LIQUIDITY_EVIDENCE_UNVERIFIED','control':label,
+                               'detail':'La evidencia histórica no permite comprobar el USDT vigente.'})
+            elif abs(quoted-liquidity)>.05:
+                issues.append({'code':'LIQUIDITY_REFERENCE_STALE','control':label,
+                               'detail':'El USDT de la evidencia histórica no coincide con el publicado.'})
+    status='STALE' if any(i['code'].endswith('_STALE') for i in issues) else ('CHECK_REQUIRED' if issues else 'CURRENT')
+    return {'status':status,'checked_against_snapshot':control['snapshot_id'],
+            'issues':issues,'read_only':True,'source':'13_CONTROL_HOMOLOGACION'}
 
 
 def parse_master(raw):
@@ -232,10 +277,14 @@ def parse_master(raw):
         segments.append({'key':mapping[r[0]],'name':r[0], 'target_usdt':_number(_cell(r,1),'integral target'),
                          'actual_usdt':_number(_cell(r,2),'integral value')})
     if len(segments)!=5:raise SheetDataError('08_INTEGRAL missing historical breakdown')
+    historical_notes=[str(_cell(r,5,'')) for r in integral if r and r[0] in mapping]
+    historical_date_refs=sorted(set(re.findall(r'\b(\d{1,2}/\d{1,2})(?:/\d{4})?\b', ' '.join(historical_notes))))
+    historical_reference_label=(' / '.join(historical_date_refs) + ' (año no indicado en la hoja)') if historical_date_refs else 'N/D (fecha no publicada)'
     validation={r[0]:_cell(r,1) for r in blocks['validation'][1:] if r and r[0]}
     for key in ('12 tokens Kairos presentes','Targets cripto suman 100%','Custodia suma unidades','Total USDT conciliado','Reserva QF sin duplicar'):
         if validation.get(key)!='OK':raise SheetDataError(f'11_VALIDACIONES: {key} not OK')
     if validation.get('Estado publicación')!='PUBLICADO':raise SheetDataError('11_VALIDACIONES: publication mismatch')
+    homologation=assess_homologation(ctrl,blocks['homologation'],liquidity)
     snapshot={'holdings_total':holdings,'custody_core_blocked__core_strategic__exchange':custody,
               'physical_total_USDT':liquidity,'trading_real_fixed_USDT':qf,
               'kairos_operating_USDT_before_commitments':operating,
@@ -247,8 +296,9 @@ def parse_master(raw):
                          'status':'REFERENCE_NOT_ACTIONABLE','levels':pivot_levels},
             'bsi_archive':bsi_rows,
             'integral':{'historical_capital_usdt':_number(meta.get('Capital inicial histórico'),'capital historical'),
-                        'source_note':'Google Sheets 08_INTEGRAL: valores históricos, no precios actuales', 'segments':segments},
-            'validation':validation, 'historical_ledger_counts':{'orders':historical_orders,'fills':historical_fills}}
+                        'source_note':'Google Sheets 08_INTEGRAL: valores históricos, no precios actuales',
+                            'reference_date_label':historical_reference_label,'segments':segments},
+            'validation':validation,'homologation':homologation, 'historical_ledger_counts':{'orders':historical_orders,'fills':historical_fills}}
 
 
 def _remote_data():
@@ -269,7 +319,7 @@ def _remote_data():
         raise SheetDataError('KAIROS_GOOGLE_SHEET_ID invalid')
     # Never print service account secrets, request headers, or raw upstream URLs.
     url=f'https://sheets.googleapis.com/v4/spreadsheets/{quote(spreadsheet_id,safe="")}/values:batchGet'
-    args=[('ranges',a) for a in SHEETS.values()]+[('valueRenderOption','UNFORMATTED_VALUE')]
+    args=[('ranges',a) for a in SHEETS.values()]+[('ranges',HOMOLOGATION_RANGE),('valueRenderOption','UNFORMATTED_VALUE')]
     session=AuthorizedSession(creds)
     try:
         for attempt in range(3):
@@ -280,9 +330,11 @@ def _remote_data():
                 raise SheetDataError(f'Google Sheets HTTP {response.status_code}')
             payload=response.json()
             items=payload.get('valueRanges')
-            if not isinstance(items,list) or len(items)!=len(SHEETS):
+            if not isinstance(items,list) or len(items) not in (len(SHEETS),len(SHEETS)+1):
                 raise SheetDataError('Google Sheets incomplete batchGet')
-            return {a1:r.get('values',[]) for a1,r in zip(SHEETS.values(),items)}
+            result={a1:r.get('values',[]) for a1,r in zip(SHEETS.values(),items)}
+            if len(items)>len(SHEETS):result[HOMOLOGATION_RANGE]=items[-1].get('values',[])
+            return result
         raise SheetDataError('Google Sheets unavailable')
     finally:
         session.close()
