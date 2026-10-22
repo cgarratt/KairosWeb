@@ -15,15 +15,15 @@ def test_release_ui_has_live_sheet_adapter_and_health_markers():
     root=Path(__file__).resolve().parents[1]
     app=(root/'app.py').read_text()
     html=(root/'templates/balancer.html').read_text()
-    assert "APP_VERSION = '2.0.27'" in app
+    assert "APP_VERSION = '2.0.29'" in app
     assert "g.kairos_state['custody_policy']" in app
     assert "compare_custody(custody_positions" in app
     assert "'custody_comparison':custody_comparison" in app
     assert "'balancer_custody_engine':" in app
     assert "'balancer_custody_ui':" in app
     assert 'id="custody-balancer"' in html
-    assert 'Movimientos propuestos' in html
-    assert 'r.ideal_feasible[c]' in html and 'r.ideal_nominal[c]' in html
+    assert 'Movimientos y distribución posterior' in html
+    assert 'r.feasible_pct.hodl' in html and 'cust.transfers if m.token == r.token' in html
     from jinja2 import Environment
     Environment().parse(html)
 
@@ -150,3 +150,71 @@ def test_v2026_balancer_and_orders_same_sell_limits():
     for item in plan:
         if item['value']>=.005:
             assert abs(item['value']-by_token[item['token']])<1e-6
+
+
+# v2.0.28 custody compact option B regression (same test module, GitHub 99-file limit)
+from pathlib import Path
+from jinja2 import Environment
+ROOT = Path(__file__).resolve().parents[1]
+TEMPLATE = (ROOT/'templates/balancer.html').read_text(encoding='utf-8')
+START = TEMPLATE.index('{% if payload.custody_comparison is defined and payload.custody_comparison %}')
+END = TEMPLATE.index('{% endif %}', TEMPLATE.index('</section>', START)) + len('{% endif %}')
+SECTION = TEMPLATE[START:END]
+POLICY = {'T1': [0.4, 0.3, 0.3], 'T2': [0, 0.3, 0.7], 'T3': [0, 0, 1]}
+
+
+def _option_b_report():
+    return compare_custody({
+        'BTC':{'tier':'T1','hodl':.1,'core':0,'exchange':.02681},
+        'SOL':{'tier':'T1','hodl':15,'core':15,'exchange':29.94},
+        'PUMPFUN':{'tier':'T2','hodl':0,'core':125000,'exchange':455124},
+        'PLUME':{'tier':'T2','hodl':0,'core':14467,'exchange':86420},
+        'VIRTUAL':{'tier':'T3','hodl':0,'core':0,'exchange':2252.54},
+    }, POLICY)
+
+
+def _option_b_render(report):
+    return Environment(autoescape=True).from_string(SECTION).render(payload={'custody_comparison': report})
+
+
+def test_b_model_groups_four_moves_in_three_tokens_and_keeps_units():
+    report = _option_b_report()
+    assert report['transfer_count'] == 4
+    assert report['tokens_with_moves'] == 3
+    html = _option_b_render(report)
+    assert html.count('class="custody-row" data-custody-token=') == 3
+    assert html.count('class="custody-transfer"') == 4
+    assert html.count('data-custody-token="SOL"') == 1
+    assert '8.976' in html and '2.982' in html
+    assert '49037.2' in html and '15799.1' in html
+    assert 'H 40.00%' in html and 'C 30.00%' in html and 'E 30.00%' in html
+    assert 'H 0.00%' in html and 'C 30.00%' in html and 'E 70.00%' in html
+    assert 'Mostrar 2 tokens sin movimientos sugeridos' in html
+    assert 'Ideal nominal (uds.)' not in html
+    assert 'Distribución exacta por token · tres custodias' not in html
+    assert 'SIN TRANSFERENCIAS' in html
+
+
+def test_b_model_when_no_safe_transfers():
+    report = compare_custody({'BTC':{'tier':'T1','hodl':.1,'core':0,'exchange':.02681}}, POLICY)
+    assert report['transfer_count'] == 0
+    html = _option_b_render(report)
+    assert 'No hay transferencias seguras' in html
+    assert 'Mostrar 1 tokens sin movimientos sugeridos' in html
+    assert 'H 78.86%' in html or 'Sin movimiento permitido' in html
+
+
+def test_b_model_does_not_change_engine_or_execute_anything():
+    source = (ROOT/'custody_balancer.py').read_text(encoding='utf-8')
+    assert 'suggested[\'exchange\']-=move' in source
+    assert 'reserved_exchange' in source
+    assert 'Sin movimientos ejecutados' not in SECTION or 'SIN TRANSFERENCIAS' in SECTION
+    assert 'fetch(' not in SECTION and 'POST' not in SECTION
+
+
+def test_b_model_is_responsive_and_accessible():
+    assert 'role="img"' in TEMPLATE
+    assert 'aria-label="{{' in TEMPLATE
+    assert '@media(max-width:550px)' in TEMPLATE
+    assert 'custody-plot' in TEMPLATE
+    assert 'custody-more' in TEMPLATE

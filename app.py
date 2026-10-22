@@ -33,7 +33,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.27'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.29'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1561,6 +1561,7 @@ def _deployed_asset_status():
         'mobile_no_tooltips': ('static/tooltips.js', ("(hover: none) and (pointer: coarse)", "node.removeAttribute('title')", "node.setAttribute('title',previousTitles.get(node))")),
         'forecast_published_pivot_locks': ('static/forecast_fibo_plan.js', ("function wavePath(p,selectors)", "const approved=s=>s==='VALIDADO'||s==='CONFIRMADO'", 'fixed[wave]=price;locked.push(wave)')),
         'forecast_locked_chart': ('templates/forecast.html', ('Fibo.wavePath(p,selectors)', "'data-wave-fixed':locked?'true':'false'", '🔒 ${r.statuses[key]}')),
+        'forecast_spot_overlay_v2029': ('templates/forecast.html', ("class:'fc-spot-line'", "'data-spot-reference':'binance-mcp'", 'fc.generated_at', "validSpot?[...prices,spot]:prices")),
         'buy_post_fibo_weights': ('static/o2_sequential.js', ('postWeights','postCrypto','stageBudgets','unallocated','policy.stageBudgets')),
         'buy_postweight_semaphore': ('static/o2_sequential.js', ('function postBuySemaphore(', "state:'green'", "state:'amber'", "state:'red'", "state:'none'")),
         'buy_postweight_color_ui': ('templates/trade_sim.html', ('buy-weight-green', 'buy-weight-amber', 'buy-weight-red', 'postBuySemaphore(amount,postWeight,t.target)', 'USDT &gt; 0')),
@@ -1570,9 +1571,9 @@ def _deployed_asset_status():
         'balancer_math_v2026': ('orders_inbox.py', ('def sell_capacity_usdt(', 'def overweight_sell_plan(', 'def allocate_infra_buys(', 'def tradingbot_tokens(')),
         'balancer_wiring_v2026': ('app.py', ('sale_preview=overweight_sell_plan(rows,band)', 'buy_preview=allocate_infra_buys(rows,current_cash_capacity,band)', 'return drift_tone(d,band)', 'def tradingbot_universe():')),
         'sales_optimizer_engine': ('static/sales_optimizer.js', ('function calculate(items,physicalCash,targetPct,bandPp,qf=0)', 'const stage1=', 'const stage2Amount=', 'TARGET_REACHED', 'CAPACITY_LIMITED')),
-        'sales_optimizer_ui': ('templates/trade_sim.html', ('KairosSalesOptimizer.calculate(', 'sell-weight-body', 'sell-plan-status', 'requested_percent')),
+        'sales_optimizer_ui': ('templates/trade_sim.html', ('KairosSalesOptimizer.calculate(', 'sell-plan-status', 'sim-body', 'requested_percent')),
         'balancer_custody_engine': ('custody_balancer.py', ('def compare_custody(', "'ideal_nominal'", "'ideal_feasible'", "'transfer_count'")),
-        'balancer_custody_ui': ('templates/balancer.html', ('id="custody-balancer"', 'Ideal nominal (uds.)', 'Movimientos propuestos', 'payload.custody_comparison')), 
+        'balancer_custody_ui': ('templates/balancer.html', ('id="custody-balancer"', 'Movimientos y distribución posterior', 'r.feasible_pct.hodl', 'payload.custody_comparison')), 
         'buy_custom_fibo_ui': ('templates/trade_sim.html', ('id="fibo-split-reset"', 'id="fibo-split-apply"', 'refreshFiboDraft', 'showFiboControls();paint();')),
         'forecast_elliott_table': ('templates/forecast.html', ('Simulación - Ondas Elliott', '<th>O5 (SH3)</th>')),
         'orders_simple_filters': ('templates/ordenes.html', ('Backlog de Ordenes Compra / Venta','id="orders-venue"','id="orders-tier"','id="orders-side"','id="orders-token"')),

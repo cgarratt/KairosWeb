@@ -19,3 +19,15 @@ def test_independent_o3_o5_from_approved_master():
     assert "id=\"o3-master-share\"" in tmpl and "id=\"o5-master-share\"" in tmpl
     assert "data-forecast-stage" in tmpl
     assert "fetch(" not in tmpl
+
+
+def test_forecast_price_line_uses_spot_not_wave_pivot():
+    view=(ROOT/'templates/forecast.html').read_text()
+    assert "const position=fc.tokens.find(t=>t.token===choice.token)" in view
+    assert "validSpot?[...prices,spot]:prices" in view
+    assert "'data-spot-reference':'binance-mcp'" in view
+    assert 'fc.generated_at' in view
+    assert 'fc-spot-line' in view
+    assert 'drawCurve(result)' in view
+    from jinja2 import Environment
+    Environment().parse(view)

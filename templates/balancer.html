@@ -3,6 +3,35 @@
 {% block head %}<style>
 .liq-flow{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.liq-step{background:#f5f9ff;border:1px solid #dce7f6;border-radius:15px;padding:15px}.liq-step strong{display:block;font-size:22px;color:#174b9a;margin:7px 0}.liq-step small{color:#586982}.liq-step.red strong{color:#c4465a}.liq-step.green strong{color:#13996c}.mix{display:flex;height:25px;overflow:hidden;border-radius:100px;background:#eef2f7}.mix>div{height:100%}.chart-pair{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}.comparison{display:grid;grid-template-columns:75px 1fr 65px;align-items:center;gap:8px;margin:13px 0}.mini-track{position:relative;height:26px;border-radius:7px;background:#f1f5fa;overflow:hidden}.mini-track .before{position:absolute;top:2px;height:9px;background:#b1c4de;border-radius:6px}.mini-track .after{position:absolute;bottom:2px;height:9px;background:#2778cf;border-radius:6px}.mini-track .target{position:absolute;top:0;bottom:0;border-left:2px dashed #d18a13}.action-pill{font-size:12px;font-weight:800;padding:6px 11px;border-radius:16px;display:inline-block}.action-pill.buy{color:#13805c;background:#e3f7ee}.action-pill.sell{color:#b62d49;background:#ffecf1}.action-pill.watch{color:#835600;background:#fff4da}.liquidity-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}@media(max-width:800px){.liq-flow,.chart-pair{grid-template-columns:1fr 1fr}}@media(max-width:540px){.liq-flow,.chart-pair{grid-template-columns:1fr}}
 @media(max-width:750px){ #custody-balancer .liq-flow{grid-template-columns:1fr!important}}.liq-labels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}.liq-labels>div{display:flex;flex-direction:column;gap:6px;background:#f6f9fe;border:1px solid #dce7f6;border-radius:13px;padding:12px}.liq-labels i{width:13px;height:13px;border-radius:3px}.liq-labels strong{font-size:20px;color:#154a94}.liq-labels small{color:#60758a}.allocation-track{height:26px}@media(max-width:750px){.liq-labels{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:450px){.liq-labels{grid-template-columns:1fr}}
+
+/* Custody Option B: one row per token and a 100% post-transfer allocation bar.
+   Theme variables ensure legibility in both KairosWeb light/dark modes. */
+#custody-balancer .custody-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:18px 0}
+#custody-balancer .custody-list{display:grid;gap:0;margin-top:15px;border:1px solid var(--line,#dce7f6);border-radius:15px;overflow:hidden}
+#custody-balancer .custody-row{display:grid;grid-template-columns:minmax(100px,.65fr) minmax(180px,1.4fr) minmax(240px,1.45fr);gap:20px;padding:18px;align-items:start;border-bottom:1px solid var(--line,#dce7f6)}
+#custody-balancer .custody-row:last-child{border-bottom:0}
+#custody-balancer .custody-name{font-size:17px;font-weight:800}
+#custody-balancer .custody-tier{display:block;color:var(--muted,#61758c);font-size:12px;margin-top:3px}
+#custody-balancer .custody-sub{font-size:12px;color:var(--muted,#61758c);margin:0 0 8px}
+#custody-balancer .custody-transfer{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:2px 0;font-size:14px}
+#custody-balancer .custody-transfer strong{font-variant-numeric:tabular-nums}
+#custody-balancer .custody-arrow{color:var(--muted,#61758c)}
+#custody-balancer .custody-plot{display:flex;height:15px;overflow:hidden;background:var(--soft,#e6eef7);border-radius:8px}
+#custody-balancer .custody-segment{height:100%;flex:none}
+#custody-balancer .custody-hodl{background:#285cb3}
+#custody-balancer .custody-core{background:#4d9ee7}
+#custody-balancer .custody-exchange{background:#16a588}
+#custody-balancer .custody-pct{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-top:9px;font-variant-numeric:tabular-nums}
+#custody-balancer .custody-pct span{white-space:nowrap}
+#custody-balancer .custody-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+#custody-balancer .custody-note{font-size:12px;color:var(--muted,#61758c);margin:9px 0 0}
+#custody-balancer .custody-more{margin:16px 0;border:1px solid var(--line,#dce7f6);border-radius:12px;padding:12px 15px}
+#custody-balancer .custody-more summary{cursor:pointer;font-weight:700;color:var(--blue2,#2460aa)}
+#custody-balancer .custody-mini-row{display:flex;gap:14px;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line,#dce7f6);font-size:13px}
+#custody-balancer .custody-mini-row:last-child{border-bottom:0}
+#custody-balancer .custody-mini-row span{font-variant-numeric:tabular-nums}
+@media(max-width:850px){ #custody-balancer .custody-row{grid-template-columns:minmax(75px,.55fr) minmax(130px,1fr);gap:12px}#custody-balancer .custody-allocation{grid-column:1/-1}}
+@media(max-width:550px){ #custody-balancer .custody-row{grid-template-columns:1fr}#custody-balancer .custody-allocation{grid-column:auto}#custody-balancer .custody-kpis{grid-template-columns:1fr}#custody-balancer .custody-mini-row{flex-direction:column;align-items:flex-start;gap:5px}}
 </style>{% endblock %}
 {% block content %}
 <div class="grid"><section class="panel span-12 hero"><div><h2>Balancer</h2><p>Gestión de liquidez · Composición · Escenarios post-balance</p></div><span class="badge ok">● LIVE MCP · PRELIMINAR</span></section>
@@ -33,34 +62,55 @@
 <section class="panel span-6"><h2>6. Post-balance · Ventas</h2><p class="sub">Peso actual (gris) vs posterior hipotético (azul); meta (línea punteada). Ventas no ejecutadas.</p><div class="bar-list">{% for r in payload.sell_chart %}<div class="comparison"><strong>{{ r.token }}</strong><div class="mini-track"><div class="before" style="width:{{ r.actual*2.5 }}%"></div><div class="after" style="width:{{ r.post*2.5 }}%"></div><div class="target" style="left:{{ r.target*2.5 }}%"></div></div><small>{{ '%.1f'|format(r.post) }}%</small></div>{% else %}<p class="sub">No hay ventas simulables.</p>{% endfor %}</div><p class="footer-note">USDT después de vender: {{ '${:,.0f}'.format(payload.sell_cash_after) }} (escenario independiente). Ventas indicativas: {{ '${:,.0f}'.format(payload.sell_total) }}.</p></section>
 {% if payload.custody_comparison is defined and payload.custody_comparison %}
 <section class="panel span-12" id="custody-balancer">
-  <div class="liquidity-head"><div><h2>7. Custodia · actual vs ideal (unidades)</h2>
-    <p class="sub">Fuente: 02_POSICIONES y 04_CUSTODIA del MASTER PUBLICADO. Comparación independiente de las operaciones BUY/SELL simuladas.</p></div>
+  {% set cust = payload.custody_comparison %}
+  <div class="liquidity-head"><div><h2>7. Custodia · rebalanceo sugerido</h2>
+    <p class="sub">Comparación independiente de BUY/SELL · 02_POSICIONES y 04_CUSTODIA del MASTER PUBLICADO.</p></div>
     <span class="badge info">PROPUESTA · SIN TRANSFERENCIAS</span></div>
-  <p class="sub"><strong>Objetivos por Tier:</strong>
-   {% for tier in ['T1','T2','T3'] %}{% set r=(payload.custody_comparison.rows|selectattr('tier','equalto',tier)|list|first) %}
-      {% if r %}{{ tier }}: HODL {{ '%.0f'|format(r.policy_pct.hodl) }}%, Core {{ '%.0f'|format(r.policy_pct.core) }}%, Exchange {{ '%.0f'|format(r.policy_pct.exchange) }}%{% if not loop.last %} · {% endif %}{% endif %}
-   {% endfor %}
-  </p>
-  <div class="liq-flow" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-    <div class="liq-step"><small>Transferencias sugeridas</small><strong>{{ payload.custody_comparison.transfer_count }}</strong><small>Movimientos manuales · Exchange → custodia protegida</small></div>
-    <div class="liq-step"><small>Tokens con propuestas</small><strong>{{ payload.custody_comparison.tokens_with_moves }}</strong><small>De 12 tokens publicados</small></div>
-    <div class="liq-step"><small>Ideales no alcanzables exactamente</small><strong>{{ payload.custody_comparison.nominal_unreachable }}</strong><small>Se mantienen HODL y Core protegidos</small></div>
+  <div class="custody-kpis">
+    <div class="liq-step"><small>Transferencias sugeridas</small><strong>{{ cust.transfer_count }}</strong><small>Exchange → HODL/Core · solo propuesta manual</small></div>
+    <div class="liq-step"><small>Tokens con ajustes</small><strong>{{ cust.tokens_with_moves }}</strong><small>De {{ cust.rows|length }} tokens publicados</small></div>
   </div>
-  <h3 style="margin-top:22px">Distribución exacta por token · tres custodias</h3>
-  <div style="overflow-x:auto"><table><thead><tr><th>Token / Tier</th><th>Custodia</th><th>Actual (uds.)</th><th>Ideal nominal (uds.)</th><th>Propuesta factible (uds.)</th><th>Estado</th></tr></thead>
-    <tbody>{% for r in payload.custody_comparison.rows %}{% for c,label in [('hodl','HODL'),('core','Core'),('exchange','Exchange')] %}
-    <tr><td>{% if loop.first %}<strong>{{ 'PUMP' if r.token=='PUMPFUN' else r.token }}</strong><br><small>{{ r.tier }}</small>{% endif %}</td><td>{{ label }}</td>
-      <td style="font-variant-numeric:tabular-nums">{{ r.current[c] }}</td>
-      <td style="font-variant-numeric:tabular-nums">{{ r.ideal_nominal[c] }}</td>
-      <td style="font-variant-numeric:tabular-nums"><strong>{{ r.ideal_feasible[c] }}</strong></td>
-      <td>{% if loop.first %}{{ 'Ideal alcanzable' if r.nominal_reachable else 'Ajuste parcial' if r.transfer_count else 'Protegido / sin movimiento' }}{% endif %}</td></tr>
-    {% endfor %}{% endfor %}</tbody></table></div>
-  <h3 style="margin-top:24px">Movimientos propuestos · unidades a transferir</h3>
-  <div style="overflow-x:auto"><table><thead><tr><th>Token</th><th>Desde</th><th>Hacia</th><th>Unidades exactas</th><th>Operación</th></tr></thead><tbody>
-    {% for m in payload.custody_comparison.transfers %}<tr><td><strong>{{ 'PUMP' if m.token=='PUMPFUN' else m.token }}</strong></td><td>{{ m.source }}</td><td>{{ m.destination }}</td><td style="font-variant-numeric:tabular-nums"><strong>{{ m.units }}</strong></td><td><span class="action-pill watch">PROPUESTA</span></td></tr>
-    {% else %}<tr><td colspan="5">No hay transferencias desde Exchange que acerquen a los porcentajes publicados sin retirar HODL/Core.</td></tr>{% endfor %}
-  </tbody></table></div>
-  <p class="footer-note"><strong>Regla de protección:</strong> no recomendar Core/HODL → Exchange ni HODL ↔ Core. Solo transferir excedentes de Exchange hacia custodia protegida y sin consumir unidades SELL reservadas. Cuando el ideal nominal exige retirar unidades protegidas, se informa la brecha sin inventar movimientos. Las propuestas no constituyen transferencias efectivas; confirmar en wallet/exchange y publicar nuevo snapshot antes de cambiar el inventario.</p>
+  <div class="liquidity-head"><h3>Movimientos y distribución posterior</h3><small class="sub">H = HODL · C = Core · E = Exchange · porcentajes por token</small></div>
+  {% set moved = cust.rows|selectattr('transfer_count')|list %}
+  <div class="custody-list" aria-label="Propuestas de custodia agrupadas por token">
+  {% for r in moved %}
+  <div class="custody-row" data-custody-token="{{ r.token }}">
+    <div><span class="custody-name">{{ 'PUMP' if r.token=='PUMPFUN' else r.token }}</span><span class="custody-tier">{{ r.tier }}</span></div>
+    <div><p class="custody-sub">Mover desde Exchange</p>
+       {% for m in cust.transfers if m.token == r.token %}
+       <div class="custody-transfer"><strong>{{ m.units }}</strong><span>uds.</span><span class="custody-arrow" aria-hidden="true">→</span><strong>{{ m.destination }}</strong></div>
+       {% endfor %}
+    </div>
+    <div class="custody-allocation"><p class="custody-sub">Distribución después del movimiento</p>
+      <div class="custody-plot" role="img" aria-label="{{ 'PUMP' if r.token=='PUMPFUN' else r.token }}: HODL {{ '%.2f'|format(r.feasible_pct.hodl) }}%, Core {{ '%.2f'|format(r.feasible_pct.core) }}%, Exchange {{ '%.2f'|format(r.feasible_pct.exchange) }}%">
+        {% if r.feasible_pct.hodl > 0 %}<div class="custody-segment custody-hodl" style="width:{{ r.feasible_pct.hodl }}%" title="HODL {{ '%.2f'|format(r.feasible_pct.hodl) }}%"></div>{% endif %}
+        {% if r.feasible_pct.core > 0 %}<div class="custody-segment custody-core" style="width:{{ r.feasible_pct.core }}%" title="Core {{ '%.2f'|format(r.feasible_pct.core) }}%"></div>{% endif %}
+        {% if r.feasible_pct.exchange > 0 %}<div class="custody-segment custody-exchange" style="width:{{ r.feasible_pct.exchange }}%" title="Exchange {{ '%.2f'|format(r.feasible_pct.exchange) }}%"></div>{% endif %}
+      </div>
+      <div class="custody-pct">
+        <span><i class="custody-dot custody-hodl"></i>H {{ '%.2f'|format(r.feasible_pct.hodl) }}%</span>
+        <span><i class="custody-dot custody-core"></i>C {{ '%.2f'|format(r.feasible_pct.core) }}%</span>
+        <span><i class="custody-dot custody-exchange"></i>E {{ '%.2f'|format(r.feasible_pct.exchange) }}%</span>
+      </div>
+      <p class="custody-note">{{ 'Ideal alcanzable' if r.nominal_reachable else 'Ajuste parcial · existen custodias protegidas fuera del objetivo' }}</p>
+    </div>
+  </div>
+  {% else %}
+  <div class="custody-row"><p>No hay transferencias seguras desde Exchange que mejoren el objetivo de custodia.</p></div>
+  {% endfor %}
+  </div>
+  {% set unmoved = cust.rows|rejectattr('transfer_count')|list %}
+  {% if unmoved %}
+  <details class="custody-more"><summary>Mostrar {{ unmoved|length }} tokens sin movimientos sugeridos</summary>
+    {% for r in unmoved %}
+    <div class="custody-mini-row"><strong>{{ 'PUMP' if r.token=='PUMPFUN' else r.token }} <small>· {{ r.tier }}</small></strong>
+      <span>H {{ '%.2f'|format(r.feasible_pct.hodl) }}% · C {{ '%.2f'|format(r.feasible_pct.core) }}% · E {{ '%.2f'|format(r.feasible_pct.exchange) }}%</span>
+      <small>{{ 'En objetivo' if r.nominal_reachable else 'Sin movimiento permitido' }}</small>
+    </div>
+    {% endfor %}
+  </details>
+  {% endif %}
+  <p class="footer-note">{{ cust.nominal_unreachable }} ideales nominales no alcanzables exactamente sin retirar custodia protegida. Los porcentajes son el resultado hipotético de las transferencias propuestas, NO posiciones confirmadas. HODL/Core nunca se retiran ni se intercambian entre sí; reservas SELL de Exchange protegidas. Tras una transferencia real, confirmar y publicar un snapshot nuevo.</p>
 </section>
 {% endif %}
 <section class="panel span-12"><div class="callout warn"><strong>Interpretación · Solo simulación</strong>{{ payload.limitations }} No se presume que una orden LIMIT esté ejecutada. BTC nunca se vende; Core/HODL protegido. Los escenarios de compras y ventas son independientes, no son un rebalanceo secuencial ni un plan ejecutable. Snapshot: {{ payload.snapshot_note }}</div></section>

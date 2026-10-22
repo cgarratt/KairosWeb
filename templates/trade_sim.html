@@ -64,7 +64,7 @@
 {% endif %}
 {% if mode.slug=='ventas' %}
 <section class="panel span-12"><h2>Candidatos SELL</h2><p class="sub">Órdenes en prioridad: SOBRE primero, después balance optimizado. BTC excluido. Cupo de cada token: min(Exchange libre, límite acumulado del Tier). Escenario sin órdenes reales.</p><p class="sub" id="sell-plan-status" role="status"></p>
-<div style="overflow-x:auto"><table><thead><tr><th>Prioridad / Fase</th><th>Token</th><th>% Actual</th><th>% Objetivo</th><th>% Post-venta</th><th>Exchange ud.</th><th>USDT estimado</th><th>Unidades SELL</th><th>Acción</th></tr></thead><tbody id="sim-body"></tbody><tfoot id="sim-foot" style="font-weight:800;background:#eaf3ff;border-top:2px solid #91b7e9"></tfoot></table></div><h3>Pesos antes / objetivo / después (12 tokens)</h3><div style="overflow-x:auto"><table><thead><tr><th>Token</th><th>% Antes</th><th>% Objetivo</th><th>% Después</th><th>Desviación final</th><th>USDT venta total</th></tr></thead><tbody id="sell-weight-body"></tbody></table></div></section>
+<div style="overflow-x:auto"><table><thead><tr><th>Prioridad / Fase</th><th>Token</th><th>% Actual</th><th>% Objetivo</th><th>% Post-venta</th><th>Exchange ud.</th><th>USDT estimado</th><th>Unidades SELL</th><th>Acción</th></tr></thead><tbody id="sim-body"></tbody><tfoot id="sim-foot" style="font-weight:800;background:#eaf3ff;border-top:2px solid #91b7e9"></tfoot></table></div></section>
 {% endif %}
 
 </div>
@@ -200,10 +200,6 @@ if(mode==='compras'){
      : 'Objetivo NO alcanzable con Exchange/Tier. USDT faltante: '+dollar(sim.unmet_usdt)+'. No se vende custodia protegida.';
   el('sim-foot').innerHTML=`<tr><td colspan="6">TOTAL VENTAS USDT</td><td>${dollar(sum)}</td><td>—</td><td>SIMULACIÓN</td></tr>`;
   const byToken=Object.fromEntries(sim.positions.map(x=>[x.token,x]));
-  el('sell-weight-body').innerHTML=sim.positions.map(x=>{const drift=x.after_pct-x.target_pct;
-     const classification=drift>source.current.band_pp?'SOBRE':drift < -source.current.band_pp?'INFRA':'NEUTRAL';
-     return `<tr><td>${token(x.token)}</td><td>${x.before_pct.toFixed(2)}%</td><td>${x.target_pct.toFixed(2)}%</td><td><b>${x.after_pct.toFixed(2)}%</b></td><td>${drift.toFixed(2)} pp · ${classification}</td><td>${dollar(x.sell_usdt)}</td></tr>`;
-  }).join('');
   el('sim-body').innerHTML=sim.orders.map(order=>{
     const x=source.tokens.find(x=>x.token===order.token),p=byToken[order.token];
     return `<tr><td><b>${order.priority} · E${order.stage}</b></td><td>${token(order.token)}</td><td>${p.before_pct.toFixed(2)}%</td><td>${p.target_pct.toFixed(2)}%</td><td><b>${p.after_pct.toFixed(2)}%</b></td><td data-private="units">${quantity(x.exchange_units)}</td><td><b>${dollar(order.usdt)}</b></td><td data-private="units">${quantity(order.units)}</td><td><span class="sim-actions sell">SELL · SIMULAR</span></td></tr>`;

@@ -1,13 +1,13 @@
-# KairosWeb v2.0.27 — DASHBOARD BSI + ESTADOS + LOGOS
+# KairosWeb v2.0.29 — Ventas compactas + Spot en trayectoria de Forecast
 
-**Aplicación:** `2.0.27` · **Google Sheets schema:** `5.0.0` · **Motor KairosGPT compatible:** v1.3.6.
+**Aplicación:** `2.0.29` · **Google Sheets schema:** `5.0.0` · **Motor KairosGPT compatible:** v1.3.6.
 
 ## Novedades acumuladas sobre KairosWeb v2.0.18
 
 1. **Ventas ordinarias (2 etapas)**: primera etapa vende tokens SOBRE de forma secuencial; segunda etapa minimiza la suma de desviaciones cuadráticas entre pesos cripto finales y targets al distribuir el faltante de USDT. No confundir con Ventas O3/O5.
 2. **Objetivo dinámico USDT**: `Kairos Ventas` usa 40% por defecto en el Master `ORDINARY_DEFAULT_USDT_TARGET`; `/mode/ventas?usdt_pct=55` o el deslizador permiten un porcentaje explícito de 0% a 100%, sin modificar el default. Meta no alcanzable = mostrar faltante y `CAPACITY_LIMITED`.
 3. **Restricciones duras**: BTC NEVER SELL; Exchange libre y órdenes SELL reservadas; límites acumulados T1 30% / T2 70% / T3 100%; HODL/Core protegidos; QF contado una sola vez. No hay creación/cancelación de órdenes, ni fills supuestos ni transferencias.
-4. **UI**: lista de ventas ordenadas con fase, unidades y USDT, y tabla de los 12 tokens con peso antes / objetivo / después. El selector de porcentaje funciona independientemente de los sliders de Compras.
+4. **UI**: lista de ventas ordenadas con fase, unidades y USDT, y detalles de cada orden con pesos antes/objetivo/después; se elimina la tabla de 12 tokens redundante. El selector de porcentaje funciona independientemente de los sliders de Compras.
 5. **Portafolio**: se libera el gráfico de resultado no realizado de la anterior DEV; usa unidades y costos del Master y precios del MCP, sin mezclar pérdidas realizadas históricas ni USDT.
 6. **Se preserva v2.0.18**: semáforo de peso post-compra en Precio / %Peso / USDT Fibonacci, y módulos de Compras, Forecast, Pivotes, Alertas y Órdenes fase 1.
 
@@ -22,7 +22,7 @@
 
 1. Extraer el ZIP **en la raíz del repositorio de KairosWeb**; el contenido se encuentra en la raíz, no en un subdirectorio adicional. Reemplazar los archivos por estos manteniendo las variables de entorno existentes. **No añadir credenciales ni subir `.env`.**
 2. Revisar diferencias, hacer commit y desplegar Render. Este ZIP no ejecuta git push, no crea un GitHub Release y no redepliega por sí mismo.
-3. Comprobar `/health`: `service=KairosWeb`, `version=2.0.27`, `status=UP`, `release_assets.consistent=true` y checks `sales_optimizer_engine`, `sales_optimizer_ui`, `portfolio_unrealized_chart`.
+3. Comprobar `/health`: `service=KairosWeb`, `version=2.0.29`, `status=UP`, `release_assets.consistent=true` y checks `sales_optimizer_engine`, `sales_optimizer_ui`, `portfolio_unrealized_chart`.
 4. Abrir `/mode/ventas` y `/mode/ventas?usdt_pct=55`; comprobar el porcentaje solicitado, prioridades y el comparativo. Confirmar que no hay órdenes reales creadas.
 5. Confirmar `/mode/portafolio` y el gráfico de resultado no realizado; verificar Compras, Forecast, Pivotes y Órdenes fase 1.
 
@@ -30,7 +30,7 @@
 
 - `python -m pytest -q` sobre el release extraído.
 - `node tests/test_sales_optimizer.js` y tests JS adicionales incluidos.
-- `SHA256SUMS.txt` / `RELEASE_MANIFEST_v2.0.27.json` permiten comprobar integridad de archivos del ZIP, excluyendo sus propios metadatos.
+- `SHA256SUMS.txt` / `RELEASE_MANIFEST_v2.0.29.json` permiten comprobar integridad de archivos del ZIP, excluyendo sus propios metadatos.
 
 **Límite:** menos de 100 archivos; se omiten algunos tests de regresión antiguos del paquete distribuible para mantener ese límite (pero se ejecutaron en el checkout completo). Los fuentes de aplicación y assets no se han eliminado.
 
@@ -63,7 +63,7 @@ Incluye el módulo de custodia 2.0.20 y corrige el renderizado de Balancer cuand
 - La curva de rentabilidad retrospectiva y su endpoint `/api/portfolio-repricing` fueron **retirados** de Portafolio por petición del usuario; no se disparan consultas 1D para esa vista.
 - `/mode/portafolio` ya no genera curvas históricas. La segunda fila muestra BSI 4H archivado y resultado no realizado por token.
 - `/mode/ordenes` mantiene independiente el Balancer ordinario del filtro 1W de Compras. Si falla solo la estructura semanal, los niveles de compra quedan N/D y los cálculos de Balance pueden continuar como **propuestas no ejecutables**. Si faltan Sheets válidos, 12 precios Spot o la valoración Balancer, muestra `DATA ERROR` y la etapa/ID diagnóstico; no usa inventarios del ZIP.
-- `/health`: version `2.0.27`, chequeos de integridad para el nuevo motor e interfaz.
+- `/health`: version `2.0.29`, chequeos de integridad para el nuevo motor e interfaz.
 - No se ejecutan, cancelan, envían o simulan fills de órdenes. No se actualiza el MASTER.
 
 ### Validación de esta entrega
@@ -97,3 +97,17 @@ Una sola vista `/mode/portafolio` accesible desde `/` (redirección). Valor tota
 - Retiradas las dos secciones colapsables inferiores BSI y composición histórica por segmentos. El donut histórico de primera fila se mantiene.
 - Conserva valorización total en USDT y BTC, simulaciones de trading y protección de custodia.
 - No cambia posiciones, parámetros ni órdenes del MASTER.
+
+
+## Release 2.0.28 · Custodia compacta Opción B
+
+La sección 7 de Balancer presenta una fila por token con transferencias desde Exchange a HODL/Core, cantidades exactas por destino y una barra de porcentajes **post-movimiento**. Los tokens sin transferencias están en un desplegable secundario; se retira la tabla anterior de 36 filas. La simulación es de solo lectura y no altera posiciones ni reglas. Ver `RELEASE_NOTES_v2.0.28.md`.
+
+
+## Release 2.0.29 · Ventas y línea Spot en trayectoria
+
+- **Ventas:** retirar exclusivamente la segunda tabla “Pesos antes / objetivo / después (12 tokens)”. La tabla priorizada de SELL, el cálculo del optimizador, los estados y los importes siguen intactos.
+- **Forecast:** dibujar una línea horizontal punteada con el Spot MCP vigente del token seleccionado y su precio. Incluir Spot en la escala vertical; actualizar al cambiar token y al ajustar etapas. Si falta Spot, mostrar N/D y omitir la línea, sin inventar cotización.
+- La línea es referencia informativa sobre un eje de etapas hipotéticas; **no es una onda, pivote ni señal**.
+- `/health` incorpora el marcador `forecast_spot_overlay_v2029` y deja de exigir la tabla eliminada.
+- Paquete local pendiente de despliegue. Master, órdenes y custodia sin cambios. Ver `RELEASE_NOTES_v2.0.29.md`.
