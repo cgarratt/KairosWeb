@@ -1,3 +1,4 @@
+import pytest
 """Contract tests for Google Sheets. All data below are SYNTHETIC, not balances."""
 import copy
 import sys
@@ -280,3 +281,97 @@ def test_manual_homologation_is_append_only_and_idempotent():
         with patch.object(sf,'parse_master',return_value=state):
             again=sf.homologate_current_snapshot('TEST-001')
     assert again['already_homologated'] is True
+
+# v2.0.33 — Fresh homologation must be read, identity-bound and diagnosable.
+def test_v2033_readiness_reports_missing_ledger_without_writing():
+    import kairos_sheets_features as sf
+    raw=fake_master()
+    state=gs.parse_master(raw)
+    with patch.object(gs,'get_state',return_value=state), \
+         patch.object(sf,'_sheet_ids',return_value={'01_CONTROL':123}), \
+         patch.object(sf,'_api',side_effect=AssertionError('GET-only readiness must not write')):
+        status=sf.homologation_readiness()
+    assert status['status']=='PENDING'
+    assert status['snapshot_id']=='TEST-001'
+    assert status['ledger_present'] is False
+    assert status['ledger_tab']=='25_HOMOLOGACION_HISTORIAL'
+    assert status['recommended_action']=='HOMOLOGATE_CURRENT_SNAPSHOT'
+
+
+def test_v2033_readiness_uses_current_ledger_no_write():
+    import kairos_sheets_features as sf
+    state=gs.parse_master(_certified_master())
+    assert state['homologation']['status']=='CURRENT'
+    with patch.object(gs,'get_state',return_value=state), \
+         patch.object(sf,'_sheet_ids',return_value={'25_HOMOLOGACION_HISTORIAL':300}), \
+         patch.object(sf,'_api',side_effect=AssertionError('readiness cannot mutate Sheets')):
+        status=sf.homologation_readiness()
+    assert status['status']=='CURRENT'
+    assert status['recommended_action']=='NONE'
+    assert status['ledger_present'] is True
+
+
+def test_v2033_reader_snapshot_conflict_blocks_homologation_write():
+    import kairos_sheets_features as sf
+    raw=fake_master()
+    with patch.object(sf,'_remote_data',return_value=raw), \
+         patch.object(sf,'_api',side_effect=AssertionError('must not write after mismatch')):
+        with pytest.raises(sf.HomologationWorkflowError) as failure:
+            sf.homologate_current_snapshot('OTHER-SNAPSHOT')
+    assert failure.value.code=='HOM_SNAPSHOT_CHANGED'
+    assert failure.value.phase=='VALIDATION'
+
+
+def test_v2033_writer_403_reports_actionable_safe_code():
+    import kairos_sheets_features as sf
+    raw=fake_master()
+    with patch.object(sf,'_remote_data',return_value=raw), \
+         patch.object(sf,'_sheet_ids',return_value={'01_CONTROL':1}), \
+         patch.object(sf,'_api',side_effect=sf.SettingsError('Google Sheets HTTP 403')):
+        with pytest.raises(sf.HomologationWorkflowError) as failure:
+            sf.homologate_current_snapshot('TEST-001')
+    assert failure.value.code=='HOM_WRITER_FORBIDDEN'
+    assert failure.value.phase=='WRITE'
+    assert failure.value.write_may_have_committed is False
+    assert 'Editor' in str(failure.value)
+
+
+def test_v2033_post_write_read_fails_closed_and_requires_manual_check():
+    import kairos_sheets_features as sf
+    raw=fake_master()
+    with patch.object(sf,'_remote_data',return_value=raw), \
+         patch.object(sf,'_sheet_ids',return_value={'01_CONTROL':1}), \
+         patch.object(sf,'_api',return_value={'replies':[{}, {}, {}]}), \
+         patch.object(gs,'get_state',side_effect=gs.SheetDataError('Google Sheets HTTP 503')):
+        with pytest.raises(sf.HomologationWorkflowError) as failure:
+            sf.homologate_current_snapshot('TEST-001')
+    assert failure.value.code=='HOM_WRITE_UNVERIFIED'
+    assert failure.value.phase=='POST_WRITE_READ'
+    assert failure.value.write_may_have_committed
+    assert 'antes de reintentar' in str(failure.value)
+
+
+def test_v2033_homologation_diagnostics_and_units_contract_in_release():
+    from pathlib import Path
+    from jinja2 import Environment
+    root=Path(__file__).resolve().parents[1]
+    app=(root/'app.py').read_text()
+    mcp=(root/'static/mcp_settings.js').read_text()
+    html=(root/'templates/balancer.html').read_text()
+    assert "APP_VERSION = '2.0.34'" in app
+    assert "/api/settings/homologation-status" in app
+    assert 'HOM_WRITER_MISSING' in app
+    assert 'write_may_have_committed' in app
+    assert 'HOM_WRITE_UNVERIFIED' in (root/'kairos_sheets_features.py').read_text()
+    assert 'HOM_WRITER_FORBIDDEN' in (root/'kairos_sheets_features.py').read_text()
+    assert 'master-homologation-readiness' in (root/'templates/settings.html').read_text()
+    assert 'master-homologation-check' in (root/'templates/settings.html').read_text()
+    assert 'getHomologationReadiness()' in mcp
+    start=html.index('<section class="panel span-6"><h2>4. Candidatos de venta')
+    end=html.index('</section>',start)+len('</section>')
+    payload=type('Payload',(),{'sells':[{'token':'HBAR','value':100,'weight':.07,'target':.05,'units':17857.38754194}]})()
+    out=Environment().from_string(html[start:end]).render(payload=payload)
+    assert '<th>Unidades</th>' in out
+    assert '17,857.39' in out
+    assert '17,857.38754194' not in out
+    assert 'TOTAL VENTAS USDT' in out

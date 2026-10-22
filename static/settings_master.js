@@ -2,11 +2,12 @@
   'use strict';
   const fmt=window.KairosFormatting;
   const names={units:'Maestro de unidades',targets:'Objetivos y Tiers',tier_custody:'Custodia por Tier',
-    liquidity:'Liquidez por venue',parameters:'Parámetros',pivots:'Pivotes y referencias',mcp:'Estado de conexiones MCP'};
+    liquidity:'Liquidez por venue',capital_targets:'Objetivos de liquidez y ReservaTrading (%)',parameters:'Parámetros',pivots:'Pivotes y referencias',mcp:'Estado de conexiones MCP'};
   const desc={units:'02_POSICIONES · Unidades HODL, Core y Exchange; inversión remanente. Total y costo medio se calculan automáticamente.',
     targets:'02_POSICIONES · Objetivos de los 12 activos; la suma debe ser 100%.',
     tier_custody:'04_CUSTODIA · Porcentajes simulados por Tier; no realiza traspasos reales.',
-    liquidity:'03_LIQUIDEZ · Saldos USDT por venue; Quantfury se cuenta una sola vez.',
+    liquidity:'03_LIQUIDEZ · Saldos USDT reales por venue; Quantfury se cuenta una sola vez. Para porcentajes objetivo abre «Objetivos de liquidez y ReservaTrading (%)».',
+    capital_targets:'08_INTEGRAL · Objetivos de distribución del capital histórico (%). Liquidez y Trading/ReservaTrading son objetivos, NO saldos reales ni políticas de ejecución. Los cuatro segmentos deben sumar 100%; no altera 03_LIQUIDEZ ni la reserva física Quantfury.',
     parameters:'12_PARAMETROS_KAIROS · Valores aprobados, porcentajes y planes de ventas. Cada parámetro describe su impacto.',
     pivots:'07_PIVOTES · CL y O1–O5: PROPUESTO → VALIDADO (5L/5R+BOS 1W) → CONFIRMADO. «Actualizar candidatos desde MCP» actualiza solo PROPUESTO; VALIDADO y CONFIRMADO conservan precio, fecha y estado. «Validar → Publicar» registra cambios administrativos sin ejecutar órdenes.',mcp:'Diagnóstico MCP independiente del Master. Consultas de solo lectura y reconexión sin reiniciar Render.'};
   const PARAM_GROUPS=[
@@ -35,7 +36,7 @@
   const sectionFields={units:[['hodl','HODL'],['core','Core'],['exchange','Exchange'],['investment_total','Inversión remanente (USDT)']],
     targets:[['tier','Tier'],['target','Objetivo (%)']],
     tier_custody:[['hodl','HODL (%)'],['core','Core (%)'],['exchange','Exchange (%)']],
-    liquidity:[['usdt','USDT físico']],parameters:[['value','Valor']],
+    liquidity:[['usdt','USDT físico']],capital_targets:[['target','Objetivo (%)']],parameters:[['value','Valor']],
     pivots:[['cycle_low','Cycle Low'],['o1','O1'],['o2','O2'],['o3','O3'],['o4','O4'],['o5','O5']]};
   const nav=document.getElementById('settings-nav'), body=document.getElementById('settings-data');
   const status=document.getElementById('settings-msg'), save=document.getElementById('settings-save');
@@ -80,9 +81,9 @@
   const pc=(n)=>`${cleanFloat(n)}%`;
   const money=(n)=>'US$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
   const price5=(n)=>{const v=Number(n);return !Number.isFinite(v)?'N/D':v>0&&v<0.00001?'US$<0.00001':'US$'+v.toLocaleString('en-US',{maximumFractionDigits:5});};
-  function rowKey(){return tab==='liquidity'?'venue':tab==='tier_custody'?'tier':tab==='parameters'?'key':'token';}
+  function rowKey(){return tab==='capital_targets'?'segment':tab==='liquidity'?'venue':tab==='tier_custody'?'tier':tab==='parameters'?'key':'token';}
   function inputValue(field,entry){const value=entry[field];
-    if(tab==='targets'&&field==='target' ||tab==='tier_custody')return cleanFloat(numerical(value)*100);
+    if((tab==='targets'||tab==='capital_targets')&&field==='target' ||tab==='tier_custody')return cleanFloat(numerical(value)*100);
     if(tab==='parameters'&&field==='value')return fmt.toDisplay(value,entry);
     if(tab==='units'&&field==='investment_total')return Number(value).toFixed(2);
     return value===null||value===undefined?'':String(value);
@@ -114,6 +115,12 @@
     }else if(tab==='tier_custody'){
       state.sections.tier_custody.forEach((r,i)=>{let t=['hodl','core','exchange'].reduce((s,f)=>s+rowNum(i,f),0);
         box.append(el('span',Math.abs(t-100)>.000001?'invalid-value':'valid-value',`${r.tier}: ${pc(t)} / 100%`));});
+    }else if(tab==='capital_targets'){
+      const total=state.sections.capital_targets.reduce((s,_,i)=>s+rowNum(i,'target'),0);
+      const capital=state.sections.capital_targets.reduce((s,r)=>s+Number(r.target_usdt),0);
+      box.append(el('strong','',`Suma objetivos: ${pc(total)} / 100%`));
+      box.append(el('span',Math.abs(total-100)>0.000001?'invalid-value':'valid-value',Math.abs(total-100)>0.000001?'Ajusta otros segmentos para completar el 100%':'Objetivos coherentes con 100%'));
+      box.append(el('span','',`Base de capital histórico: ${money(capital)}. Solo modifica objetivos de 08_INTEGRAL; no mueve saldos de Quantfury ni cambia el objetivo estructural de 12_PARAMETROS_KAIROS.`));
     }else if(tab==='liquidity'){
       const total=state.sections.liquidity.reduce((s,_,i)=>s+rowNum(i,'usdt'),0);
       const qf=state.sections.liquidity.reduce((s,r,i)=>s+(r.classification==='TRADING_QF'?rowNum(i,'usdt'):0),0);
@@ -142,6 +149,13 @@
         const avg=body.querySelector(`[data-computed="avg-${i}"]`);
         if(total)total.textContent=Number(t).toLocaleString('en-US',{maximumFractionDigits:10});
         if(avg)avg.textContent=t>0?price5(v/t):'N/D';
+      });
+    }
+    if(tab==='capital_targets'){
+      const cap=state.sections.capital_targets.reduce((s,r)=>s+Number(r.target_usdt),0);
+      state.sections.capital_targets.forEach((r,i)=>{
+        const target=body.querySelector(`[data-computed="capital-target-${i}"]`);
+        if(target)target.textContent=`Objetivo: ${money(cap*rowNum(i,'target')/100)}`;
       });
     }
     renderTotals();
@@ -301,9 +315,15 @@
         if(entry.description)primary.append(el('p','parameter-description',entry.description));
         primary.append(el('small','settings-hint',`Área: ${entry.module_name} · Estado: ${entry.status} · Fuente: ${entry.source||'Master'}`));
       }else if((tab==='units'||tab==='targets')&&entry.token)primary.append(settingsTokenLabel(entry.token));
-      else primary.append(el('strong','token-name',entry[rowKey()]));
+      else primary.append(el('strong','token-name',tab==='capital_targets'&&entry.segment==='Trading'?'Trading · ReservaTrading':entry[rowKey()]));
       item.append(primary);
       for(const [field,label] of sectionFields[tab])makeField(item,entry,index,field,label);
+      if(tab==='capital_targets'){
+        const detail=el('div','settings-field computed');
+        detail.append(el('span','settings-hint','Importe objetivo sobre capital histórico'));
+        const amount=el('strong','computed-value','—');amount.dataset.computed=`capital-target-${index}`;
+        detail.append(amount);item.append(detail);
+      }
       if(tab==='units'){
         for(const [field,label] of [['total','Total unidades'],['avg','Costo medio (USDT/unidad)']]){
           const cell=el('div','settings-field computed');cell.append(el('span','settings-hint',label));
@@ -327,7 +347,7 @@
     if(value.trim()===''&&tab==='pivots')return null;
     const n=Number(value.replace(',','.'));
     if(!value.trim()||!Number.isFinite(n)||n<0)throw Error(`Valor inválido: ${entry.token||entry.key||entry.venue||entry.tier} · ${field}`);
-    if((tab==='targets'&&field==='target')||tab==='tier_custody'){
+    if(((tab==='targets'||tab==='capital_targets')&&field==='target')||tab==='tier_custody'){
       if(n>100)throw Error('El porcentaje no puede superar 100%');
       return n/100;
     }
@@ -391,6 +411,7 @@
     let entries;try{entries=collect();if(!entries.length)throw Error('No hay cambios para guardar.');
       if(evidence.length<8)throw Error('Indica justificación o evidencia (mínimo 8 caracteres).');
       if(tab==='targets'&&Math.abs(state.sections.targets.reduce((s,_,i)=>s+rowNum(i,'target'),0)-100)>.000001)throw Error('Los objetivos deben sumar 100%.');
+      if(tab==='capital_targets'&&Math.abs(state.sections.capital_targets.reduce((s,_,i)=>s+rowNum(i,'target'),0)-100)>.000001)throw Error('HODL + Core, Exchange, Liquidez y Trading deben sumar 100%; no se reasignan automáticamente.');
       if(tab==='tier_custody')for(let i=0;i<state.sections.tier_custody.length;i++)if(Math.abs(['hodl','core','exchange'].reduce((s,f)=>s+rowNum(i,f),0)-100)>.000001)throw Error('Custodia de cada Tier debe sumar 100%.');
       if(tab==='parameters')for(const stage of ['O2','O3','O4','O5']){
         const group=state.sections.parameters.map((r,i)=>({r,i})).filter(x=>x.r.key.startsWith(`FORECAST_${stage}_FIB_`)&&x.r.key.endsWith('_PCT'));

@@ -21,6 +21,49 @@ def demo_master():
     ])
     return raw
 
+class CapitalAllocationTargetsTests(unittest.TestCase):
+    def test_edit_liquidity_and_trading_percentages_atomically_without_balances(self):
+        raw=demo_master()
+        prior=deepcopy(raw)
+        writes, state=prepare_changes(raw,'capital_targets',[
+            {'segment':'Liquidez','target':.25},
+            {'segment':'Trading','target':.15},
+        ],evidence='Aprobación targets capital histórico 2026')
+        changed={(name,row,col):val for name,row,col,val in writes}
+        rows=raw[SHEETS['integral']]
+        liq_i=next(i for i,r in enumerate(rows) if r[0]=='Liquidez')
+        trad_i=next(i for i,r in enumerate(rows) if r[0]=='Trading')
+        assert changed['integral',liq_i,1]==37.5
+        assert changed['integral',trad_i,1]==22.5
+        assert all(name=='integral' and col==1 for name,row,col,v in writes)
+        assert raw==prior
+        assert state['snapshot']['trading_real_fixed_USDT']==10
+        assert state['snapshot']['physical_total_USDT']==50
+        assert state['parameters']['STRUCTURAL_USDT_TARGET']['value']==.4
+        assert next(x for x in state['integral']['segments'] if x['name']=='Trading')['target_usdt']==22.5
+
+    def test_reject_partial_reallocation_sum_and_unauthorized_segment(self):
+        with self.assertRaisesRegex(SettingsError,'sumar 100%'):
+            prepare_changes(demo_master(),'capital_targets',[
+                {'segment':'Liquidez','target':.50}],evidence='Aprobación targets 2026')
+        with self.assertRaisesRegex(SettingsError,'no editable'):
+            prepare_changes(demo_master(),'capital_targets',[
+                {'segment':'Lost · realizado','target':.15}],evidence='Aprobación targets 2026')
+        with self.assertRaisesRegex(SettingsError,'entre 0% y 100%'):
+            prepare_changes(demo_master(),'capital_targets',[
+                {'segment':'Trading','target':1.1}],evidence='Aprobación targets 2026')
+
+    def test_frontend_and_source_contract(self):
+        from pathlib import Path
+        root=Path(__file__).resolve().parents[1]
+        js=(root/'static/settings_master.js').read_text()
+        html=(root/'templates/settings.html').read_text()
+        assert 'capital_targets' in js and 'capital_targets' in html
+        assert 'Trading · ReservaTrading' in js
+        assert 'deben sumar 100%' in js
+        assert "'capital_targets'" in (root/'app.py').read_text()
+
+
 class BellSheetTests(unittest.TestCase):
     def fixture(self):
         runs=[['corrida_id','ejecutado_utc','ejecutado_lima','marco'],['r1','2026-10-17T12:00:00Z','', '1H'],['r2','2026-10-17T12:00:00Z','','4H']]

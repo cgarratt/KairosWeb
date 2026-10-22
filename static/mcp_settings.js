@@ -66,19 +66,41 @@
   }
   const certifyButton=document.getElementById('master-homologate-current');
   const certifyOutput=document.getElementById('master-homologate-output');
+  const readinessButton=document.getElementById('master-homologation-check');
+  const certifyState=document.getElementById('master-homologation-readiness');
+  async function getHomologationReadiness(){
+    const response=await fetch('/api/settings/homologation-status',{credentials:'same-origin',cache:'no-store'});
+    const payload=await response.json();
+    if(!response.ok){throw new Error([payload.error_code||'HOM_READ_ERROR',payload.phase||'READ',payload.reason||'Error de lectura'].join(' · '));}
+    return payload;
+  }
+  async function refreshHomologationReadiness(){
+    if(!certifyState)return null;
+    try{
+      const payload=await getHomologationReadiness();
+      certifyState.textContent=(payload.status==='CURRENT'?'CURRENT · Certificación vigente':
+        ('PENDIENTE · '+(payload.ledger_present?'Hoja 25 presente, falta certificar snapshot actual':'No existe hoja 25: se creará al homologar')))+
+        ' · Snapshot '+payload.snapshot_id;
+      return payload;
+    }catch(error){certifyState.textContent=error.message||'No fue posible comprobar homologación';return null;}
+  }
+  if(readinessButton)readinessButton.addEventListener('click',refreshHomologationReadiness);
   if(certifyButton&&certifyOutput){
     certifyButton.addEventListener('click',async()=>{
       certifyButton.disabled=true;
-      certifyOutput.textContent='Leyendo identidad y controles del MASTER…';
+      certifyOutput.textContent='Comprobando estado de homologación del MASTER…';
       try{
         const auth=await fetch('/api/admin/session',{credentials:'same-origin',cache:'no-store'});
         const account=await auth.json();
         if(!auth.ok||!account.is_admin||!account.csrf_token)throw new Error('Inicia sesión administrativa en Configuración.');
-        const statusResponse=await fetch('/api/sheets-status',{credentials:'same-origin',cache:'no-store'});
-        const status=await statusResponse.json();
-        const snapshot=status.snapshot_id||status?.control?.snapshot_id;
-        if(!statusResponse.ok||!snapshot)throw new Error('No hay snapshot PUBLICADO válido para homologar.');
-        if(!window.confirm('¿Homologar contabilidad del snapshot '+snapshot+'? No cambiará unidades, saldos, pivotes ni órdenes.')){
+        const readiness=await getHomologationReadiness();
+        if(readiness.status==='CURRENT'){
+          certifyOutput.textContent='Ya homologado: '+readiness.snapshot_id+' · CURRENT';return;
+        }
+        const snapshot=readiness.snapshot_id;
+        if(!window.confirm('¿Homologar contabilidad del snapshot '+snapshot+'? '+
+          (readiness.ledger_present?'Se registrará una certificación en hoja 25.':'Se creará hoja 25 y su primera certificación.')+
+          ' No cambiará unidades, saldos, pivotes ni órdenes.')){
           certifyOutput.textContent='Sin cambios: homologación cancelada.';return;
         }
         certifyOutput.textContent='Validando y registrando homologación…';
@@ -87,12 +109,21 @@
           headers:{'Content-Type':'application/json','X-Kairos-Csrf':account.csrf_token},
           body:JSON.stringify({expected_snapshot_id:snapshot,confirm:'HOMOLOGAR'})});
         const result=await response.json();
-        if(!response.ok||result.status!=='OK')throw new Error(result.reason||'No se pudo verificar la homologación.');
+        if(!response.ok||result.status!=='OK'){
+          const code=result.error_code||result.status||'HOM_UNKNOWN';
+          const phase=result.phase||'UNKNOWN';
+          const incident=result.error_id?' · Incidente '+result.error_id:'';
+          const retry=result.write_may_have_committed?' · Verifica hoja 25 antes de repetir la acción.':'';
+          throw new Error(code+' · '+phase+' · '+(result.reason||'No se pudo verificar la homologación.')+incident+retry);
+        }
         certifyOutput.textContent=(result.already_homologated?'Ya homologado: ':'Homologación registrada: ')+
-           result.snapshot_id+' · Contabilidad base validada; pivotes y BSI siguen pendientes.';
+          result.snapshot_id+' · '+result.verification+' · '+result.ledger_tab+
+          ' · Contabilidad base validada; pivotes y BSI siguen pendientes.';
+        await refreshHomologationReadiness();
       }catch(error){certifyOutput.textContent=error.message||'DATA_ERROR de homologación';}
       finally{certifyButton.disabled=false;}
     });
+    if(new URLSearchParams(location.search).get('tab')==='mcp')refreshHomologationReadiness();
   }
   panel.addEventListener('click',event=>{
     const button=event.target.closest('button[data-provider]');if(!button)return;

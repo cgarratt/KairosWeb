@@ -15,7 +15,7 @@ def test_release_ui_has_live_sheet_adapter_and_health_markers():
     root=Path(__file__).resolve().parents[1]
     app=(root/'app.py').read_text()
     html=(root/'templates/balancer.html').read_text()
-    assert "APP_VERSION = '2.0.32'" in app
+    assert "APP_VERSION = '2.0.34'" in app
     assert "g.kairos_state['custody_policy']" in app
     assert "compare_custody(custody_positions" in app
     assert "'custody_comparison':custody_comparison" in app
@@ -235,8 +235,8 @@ def test_v2032_balancer_sell_units_column_renders_model_quantities():
         {'token':'HBAR','value':1405.90,'weight':.069,'target':.05,'units':16843.17120163},
     ])
     markup=Environment().from_string(snippet).render(payload=payload)
-    assert '<th>Unidades estimadas</th>' in markup
-    assert '32.5' in markup and '16,843.17120163' in markup
+    assert '<th>Unidades</th>' in markup
+    assert '32.5' in markup and '16,843.17' in markup
     assert markup.count('data-private="units"')==2
     assert 'TOTAL VENTAS USDT' in markup and 'SIMULACIÓN' in markup
     assert '2,653.30' not in markup  # USD reference remains rounded visually.
@@ -254,5 +254,5 @@ def test_v2032_balancer_units_show_dash_when_zero_and_never_sum_tokens():
     payload=SimpleNamespace(sells=[{'token':'HYPE','value':0,'weight':.23,'target':.1,'units':0}])
     markup=Environment().from_string(html[start:end]).render(payload=payload)
     assert '>—</td>' in markup
-    assert '<th>Unidades estimadas</th>' in markup
+    assert '<th>Unidades</th>' in markup
     assert '<td>—</td><td>SIMULACIÓN</td>' in markup

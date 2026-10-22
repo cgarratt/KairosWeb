@@ -30,11 +30,11 @@ from custody_balancer import compare_custody, CustodyError
 from orders_inbox import drift_tone, tradingbot_tokens
 from kairos_sheets_features import (
     unread_alerts, mark_alert_read, mark_all_alerts_read, settings_data, prepare_changes,
-    save_changes, homologate_current_snapshot, SettingsError, _remote_data as _unused_remote_marker
+    save_changes, homologate_current_snapshot, homologation_readiness, HomologationWorkflowError, SettingsError, _remote_data as _unused_remote_marker
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.32'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.34'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1176,7 +1176,7 @@ def alerts_mark_read():
         return jsonify({'status':'DATA_ERROR','message':'No se pudo persistir la lectura en Google Sheets.'}),503
 
 
-_SETTINGS_TABS = frozenset(('units', 'targets', 'tier_custody', 'liquidity',
+_SETTINGS_TABS = frozenset(('units', 'targets', 'tier_custody', 'liquidity', 'capital_targets',
                            'pivots', 'parameters', 'mcp'))
 
 
@@ -1284,6 +1284,9 @@ def settings_save():
     try:
         # Shared transaction includes complete validation, audit log, new revision and fresh read.
         return jsonify(save_changes(body))
+    except HomologationWorkflowError as exc:
+        return jsonify({'status':'DATA_ERROR','error_code':exc.code,'phase':exc.phase,'reason':str(exc),
+                        'write_may_have_committed':exc.write_may_have_committed}),503
     except SettingsError as exc:return jsonify({'status':'INVALID','reason':str(exc)}),409
     except Exception as exc:
         app.logger.error('Settings save error id=%s type=%s',uuid.uuid4().hex[:10],type(exc).__name__)
@@ -1335,10 +1338,26 @@ def settings_publish():
     if body.get('confirm')!='PUBLICAR':return jsonify({'status':'CONFIRMATION_REQUIRED'}),400
     if not _verify_preview_token(body):return jsonify({'status':'PREVIEW_REQUIRED','reason':'Validación previa ausente, caducada o distinta del contenido a publicar'}),409
     try:return jsonify(save_changes(body))
+    except HomologationWorkflowError as exc:
+        return jsonify({'status':'DATA_ERROR','error_code':exc.code,'phase':exc.phase,'reason':str(exc),
+                        'write_may_have_committed':exc.write_may_have_committed}),503
     except SettingsError as exc:return jsonify({'status':'INVALID','reason':str(exc)}),409
     except Exception as exc:
         app.logger.error('Settings publish error id=%s class=%s',uuid.uuid4().hex[:10],type(exc).__name__)
         return jsonify({'status':'DATA_ERROR','reason':'No se pudo publicar nueva versión del Master.'}),503
+
+
+@app.route('/api/settings/homologation-status',methods=['GET'])
+def settings_homologation_status():
+    if not _admin_authorized():return jsonify({'status':'ADMIN_AUTH_REQUIRED'}),403
+    try:return jsonify(homologation_readiness())
+    except HomologationWorkflowError as exc:
+        return jsonify({'status':'DATA_ERROR','error_code':exc.code,'phase':exc.phase,'reason':str(exc)}),503
+    except Exception as exc:
+        incident=uuid.uuid4().hex[:10]
+        app.logger.error('Homologation readiness id=%s class=%s',incident,type(exc).__name__)
+        return jsonify({'status':'DATA_ERROR','error_code':'HOM_UNKNOWN_READ_FAILURE',
+                        'phase':'READ','error_id':incident,'reason':'No fue posible consultar el estado de la homologación.'}),503
 
 
 @app.route('/api/settings/homologate',methods=['POST'])
@@ -1347,15 +1366,22 @@ def settings_homologate():
     if not _same_origin():return jsonify({'status':'FORBIDDEN_ORIGIN'}),403
     if not _admin_authorized() or not _csrf_ok():return jsonify({'status':'ADMIN_AUTH_REQUIRED'}),403
     if not os.getenv('KAIROS_GOOGLE_WRITER_JSON'):
-        return jsonify({'status':'WRITE_DISABLED','reason':'Credenciales de edición ausentes'}),503
+        return jsonify({'status':'WRITE_DISABLED','error_code':'HOM_WRITER_MISSING',
+                        'phase':'PREFLIGHT','reason':'Falta KAIROS_GOOGLE_WRITER_JSON en Render.'}),503
     body=request.get_json(silent=True) or {}
     if body.get('confirm')!='HOMOLOGAR':return jsonify({'status':'CONFIRMATION_REQUIRED'}),400
     try:return jsonify(homologate_current_snapshot(body.get('expected_snapshot_id')))
-    except SettingsError as exc:return jsonify({'status':'INVALID','reason':str(exc)}),409
+    except HomologationWorkflowError as exc:
+        return jsonify({'status':'DATA_ERROR','error_code':exc.code,'phase':exc.phase,
+                        'reason':str(exc),'write_may_have_committed':exc.write_may_have_committed}),503
+    except SettingsError as exc:return jsonify({'status':'INVALID','error_code':'HOM_INVALID_INPUT',
+                                                'phase':'VALIDATION','reason':str(exc)}),409
     except Exception as exc:
         incident=uuid.uuid4().hex[:10]
         app.logger.error('Master homologation id=%s class=%s',incident,type(exc).__name__)
-        return jsonify({'status':'DATA_ERROR','reason':'Homologación no verificada. Revisar el MASTER antes de reintentar.','error_id':incident}),503
+        return jsonify({'status':'DATA_ERROR','error_code':'HOM_UNEXPECTED_ERROR',
+                        'phase':'UNKNOWN','reason':'Homologación no verificada. Revisar logs privados y MASTER antes de reintentar.',
+                        'error_id':incident}),503
 
 
 @app.route('/api/settings/pivots/cl-review')
@@ -1576,13 +1602,16 @@ def _deployed_asset_status():
         'integral_donut': ('templates/portfolio_integral.html', ('data-capital-chart="donut"', 'integral-donut-sector')),
         'portfolio_layout_v2022': ('templates/portfolio_integral.html', ('data-layout-row="1"','data-layout-row="2"','data-layout-row="3"','data-layout-row="4"')),
         'allocation_legend_v2032': ('templates/portfolio_integral.html', ('data-token-columns="6+6"', 'data-allocation-cash="USDT"', 'data-allocation-column=', 'port-alloc-columns')),
-        'balancer_sell_units_v2032': ('templates/balancer.html', ('<th>Unidades estimadas</th>', 'r.units', 'data-private="units"')),
+        'balancer_sell_units_v2033': ('templates/balancer.html', ('<th>Unidades</th>', "'{:,.2f}'.format(r.units)", 'data-private="units"')),
         'health_three_tiers_v2030': ('app.py', ("@app.route('/api/health/diagnostics')", 'operational_providers', 'functional_modules')),
         'health_diagnostics_ui_v2030': ('templates/settings.html', ('id="health-deep-panel"', 'id="health-check-all"')),
         'health_diagnostics_js_v2030': ('static/mcp_settings.js', ('/api/health/diagnostics', 'health-check-output')),
         'portfolio_error_contract_v2030': ('templates/portfolio_integral.html', ('id="portfolio-diagnostic"','portfolio_diagnostic')),
         'homologation_contract_v2030': ('google_sheets_master.py', ('HOMOLOGATION_RANGE', 'assess_homologation(', 'SNAPSHOT_REFERENCE_STALE')),
         'homologation_ledger_v2031': ('kairos_sheets_features.py', ('HOMOLOGATION_TAB', '_certificate_append(', 'homologate_current_snapshot(')),
+        'homologation_diagnostics_v2033': ('app.py', ('/api/settings/homologation-status', 'HOM_WRITER_MISSING', 'write_may_have_committed')),
+        'capital_targets_ui_v2034': ('templates/settings.html', ('data-tab="capital_targets"', 'Objetivos de liquidez y ReservaTrading (%)')),
+        'capital_targets_engine_v2034': ('kairos_sheets_features.py', ("elif category=='capital_targets'", 'CAPITAL_TARGET_SEGMENTS', 'sumar 100%')),
         'historical_provenance_v2030': ('templates/portfolio_integral.html', ('historical_reference_date', 'HISTÓRICO NO SPOT')),
         'consolidated_dashboard_v2027': ('templates/portfolio_integral.html', ('id="btc-portfolio-total"', 'data-bsi-chart="archived"', 'data-portfolio-executive="12"', 'class="port-status', 'port-coin-logo')),
         'consolidated_navigation_v2025': ('templates/base.html', ('href="/mode/{{ mode.slug }}"', 'global-nav-link')),

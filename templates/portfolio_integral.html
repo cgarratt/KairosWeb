@@ -131,6 +131,7 @@
 {% if homologation and homologation.status != 'CURRENT' %}
 <div class="port-homologation" id="master-homologation-status" data-homologation-status="{{ homologation.status }}">
 <strong>Homologación del MASTER: {{ homologation.status }} · Referencia del control, no certificación vigente</strong>
+<span>Para certificar el snapshot vigente: Configuración → Estado de conexiones MCP → Homologar snapshot actual (administrador). No se ocultará este aviso sin evidencia verificada.</span>
 <span>Fuente {{ homologation.source }} contrastada con snapshot {{ homologation.checked_against_snapshot }}. {% for issue in homologation.issues %}{{ issue.code }}{% if not loop.last %} · {% endif %}{% endfor %}. No modifica ni reemplaza saldos de 01_CONTROL/02_POSICIONES/03_LIQUIDEZ.</span>
 </div>
 {% endif %}

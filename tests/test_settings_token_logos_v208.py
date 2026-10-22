@@ -9,7 +9,7 @@ def test_logos_for_all_tokens_and_alias_only():
     assert 'settingsTokenLabel(rec.token)' in js
     assert "(tab==='units'||tab==='targets')&&entry.token" in js
     assert "img.addEventListener('error'" in js
-    assert "else primary.append(el('strong','token-name',entry[rowKey()]));" in js
+    assert "else primary.append(el('strong','token-name',tab==='capital_targets'" in js
 
 def test_styles_are_shared_with_dark_mode():
     css=(ROOT/'static/theme.css').read_text()

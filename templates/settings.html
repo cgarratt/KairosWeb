@@ -10,6 +10,7 @@
       <button class="settings-tab" type="button" data-tab="targets">Objetivos y Tiers</button>
       <button class="settings-tab" type="button" data-tab="tier_custody">Custodia por Tier</button>
       <button class="settings-tab" type="button" data-tab="liquidity">Liquidez por venue</button>
+      <button class="settings-tab" type="button" data-tab="capital_targets">Objetivos de liquidez y ReservaTrading (%)</button>
       <button class="settings-tab" type="button" data-tab="pivots">Pivotes O1–O5</button>
       <button class="settings-tab" type="button" data-tab="parameters">Parámetros</button>
       <button class="settings-tab" type="button" data-tab="mcp">Estado de conexiones MCP</button>
@@ -33,6 +34,8 @@
           <p>Servidor / Google Sheets-Binance-Hyperliquid / módulos dependientes. Consulta autenticada y solo lectura.</p>
           <button type="button" id="health-check-all" class="tiny-control">Ejecutar diagnóstico integral</button>
           <p class="settings-hint">Homologación contable base: valida el snapshot vigente y registra una evidencia nueva sin modificar saldos. No certifica pivotes, BSI ni órdenes remotas.</p>
+          <div id="master-homologation-readiness" class="settings-hint" role="status" aria-live="polite">Estado de certificación: pendiente de consulta.</div>
+          <button type="button" class="tiny-control" id="master-homologation-check">Consultar estado de homologación</button>
           <button type="button" class="tiny-control" id="master-homologate-current">Homologar snapshot actual (administrador)</button>
           <div id="master-homologate-output" role="status" aria-live="polite">Consulta de solo lectura; la homologación requiere confirmación.</div>
           <div id="health-check-output" role="status" aria-live="polite">Sin ejecutar. /health solo mide disponibilidad del servidor y muestra el último diagnóstico almacenado.</div>
@@ -46,7 +49,7 @@
       </div>
       <div class="settings-buttons"><button id="settings-save" class="btn primary" type="button" disabled>Guardar cambios</button></div>
       <div class="settings-msg" id="settings-msg" aria-live="polite">Pendiente de conexión a Google Sheets.</div>
-      <p class="settings-hint">Se validan unidades, objetivos, custodia, liquidez y políticas antes de la publicación. El resultado queda registrado en 01_CONTROL, 10_HISTORIAL y 18_SETTINGS_AUDITORIA. KairosGPT leerá el cambio en su próxima ejecución.</p>
+      <p class="settings-hint">Los porcentajes de 08_INTEGRAL representan objetivos históricos: los saldos operativos Quantfury se editan por monto USDT en «Liquidez por venue» y el objetivo estructural de caja se ajusta en «Parámetros». Se validan unidades, objetivos, custodia, liquidez y políticas antes de la publicación. El resultado queda registrado en 01_CONTROL, 10_HISTORIAL y 18_SETTINGS_AUDITORIA. KairosGPT leerá el cambio en su próxima ejecución.</p>
     </div>
   </div>
 </section>

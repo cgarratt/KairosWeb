@@ -38,11 +38,45 @@ EDITABLE_PARAM_KEYS = frozenset({
     'MAX_LEVERAGE','MAX_OPEN_POSITIONS',
     'TRIGGER_STRICT_GT','PROXIMITY_BAND',
 }) | ALL_TRANCHE_KEYS
-VALID_CATEGORIES = frozenset(('units','targets','tier_custody','liquidity','parameters','pivots'))
+CAPITAL_TARGET_SEGMENTS = ('HODL + Core','Exchange','Liquidez','Trading')
+VALID_CATEGORIES = frozenset(('units','targets','tier_custody','liquidity','capital_targets','parameters','pivots'))
 
 
 class SettingsError(ValueError):
     pass
+
+
+class HomologationWorkflowError(SettingsError):
+    """Safe, phase-tagged failure; does not expose Google credentials or raw HTTP."""
+    def __init__(self, code, phase, message, *, write_may_have_committed=False):
+        super().__init__(message)
+        self.code=code
+        self.phase=phase
+        self.write_may_have_committed=bool(write_may_have_committed)
+
+
+def _homologation_upstream_failure(exc, phase, *, may_commit=False):
+    """Preserve actionable category without relaying provider response or secrets."""
+    detail=str(exc)
+    if 'HTTP 403' in detail:
+        return HomologationWorkflowError('HOM_WRITER_FORBIDDEN',phase,
+            'Google Sheets denegó la operación (403). Verifica que la cuenta editora de Render tenga permiso de Editor sobre el MASTER.',
+            write_may_have_committed=may_commit)
+    if 'HTTP 404' in detail:
+        return HomologationWorkflowError('HOM_MASTER_NOT_FOUND',phase,
+            'No se encontró el MASTER con la identidad configurada en Render; verifica KAIROS_GOOGLE_SHEET_ID y permisos.',
+            write_may_have_committed=may_commit)
+    if 'HTTP 400' in detail:
+        return HomologationWorkflowError('HOM_WRITE_REQUEST_INVALID',phase,
+            'Google Sheets rechazó la estructura de la operación (400). Revisa pestaña 25, dimensiones y logs del servidor.',
+            write_may_have_committed=may_commit)
+    if 'READ_DISABLED' in detail or 'missing' in detail.lower() or 'READ_' in detail:
+        return HomologationWorkflowError('HOM_READ_UNAVAILABLE',phase,
+            'No se pudieron leer los datos del MASTER. Verifica las credenciales de lectura y la conexión Google Sheets.',
+            write_may_have_committed=may_commit)
+    return HomologationWorkflowError('HOM_UPSTREAM_UNAVAILABLE',phase,
+        'No fue posible consultar o escribir el MASTER. Revisa el identificador del incidente en los logs privados.',
+        write_may_have_committed=may_commit)
 
 
 def _id():
@@ -554,6 +588,26 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
             change('liquidity',row,1,_numeric(x.get('usdt'),'USDT'))
             change('liquidity',row,3,as_of_date)
             change('liquidity',row,4,'KairosWeb Settings · '+evidence.strip()[:90])
+    elif category=='capital_targets':
+        # Objective percentages live in 08_INTEGRAL as *amounts* (B11:B14).
+        # Google formulas D11:D14 = Bxx/$B$5 must remain untouched.
+        # Historical actuals C/E, the realized-loss segment, and physical QF
+        # in 03_LIQUIDEZ are NEVER changed by objective edits.
+        capital=_numeric(_get(b,'integral',_find_row(b,'integral','Capital inicial histórico'),1),
+                         'Capital inicial histórico')
+        if capital<=0:raise SettingsError('08_INTEGRAL: capital histórico inválido')
+        for x in entries:
+            segment=x.get('segment')
+            if segment not in CAPITAL_TARGET_SEGMENTS:
+                raise SettingsError('08_INTEGRAL: segmento objetivo no editable')
+            fraction=_numeric(x.get('target'),segment+' objetivo')
+            if fraction>1:raise SettingsError(segment+': objetivo debe estar entre 0% y 100%')
+            row=_find_row(b,'integral',segment)
+            change('integral',row,1,round(capital*fraction,2))
+        total=sum(_numeric(_get(b,'integral',_find_row(b,'integral',segment),1),segment)
+                  for segment in CAPITAL_TARGET_SEGMENTS)
+        if abs(total-capital)>.02:
+            raise SettingsError('08_INTEGRAL: HODL + Core, Exchange, Liquidez y Trading deben sumar 100% del capital histórico; ajusta otros segmentos para compensar')
     elif category=='parameters':
         for x in entries:
             key=x.get('key')
@@ -652,6 +706,10 @@ def settings_data():
                 'core':r[5],'exchange':r[6],'investment_total':r[9],'total_units':r[7], 'average_cost':r[8]} for r in rows('positions')[1:] if r and r[0] in state['tokens']]
     liquidity=[{'venue':r[0],'usdt':r[1],'classification':r[2]} for r in rows('liquidity')[1:] if len(r)>2 and r[2] in ('OPERATIVO','TRADING_QF')]
     custody=[{'tier':r[0],'hodl':r[1],'core':r[2],'exchange':r[3]} for r in rows('custody')[1:] if r and r[0] in ('T1','T2','T3')]
+    capital_amount=float(next(r[1] for r in rows('integral') if r and r[0]=='Capital inicial histórico'))
+    capital_targets=[{'segment':segment,'target':float(next(r[1] for r in rows('integral') if r and r[0]==segment))/capital_amount,
+                      'target_usdt':float(next(r[1] for r in rows('integral') if r and r[0]==segment))}
+                     for segment in ('Liquidez','Trading','HODL + Core','Exchange')] if capital_amount>0 else []
     params=[{'key':r[1],'module':r[0],'value':r[2],'unit':r[4], 'type':r[3], 'status':r[5], 'module_name':r[0], 'description':r[8] if len(r)>8 else '', 'source':r[7] if len(r)>7 else ''} for r in rows('parameters')[1:] if len(r)>5 and r[1] in EDITABLE_PARAM_KEYS]
     # 16 separately editable numeric values; draft defaults never edit Sheets.
     existing={r['key'] for r in params}
@@ -677,7 +735,7 @@ def settings_data():
         pivots.append(record)
     return {'status':'OK','snapshot_id':state['control']['snapshot_id'], 'fecha_corte':state['control']['fecha_corte'],
             'schema_version':'5.0.0','write_configured':bool(os.getenv('KAIROS_GOOGLE_WRITER_JSON')),
-            'sections':{'units':positions,'targets':positions,'tier_custody':custody,'liquidity':liquidity,'parameters':params,'pivots':pivots},
+            'sections':{'units':positions,'targets':positions,'tier_custody':custody,'liquidity':liquidity,'capital_targets':capital_targets,'parameters':params,'pivots':pivots},
             'blocked':{'BSI_SELL':'No homologado','TRADINGBOT':'WATCH', 'PIVOTS':'Certificación manual pendiente'}}
 
 
@@ -704,34 +762,82 @@ def _certificate_append(sheetid,validated,snapshot_id,published_utc,certified_ut
             'rows':[{'values':[_sval(v) for v in cert]}], 'fields':'userEnteredValue'}}
 
 
-def homologate_current_snapshot(expected_snapshot_id):
-    """Admin-only caller: independently validate current snapshot; append-only and idempotent.
+def homologation_readiness():
+    """Admin-only read-only readiness; never creates tabs or credits a certificate."""
+    try:
+        from google_sheets_master import get_state
+        current=get_state(force=True)
+        sheetids=_sheet_ids()
+    except (SettingsError,SheetDataError) as exc:
+        raise _homologation_upstream_failure(exc,'READ') from exc
+    h=current.get('homologation') or {}
+    ledger_present=HOMOLOGATION_TAB in sheetids
+    active=(h.get('status')=='CURRENT' and h.get('source')==HOMOLOGATION_TAB and ledger_present)
+    return {'status':'CURRENT' if active else 'PENDING',
+            'snapshot_id':current['control']['snapshot_id'],
+            'fecha_corte':current['control']['fecha_corte'],
+            'ledger_present':ledger_present,'ledger_tab':HOMOLOGATION_TAB,
+            'certification_source':h.get('source'),
+            'homologation_status':h.get('status','NOT_VERIFIED'),
+            'issues':[str(i.get('code')) for i in h.get('issues',[]) if isinstance(i,dict)],
+            'recommended_action':'NONE' if active else 'HOMOLOGATE_CURRENT_SNAPSHOT',
+            'note':'La ausencia de hoja 25 no implica error en saldos; requiere homologación administrativa.'}
 
-    Never writes balances or replaces an old 13_CONTROL historical PASS.
+
+def homologate_current_snapshot(expected_snapshot_id):
+    """Admin-only write: validate current published data, create/append an immutable certificate.
+
+    Explicit confirmation required by route. A failed post-write verification must not
+    claim success or blindly append a second row: administrator inspects history first.
     """
     if not isinstance(expected_snapshot_id,str) or not expected_snapshot_id.strip():
         raise SettingsError('expected_snapshot_id requerido')
     with WRITE_LOCK:
-        raw=_remote_data()
-        current=parse_master(raw)
+        try:
+            raw=_remote_data()
+            current=parse_master(raw)
+        except (SheetDataError,SettingsError) as exc:
+            raise _homologation_upstream_failure(exc,'READ') from exc
         ctrl=current['control']
         if expected_snapshot_id!=ctrl['snapshot_id']:
-            raise SettingsError('CONFLICTO: el snapshot cambió, recarga antes de homologar')
+            raise HomologationWorkflowError('HOM_SNAPSHOT_CHANGED','VALIDATION',
+                'El snapshot publicado cambió. Actualiza Configuración antes de homologar.')
         if current['homologation']['status']=='CURRENT' and current['homologation']['source']==HOMOLOGATION_TAB:
             return {'status':'OK','already_homologated':True,'snapshot_id':expected_snapshot_id,
+                    'ledger_tab':HOMOLOGATION_TAB,'verification':'CURRENT',
                     'certification_scope':'BASE_CONTABLE','pending_controls':current['homologation']['pending_controls']}
-        sheetids=_sheet_ids()
+        try:
+            sheetids=_sheet_ids()
+        except (SheetDataError,SettingsError) as exc:
+            raise _homologation_upstream_failure(exc,'METADATA') from exc
         requests,sid=_homologation_sheet_requests(sheetids)
         now=datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
-        requests.append(_certificate_append(sid,current,expected_snapshot_id,ctrl['publicado_utc'],now))
-        _api('POST',':batchUpdate',write=True,payload={'requests':requests})
+        try:
+            requests.append(_certificate_append(sid,current,expected_snapshot_id,ctrl['publicado_utc'],now))
+        except SheetDataError as exc:
+            raise HomologationWorkflowError('HOM_VALIDATION_FAILED','VALIDATION',
+                'Falló la validación de 12 tokens, targets, custodia, liquidez o QF. No se escribió ninguna certificación.') from exc
+        try:
+            _api('POST',':batchUpdate',write=True,payload={'requests':requests})
+        except (SettingsError,SheetDataError) as exc:
+            raise _homologation_upstream_failure(exc,'WRITE') from exc
         from google_sheets_master import invalidate_cache, get_state
         invalidate_cache()
-        verified=get_state(force=True)
-        if verified['control']['snapshot_id']!=expected_snapshot_id or verified['homologation']['status']!='CURRENT' or verified['homologation']['source']!=HOMOLOGATION_TAB:
-            raise SettingsError('Homologación escrita pero no certificada en lectura posterior; verificar MASTER')
+        try:
+            verified=get_state(force=True)
+        except (SettingsError,SheetDataError) as exc:
+            raise HomologationWorkflowError('HOM_WRITE_UNVERIFIED','POST_WRITE_READ',
+                'Google aceptó la escritura, pero la lectura posterior falló. Revisa la hoja 25 antes de reintentar para evitar duplicados.',
+                write_may_have_committed=True) from exc
+        if (verified['control']['snapshot_id']!=expected_snapshot_id or
+            verified['homologation']['status']!='CURRENT' or
+            verified['homologation']['source']!=HOMOLOGATION_TAB):
+            raise HomologationWorkflowError('HOM_WRITE_UNVERIFIED','POST_WRITE_CHECK',
+                'La escritura se envió, pero la homologación no quedó CURRENT. Revisa hoja 25 y permisos lectores antes de volver a registrar.',
+                write_may_have_committed=True)
         return {'status':'OK','already_homologated':False,'snapshot_id':expected_snapshot_id,
-                'certified_utc':now,'certification_scope':'BASE_CONTABLE',
+                'certified_utc':now,'ledger_tab':HOMOLOGATION_TAB,'verification':'CURRENT',
+                'certification_scope':'BASE_CONTABLE',
                 'pending_controls':verified['homologation']['pending_controls']}
 
 
@@ -804,13 +910,25 @@ def save_changes(data):
         requests.append(_certificate_append(homologation_sid,newstate,new_snapshot,
                                             now.isoformat().replace('+00:00','Z'),
                                             now.isoformat().replace('+00:00','Z')))
-        _api('POST',':batchUpdate',write=True,payload={'requests':requests})
+        try:
+            _api('POST',':batchUpdate',write=True,payload={'requests':requests})
+        except (SettingsError,SheetDataError) as exc:
+            raise _homologation_upstream_failure(exc,'PUBLICATION_WRITE') from exc
         from google_sheets_master import invalidate_cache, get_state
         invalidate_cache()
-        # Publication is not claimed successful until the canonical reader validates it.
-        verified=get_state(force=True)
-        if verified['control']['snapshot_id']!=new_snapshot or verified['homologation']['status']!='CURRENT':
-            raise SettingsError('Publicación enviada pero nueva versión NO verificada; revisar Google Sheets')
+        # Publication and certificate must be visible in the *same* validated reader.
+        try:
+            verified=get_state(force=True)
+        except (SettingsError,SheetDataError) as exc:
+            raise HomologationWorkflowError('HOM_PUBLICATION_UNVERIFIED','POST_PUBLISH_READ',
+                'Google aceptó la publicación, pero no se pudo releer. Verifica hoja 01 y 25 antes de repetirla.',
+                write_may_have_committed=True) from exc
+        if (verified['control']['snapshot_id']!=new_snapshot or
+            verified['homologation']['status']!='CURRENT' or
+            verified['homologation']['source']!=HOMOLOGATION_TAB):
+            raise HomologationWorkflowError('HOM_PUBLICATION_UNVERIFIED','POST_PUBLISH_CHECK',
+                'Publicación posiblemente aplicada pero homologación no visible como CURRENT. Verifica 01_CONTROL y hoja 25 antes de reintentar.',
+                write_may_have_committed=True)
         return {'status':'OK','snapshot_id':new_snapshot,'previous_snapshot_id':oldid,'section':category,
                 'written_fields':len(writes),'published_utc':snapshot_row[2],
                 'warning':'Nueva publicación y homologación contable base verificadas; pivotes, BSI y operaciones remotas continúan sujetos a sus propios controles.'}

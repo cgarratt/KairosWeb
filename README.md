@@ -1,6 +1,6 @@
-# KairosWeb v2.0.32 — Leyenda de allocation y unidades en Balancer
+# KairosWeb v2.0.34 — Objetivos de Liquidez y ReservaTrading
 
-**Aplicación:** `2.0.32` · **Google Sheets schema:** `5.0.0` · **Motor KairosGPT compatible:** v1.3.6.
+**Aplicación:** `2.0.34` · **Google Sheets schema:** `5.0.0` · **Motor KairosGPT compatible:** v1.3.6.
 
 ## Novedades acumuladas sobre KairosWeb v2.0.18
 
@@ -22,7 +22,7 @@
 
 1. Extraer el ZIP **en la raíz del repositorio de KairosWeb**; el contenido se encuentra en la raíz, no en un subdirectorio adicional. Reemplazar los archivos por estos manteniendo las variables de entorno existentes. **No añadir credenciales ni subir `.env`.**
 2. Revisar diferencias, hacer commit y desplegar Render. Este ZIP no ejecuta git push, no crea un GitHub Release y no redepliega por sí mismo.
-3. Comprobar `/health`: `service=KairosWeb`, `version=2.0.32`, `status=UP`, `release_assets.consistent=true` y checks `sales_optimizer_engine`, `sales_optimizer_ui`, `portfolio_unrealized_chart`.
+3. Comprobar `/health`: `service=KairosWeb`, `version=2.0.34`, `status=UP`, `release_assets.consistent=true` y checks `sales_optimizer_engine`, `sales_optimizer_ui`, `portfolio_unrealized_chart`.
 4. Abrir `/mode/ventas` y `/mode/ventas?usdt_pct=55`; comprobar el porcentaje solicitado, prioridades y el comparativo. Confirmar que no hay órdenes reales creadas.
 5. Confirmar `/mode/portafolio` y el gráfico de resultado no realizado; verificar Compras, Forecast, Pivotes y Órdenes fase 1.
 
@@ -30,7 +30,7 @@
 
 - `python -m pytest -q` sobre el release extraído.
 - `node tests/test_sales_optimizer.js` y tests JS adicionales incluidos.
-- `SHA256SUMS.txt` / `RELEASE_MANIFEST_v2.0.32.json` permiten comprobar integridad de archivos del ZIP, excluyendo sus propios metadatos.
+- `SHA256SUMS.txt` / `RELEASE_MANIFEST_v2.0.33.json` permiten comprobar integridad de archivos del ZIP, excluyendo sus propios metadatos.
 
 **Límite:** menos de 100 archivos; se omiten algunos tests de regresión antiguos del paquete distribuible para mantener ese límite (pero se ejecutaron en el checkout completo). Los fuentes de aplicación y assets no se han eliminado.
 
@@ -141,3 +141,24 @@ La sección 7 de Balancer presenta una fila por token con transferencias desde E
 - **Precisión:** hasta 8 decimales referenciales; sin ajuste a LOT_SIZE, comisiones o pasos de cantidad de cada venue. **Propuesta, no orden**.
 - Ver `RELEASE_NOTES_v2.0.32.md`. `GET /health` debe indicar `2.0.32` y `release_assets.consistent=true`; controles de versión mixtos `allocation_legend_v2032` y `balancer_sell_units_v2032`.
 - No se despliega automáticamente ni se modifican saldos, configuración MASTER, órdenes o custodias.
+
+
+## Release v2.0.33 · Homologación fiable y UI de unidades
+
+- **Balancer (candidatos de venta):** cabecera `Unidades`, siempre dos decimales en visualización (`17,857.39`). Los valores exactos del motor (`r.units`) siguen intactos; no cambia volumen sugerido ni cálculo USDT, Exchange, Tier o QF.
+- **Configuración → Estado de conexiones MCP:** botón de solo lectura `Consultar estado de homologación` para ver si existe `25_HOMOLOGACION_HISTORIAL` y si su última evidencia corresponde al snapshot actual. `Homologar snapshot actual` crea la pestaña y anexa la primera fila en un único batch Google Sheets, **únicamente después de confirmación administrativa**. No escribe desde GET ni al abrir Portafolio.
+- **Diagnósticos por fase:** `HOM_WRITER_MISSING`, `HOM_WRITER_FORBIDDEN`, `HOM_MASTER_NOT_FOUND`, `HOM_WRITE_REQUEST_INVALID`, `HOM_VALIDATION_FAILED`, `HOM_WRITE_UNVERIFIED`, `HOM_PUBLICATION_UNVERIFIED`, entre otros. `phase` identifica READ / METADATA / VALIDATION / WRITE / POST_WRITE_READ / POST_WRITE_CHECK; nunca se expone la clave de servicio.
+- **Publicación protegida:** una nueva publicación desde Configuración sigue anexando homologación contable en la misma transacción. La API distingue errores de escritura de certificación no visible. Si el servidor **pudo escribir pero no verificar**, **no reintentar ciegamente**: comprobar `01_CONTROL` y hoja `25` para no duplicar registros.
+- **Certificación solo contable:** 12 tokens, targets 100%, custodia, QF y USDT; no acredita pivotes, BSI SELL, órdenes, fills ni saldos remotos.
+- Si el aviso STALE continúa, el Administrador deberá inspeccionar el código de fallo y realizar la primera homologación verificada; desplegar el código **no altera** el MASTER por sí mismo.
+- `/health` debe declarar `version=2.0.34` y `release_assets.consistent=true`; los nuevos marcadores son `balancer_sell_units_v2033` y `homologation_diagnostics_v2033`.
+- Ver `RELEASE_NOTES_v2.0.33.md` para límites de prueba, instalación y validación.
+
+## Release v2.0.34 · Editar objetivos de Liquidez y ReservaTrading
+
+- Configuración incorpora la pestaña **Objetivos de liquidez y ReservaTrading (%)**. Edita los cuatro segmentos objetivo de `08_INTEGRAL`: Liquidez, Trading (ReservaTrading), HODL + Core, Exchange. El conjunto debe sumar **100% del capital histórico de referencia**. Ningún porcentaje se ajusta automáticamente.
+- `08_INTEGRAL` tiene `Objetivo %` como **fórmula** `=Bxx/$B$5`. Para conservarla, el backend escribe **solo la columna B (Objetivo USDT)** para los segmentos modificados; preserva C/E (registrado histórico), D/F (fórmulas y notas), el segmento Lost y el total con fórmula.
+- El formulario calcula una previsualización monetaria de cada porcentaje. **No cambia USDT físico ni ReservaTrading Quantfury**; estos se editan como USDT en `Liquidez por venue` solo ante balances reales conciliados.
+- La política operativa `STRUCTURAL_USDT_TARGET` (por defecto publicado 40%) **es un parámetro independiente**, ya editable en Configuración → Parámetros → Portafolio. Cambiar porcentajes históricos de `08_INTEGRAL` no modifica Balancer ni Ventas.
+- Cada cambio requiere sesión admin, evidencia/justificación, `expected_snapshot_id`, una nueva publicación Google Sheets atómica, entrada de auditoría y certificado contable del snapshot. No se generan órdenes ni transferencias.
+- No se modificó el MASTER real durante la creación del ZIP. Los nuevos porcentajes deben ser indicados y publicados por el administrador.

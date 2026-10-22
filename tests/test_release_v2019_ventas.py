@@ -3,7 +3,7 @@ R=Path(__file__).resolve().parents[1]
 
 def test_release_v2019_identity_and_preserved_functions():
     source=(R/'app.py').read_text()
-    assert "APP_VERSION = '2.0.32'" in source
+    assert "APP_VERSION = '2.0.34'" in source
     assert "'portfolio_unrealized_chart':" in source
     assert "'sales_optimizer_engine':" in source
     assert "'sales_optimizer_ui':" in source
