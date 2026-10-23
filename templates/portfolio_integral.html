@@ -123,8 +123,8 @@
 {% if portfolio_diagnostic %}
 <div class="port-diagnostic" id="portfolio-diagnostic" role="alert" data-origin="{{ portfolio_diagnostic.origin }}" data-code="{{ portfolio_diagnostic.category }}">
 <strong>Valoración Spot no disponible · {{ portfolio_diagnostic.status }}</strong>
-{{ portfolio_diagnostic.message }}
-<div class="diag-meta">Proveedor / etapa: {{ portfolio_diagnostic.origin }} · Categoría: {{ portfolio_diagnostic.category }} · ID: {{ portfolio_diagnostic.error_id }}</div>
+{{ portfolio_diagnostic.message }} <a class="btn" href="{{ url_for('integral_portfolio_page') }}">Reintentar conexión Spot</a>
+<div class="diag-meta">Proveedor / etapa: {{ portfolio_diagnostic.origin }} · Categoría: {{ portfolio_diagnostic.category }} · HTTP: {{ portfolio_diagnostic.http_status or 'N/D' }} · ID: {{ portfolio_diagnostic.error_id }}</div>
 <div class="diag-meta">Consulta: {{ portfolio_diagnostic.checked_utc }} · Última consulta válida: {{ portfolio_diagnostic.last_valid_spot_utc or 'N/D' }} (no reutilizada) · Snapshot: {{ portfolio_diagnostic.snapshot_id }} · Corte: {{ portfolio_diagnostic.fecha_corte }}</div>
 </div>
 {% endif %}
@@ -135,7 +135,7 @@
 <span>Fuente {{ homologation.source }} contrastada con snapshot {{ homologation.checked_against_snapshot }}. {% for issue in homologation.issues %}{{ issue.code }}{% if not loop.last %} · {% endif %}{% endfor %}. No modifica ni reemplaza saldos de 01_CONTROL/02_POSICIONES/03_LIQUIDEZ.</span>
 </div>
 {% endif %}
-<header class="port-hero"><div><h2>KAIROS | PORTAFOLIO</h2><p>Inventario publicado: {{ g.kairos_state['control']['fecha_corte'] }} · Spot MCP: {{ spot_observed or 'N/D' }}</p></div><span class="port-tag">SOLO LECTURA · MASTER PUBLICADO 5.0.0</span></header>
+<header class="port-hero"><div><h2>Portafolio</h2><p>Inventario publicado: {{ g.kairos_state['control']['fecha_corte'] }} · Spot MCP: {{ spot_observed or 'N/D' }}</p></div><span class="port-tag">SOLO LECTURA · MASTER PUBLICADO 5.0.0</span></header>
 <div class="port-kpis" data-layout-region="kpis">
  <div class="port-kpi port-kpi-primary"><small>Patrimonio total</small><strong data-private="money">{{ '${:,.2f}'.format(spot.total) if spot else 'N/D' }} USDT</strong><span class="btc-total" id="btc-portfolio-total" data-private="money">{{ '₿ {:,.8f}'.format(btc_total) if btc_total is not none else '₿ N/D' }}</span><span class="btc-source">Equivalencia total BTC · BTC/USDT Spot {{ '${:,.2f}'.format(btc_reference_price) if btc_reference_price is not none else 'N/D' }} · lecturas MCP no atómicas</span></div>
  <div class="port-kpi"><small>Resultado no realizado</small><strong data-private="money" class="{{ 'negative' if pnl_report and pnl_report.total_usdt is not none and pnl_report.total_usdt < 0 else 'positive' if pnl_report and pnl_report.total_usdt is not none else '' }}">{{ '{:+,.2f}'.format(pnl_report.total_usdt) if pnl_report and pnl_report.total_usdt is not none else 'N/D' }}</strong><span>{{ ('%.2f%% sobre costo abierto'|format(pnl_report.total_pct)) if pnl_report and pnl_report.total_pct is not none else 'Requiere Spot y costos completos' }}</span></div>

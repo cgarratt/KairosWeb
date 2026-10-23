@@ -171,3 +171,11 @@ La sección 7 de Balancer presenta una fila por token con transferencias desde E
 - El donut utiliza **el mismo patrimonio total** que “Allocation por token (incluye USDT)”. Una prueba explícita rechaza discrepancias de totales, unidades por custodia, precios incompletos o QF fuera del USDT físico. Con DATA ERROR la vista indica N/D en vez de mostrar histórico obsoleto.
 - La leyenda incluye USDT y porcentajes actuales; se conserva el segundo donut de 13 componentes, P&L, BSI archivado, Ventas y el resto de módulos. Sin movimientos reales ni edición del MASTER.
 - Nueva verificación `/health`: `current_capital_donut_v2035`. La comprobación HTTP real de Render requiere desplegar el ZIP.
+
+
+## v2.0.36 · Acceso con privacidad por servidor
+- `KAIROS_WEB_USER` y `KAIROS_WEB_PASSWORD` autentican sesión de portafolio; `KAIROS_SESSION_SECRET` firma cookie HttpOnly/Secure/SameSite=Strict.
+- Sin sesión: navegación de invitado con marcadores ocultos; `/api/portfolio`, alertas, MCP y demás endpoints de datos se bloquean con 401 (no basta privacidad JS).
+- Configuración mantiene una SEGUNDA clave (`KAIROS_SETTINGS_ADMIN_KEY`), sesión administrativa y CSRF.
+- Portafolio usa título único “Portafolio”.
+- Error `UPSTREAM_HTTP`: se origina en el proveedor remoto; revisar logs Render con ID y diagnóstico MCP autenticado. No se reutilizan cotizaciones antiguas.

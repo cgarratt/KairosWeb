@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block title %}Acceso al Portafolio · KairosWeb{% endblock %}
+{% block content %}
+<section class="panel" style="max-width:520px;margin:20px auto" aria-label="Inicio de sesión">
+  <h2>Acceso al Portafolio</h2>
+  <p class="sub">Identifícate para consultar montos, posiciones y simulaciones. Configuración requiere una autorización administrativa adicional.</p>
+  {% if error %}<div class="callout danger" role="alert">{{ error }}</div>{% endif %}
+  {% if not not_configured %}<form method="post" action="{{ url_for('portfolio_login', next=destination) }}" autocomplete="on" class="admin-login-form">
+    <input type="hidden" name="login_csrf" value="{{ login_csrf }}">
+    <label>Usuario<input name="username" autocomplete="username" required maxlength="128"></label>
+    <label>Contraseña<input type="password" name="password" autocomplete="current-password" required></label>
+    <button class="btn primary" type="submit">Iniciar sesión</button>
+  </form>{% endif %}
+  <p style="margin-top:18px"><a class="btn" href="{{ url_for('integral_portfolio_page') }}">Continuar como invitado · Saldos ocultos</a></p>
+</section>
+{% endblock %}

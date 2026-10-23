@@ -34,7 +34,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.35'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.36'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -83,22 +83,122 @@ _MARKET_CACHE = {'stored': 0.0, 'observed': None, 'prices': None}
 _MARKET_LOCK = threading.Lock()
 _FETCH_LOCK = threading.Lock()
 CACHE_TTL_SECONDS = 30
-RETRY_HTTP_CODES = frozenset((502, 503, 504))
+RETRY_HTTP_CODES = frozenset((429, 500, 502, 503, 504))
 MCP_RETRY_DELAYS = (2, 5, 10)
 MCP_TIMEOUT_SECONDS = 35
+
+# In-process login throttling (one Render Gunicorn worker). Deploy a shared edge
+# limiter if scaling to multiple workers/instances.
+_LOGIN_ATTEMPTS = {}
+_LOGIN_ATTEMPTS_LOCK = threading.Lock()
+LOGIN_WINDOW_SECONDS = 15 * 60
+LOGIN_MAX_FAILURES = 5
+
+
+def _login_rate_check(ip):
+    now = time.monotonic()
+    with _LOGIN_ATTEMPTS_LOCK:
+        # Prune entries to prevent indefinite growth.
+        if len(_LOGIN_ATTEMPTS) > 1024:
+            for key, values in list(_LOGIN_ATTEMPTS.items()):
+                updated = [v for v in values if now - v < LOGIN_WINDOW_SECONDS]
+                if updated: _LOGIN_ATTEMPTS[key] = updated
+                else: _LOGIN_ATTEMPTS.pop(key, None)
+        recent = [v for v in _LOGIN_ATTEMPTS.get(ip, []) if now-v < LOGIN_WINDOW_SECONDS]
+        _LOGIN_ATTEMPTS[ip] = recent
+        return len(recent) < LOGIN_MAX_FAILURES
+
+
+def _login_rate_fail(ip):
+    with _LOGIN_ATTEMPTS_LOCK:
+        _LOGIN_ATTEMPTS.setdefault(ip, []).append(time.monotonic())
+
+
+def _login_rate_reset(ip):
+    with _LOGIN_ATTEMPTS_LOCK:
+        _LOGIN_ATTEMPTS.pop(ip, None)
+
+
+# Guest access is server-side REDACTED. A browser-only balance toggle is never a security boundary.
+def _portfolio_authorized():
+    return bool(app.secret_key and os.getenv('KAIROS_WEB_PASSWORD') and
+                session.get('kairos_portfolio') is True)
 
 
 @app.before_request
 def authenticate():
-    if request.path == '/health':
+    path = request.path
+    # Static assets and Render liveness are public. API values remain private.
+    if path == '/health' or path.startswith('/static/') or path in ('/login', '/api/modes'):
         return None
-    password = os.getenv('KAIROS_WEB_PASSWORD', '')
-    if not password:
-        return jsonify({'status': 'CONFIG_REQUIRED', 'message': 'Configure KAIROS_WEB_PASSWORD in Render.'}), 503
-    auth = request.authorization
-    username = os.getenv('KAIROS_WEB_USER', 'kairos')
-    if not auth or not secrets.compare_digest(auth.username or '', username) or not secrets.compare_digest(auth.password or '', password):
-        return Response('Autenticación requerida', 401, {'WWW-Authenticate':'Basic realm="Kairos Web"', 'Cache-Control':'no-store'})
+    if not _portfolio_authorized():
+        if path in ('/', '/mode/portafolio'):
+            return render_template('guest_portfolio.html', master=APP_VERSION)
+        if path.startswith('/mode/'):
+            slug = path.partition('/mode/')[2]
+            if slug in ENABLED_MODE_SLUGS:
+                return render_template('guest_portfolio.html', master=APP_VERSION, guest_mode=MODES_BY_SLUG[slug])
+            abort(404)
+        if path in ('/settings', '/admin/login'):
+            return redirect(url_for('portfolio_login', next='settings'))
+        if path == '/api/admin/session':
+            return jsonify({'status':'AUTH_REQUIRED','is_admin':False,'csrf_token':None}), 401
+        # Do not leak inventory, P&L, alerts, market valuation or raw reports to guests.
+        return jsonify({'status':'PORTFOLIO_AUTH_REQUIRED', 'message':'Inicia sesión para consultar información privada.'}), 401
+    return None
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def portfolio_login():
+    destination = 'settings' if request.args.get('next') == 'settings' else 'portfolio'
+    target = url_for('admin_login') if destination == 'settings' else url_for('integral_portfolio_page')
+    if _portfolio_authorized():
+        return redirect(target)
+    if not app.secret_key or not os.getenv('KAIROS_WEB_PASSWORD') or not os.getenv('KAIROS_WEB_USER'):
+        return render_template('portfolio_login.html', master=APP_VERSION, not_configured=True,
+                               error='Acceso de usuario no configurado. Revisa las variables seguras en Render.',
+                               login_csrf='', destination=destination), 503
+    if request.method == 'POST':
+        ip = request.remote_addr or 'unknown'
+        if not _login_rate_check(ip):
+            return render_template('portfolio_login.html', master=APP_VERSION, not_configured=False,
+                                   login_csrf=session.get('portfolio_login_csrf',''), destination=destination,
+                                   error='Demasiados intentos. Intenta más tarde.'), 429
+        token = request.form.get('login_csrf','')
+        saved = session.pop('portfolio_login_csrf', '')
+        if not token or not saved or not secrets.compare_digest(token, saved) or not _same_origin(csrf_protected_login=True):
+            error = 'La solicitud de acceso no es válida. Recarga e inténtalo nuevamente.'
+        else:
+            user = request.form.get('username','')
+            password = request.form.get('password','')
+            expected_user = os.getenv('KAIROS_WEB_USER','')
+            expected_password = os.getenv('KAIROS_WEB_PASSWORD','')
+            # Compare both credentials with constant-time checks; do not log them.
+            if secrets.compare_digest(user, expected_user) and secrets.compare_digest(password, expected_password):
+                _login_rate_reset(ip)
+                session.clear()
+                session.permanent = True
+                session['kairos_portfolio'] = True
+                session['csrf_token'] = secrets.token_urlsafe(32)
+                return redirect(target)
+            error = 'Usuario o contraseña incorrectos.'
+        _login_rate_fail(ip)
+        token = secrets.token_urlsafe(32)
+        session['portfolio_login_csrf'] = token
+        return render_template('portfolio_login.html', master=APP_VERSION, not_configured=False,
+                               login_csrf=token, destination=destination, error=error), 403
+    token = secrets.token_urlsafe(32)
+    session['portfolio_login_csrf'] = token
+    return render_template('portfolio_login.html', master=APP_VERSION, not_configured=False,
+                           login_csrf=token, destination=destination, error=None)
+
+
+@app.route('/logout', methods=['POST'])
+def portfolio_logout():
+    if not _portfolio_authorized() or not _same_origin() or not _csrf_ok():
+        return jsonify({'status':'FORBIDDEN'}), 403
+    session.clear()
+    return redirect(url_for('integral_portfolio_page'))
 
 @app.before_request
 def bind_published_sheet():
@@ -106,7 +206,7 @@ def bind_published_sheet():
     independent={'/health','/api/mcp-status','/api/mcp-config-check','/api/mcp-diagnostics',
                  '/api/alerts/unread','/api/alerts/read','/api/alerts/read-all',
                  '/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status', '/api/mcp-refresh', '/api/health/diagnostics'}
-    if request.path in independent or request.path in ('/admin/login','/api/admin/session') or request.path=='/settings' or request.path.startswith('/static/'):
+    if request.path in independent or request.path in ('/login','/admin/login','/api/admin/session') or request.path=='/settings' or request.path.startswith('/static/'):
         return None
     try:
         g.kairos_state=get_state()
@@ -961,7 +1061,7 @@ def balancer_report(d, observed):
 
 @app.context_processor
 def common_nav():
-    return {'nav_modes':[m for m in MODE_DEFS if m['slug'] in ENABLED_MODE_SLUGS]}
+    return {'nav_modes':[m for m in MODE_DEFS if m['slug'] in ENABLED_MODE_SLUGS], 'portfolio_authenticated':_portfolio_authorized(), 'portfolio_csrf':session.get('csrf_token','') if _portfolio_authorized() else ''}
 
 @app.route('/')
 def home():
@@ -1020,6 +1120,7 @@ def integral_portfolio_page():
                               'error_id':error_id,'checked_utc':attempt_utc,
                               'snapshot_id':g.kairos_state['control']['snapshot_id'],
                               'fecha_corte':g.kairos_state['control']['fecha_corte'],
+                              'http_status':info.get('http_status') if info else None,
                               'last_valid_spot_utc':market_cache_status()['last_valid_observed_at'],
                               'message':'Valoración actual no disponible. No se muestran cifras Spot parciales ni se reutiliza una cotización anterior.'}
     return render_template('portfolio_integral.html', master=APP_VERSION,
@@ -1208,7 +1309,7 @@ def get_settings_data():
 
 def _admin_authorized():
     # Signed, HttpOnly, Secure 30-minute session; never use Basic as write permission.
-    return bool(app.secret_key and os.getenv('KAIROS_SETTINGS_ADMIN_KEY') and session.get('kairos_admin'))
+    return bool(_portfolio_authorized() and app.secret_key and os.getenv('KAIROS_SETTINGS_ADMIN_KEY') and session.get('kairos_admin'))
 
 
 def _csrf_ok():
@@ -1245,7 +1346,7 @@ def admin_login():
         supplied=request.form.get('admin_key','')
         expected=os.getenv('KAIROS_SETTINGS_ADMIN_KEY','')
         if supplied and secrets.compare_digest(supplied,expected):
-            session.clear();session.permanent=True
+            session.permanent=True
             session['kairos_admin']=True
             session['csrf_token']=secrets.token_urlsafe(32)
             return redirect(_settings_destination(selected_tab))
@@ -1261,7 +1362,7 @@ def admin_login():
 @app.route('/admin/logout',methods=['POST'])
 def admin_logout():
     if not _same_origin() or not _csrf_ok():return jsonify({'status':'FORBIDDEN'}),403
-    session.clear();return jsonify({'status':'OK'})
+    session.pop('kairos_admin', None);session['csrf_token']=secrets.token_urlsafe(32);return jsonify({'status':'OK'})
 
 
 @app.route('/api/settings/save',methods=['POST'])
@@ -1596,6 +1697,9 @@ def _deployed_asset_status():
         'o2_simulator': ('static/o2_sequential.js', ('classifyDrift', 'snapshots')),
         'alerts_bell': ('static/alert_bell.js', ('alert-timeframe', '/api/alerts/read', 'event-bull', 'event-bear')),
         'integral_donut': ('templates/portfolio_integral.html', ('data-capital-chart="donut"', 'integral-donut-sector')),
+        'guest_redaction_v2036': ('templates/guest_portfolio.html', ('SALDOS OCULTOS', 'Requiere acceso de usuario')),
+        'user_login_v2036': ('templates/portfolio_login.html', ('name="username"', 'name="password"', 'login_csrf')),
+        'auth_gate_v2036': ('app.py', ("@app.route('/login'", 'PORTFOLIO_AUTH_REQUIRED', "@app.route('/logout'")),
         'portfolio_layout_v2022': ('templates/portfolio_integral.html', ('data-layout-row="1"','data-layout-row="2"','data-layout-row="3"','data-layout-row="4"')),
         'allocation_legend_v2032': ('templates/portfolio_integral.html', ('data-token-columns="6+6"', 'data-allocation-cash="USDT"', 'data-allocation-column=', 'port-alloc-columns')),
         'balancer_sell_units_v2033': ('templates/balancer.html', ('<th>Unidades</th>', "'{:,.2f}'.format(r.units)", 'data-private="units"')),

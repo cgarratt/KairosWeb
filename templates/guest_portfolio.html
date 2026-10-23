@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block title %}Portafolio · KairosWeb (Invitado){% endblock %}
+{% block content %}
+<section class="panel span-12" style="margin-bottom:18px" aria-label="Modo invitado">
+  <div class="hero"><div><h2>{{ guest_mode.name if guest_mode is defined else 'Portafolio' }}</h2>
+    <p class="sub">Modo invitado · Solo lectura · Datos del portafolio protegidos</p></div>
+    <span class="badge info">SALDOS OCULTOS · SIN SESIÓN</span></div>
+  <div class="kpis" style="margin-top:20px">
+  {% for label in ('Patrimonio USDT / BTC','P&L y rentabilidad','Liquidez / ReservaTrading','Custodia y unidades') %}
+    <article class="kpi"><div class="label">{{ label }}</div><div class="value" aria-label="Dato oculto">••••••</div><div class="help">Requiere acceso de usuario</div></article>
+  {% endfor %}
+  </div>
+  <p class="footer-note">El servidor no entrega montos, unidades, pesos ni datos privados a visitantes. El modo invitado no tiene acceso a simulaciones financieras completas ni API privadas.</p>
+  <a class="btn primary" href="{{ url_for('portfolio_login') }}">Iniciar sesión para visualizar los datos</a>
+</section>
+{% endblock %}

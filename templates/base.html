@@ -92,7 +92,7 @@
         <div><h1>KairosWeb</h1><p>v{{ master }}</p></div>
       </div>
       <div class="right-tools">
-        <button type="button" class="tool-icon privacy-toggle" id="privacy-toggle" aria-label="Mostrar saldos" aria-pressed="false" title="Mostrar saldos">
+        {% if portfolio_authenticated %}<button type="button" class="tool-icon privacy-toggle" id="privacy-toggle" aria-label="Mostrar saldos" aria-pressed="false" title="Mostrar saldos">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path d="M3 3 21 21"/></svg><span class="privacy-label">Mostrar</span>
         </button>
         <div class="alerts-wrap">
@@ -106,12 +106,18 @@
             <div id="alerts-list" class="alerts-list" aria-live="polite">Consultando…</div>
           </div>
         </div>
+        {% endif %}
         <button type="button" class="tool-icon" data-theme-toggle title="Cambiar tema" aria-label="Activar tema oscuro" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.4A8.3 8.3 0 0 1 8.6 3.5a8.5 8.5 0 1 0 11.9 11.9Z"/></svg>
         </button>
-        <a class="tool-icon {{ 'active' if request.path == '/settings' else '' }}" href="{{ url_for('settings_page') }}" aria-label="Configuración de KairosWeb" title="Configuración y mantenimiento del Master">
+        {% if portfolio_authenticated %}<a class="tool-icon {{ 'active' if request.path == '/settings' else '' }}" href="{{ url_for('settings_page') }}" aria-label="Configuración de KairosWeb" title="Configuración y mantenimiento del Master">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 3 .6 2.1c.6.2 1.1.5 1.6.9L14 5l2 2-1 2.3c.4.5.7 1 .9 1.6L18 11v3l-2.1.6c-.2.6-.5 1.1-.9 1.6l1 2.3-2 2-2.3-1c-.5.4-1 .7-1.6.9L9.5 22h-3l-.6-2.1c-.6-.2-1.1-.5-1.6-.9l-2.3 1-2-2 1-2.3c-.4-.5-.7-1-.9-1.6L-2 14v-3l2.1-.6c.2-.6.5-1.1.9-1.6L0 6.5l2-2 2.3 1c.5-.4 1-.7 1.6-.9L6.5 3Z" transform="translate(3,0)"/><circle cx="11" cy="12.5" r="3"/></svg>
         </a>
+        <form method="post" action="{{ url_for('portfolio_logout') }}" class="session-exit">
+          <input type="hidden" name="csrf" value="{{ portfolio_csrf }}">
+          <button type="submit" class="btn">Cerrar sesión</button>
+        </form>
+        {% else %}<a class="btn primary" href="{{ url_for('portfolio_login') }}">Iniciar sesión</a>{% endif %}
       </div>
     </div>
     <nav class="global-nav" aria-label="Navegación Kairos">
@@ -122,7 +128,7 @@
     {% block content %}{% endblock %}
   </div>
   <script defer src="{{ url_for('static', filename='table_sort.js') }}"></script>
-  <script defer src="{{ url_for('static', filename='alert_bell.js') }}?v={{ master }}"></script>
+  {% if portfolio_authenticated %}<script defer src="{{ url_for('static', filename='alert_bell.js') }}?v={{ master }}"></script>{% endif %}
   <script defer src="{{ url_for('static', filename='theme.js') }}"></script>
   <script defer src="{{ url_for('static', filename='tooltips.js') }}?v={{ master }}"></script>
   <script defer src="{{ url_for('static', filename='privacy.js') }}?v={{ master }}"></script>
