@@ -208,3 +208,12 @@ El botón de publicación requiere administración vigente, CSRF, preview, confi
 - Las ventas del Balancer solo aumentan presupuesto ejecutable tras registro de fills reales y conciliación del efectivo en el MASTER; los escenarios de ventas simuladas siguen identificados como *condicionales*. La aplicación no registra fills ni mueve dinero automáticamente.
 - Los porcentajes de liquidez de Configuración permanecen **objetivos de planificación**; la asignación en USDT es el gate operativo de Balancer. No modificar balances físicos para intentar alcanzar objetivos.
 - Antes de habilitar el flujo en producción, el MASTER debe publicar la política actualizada. Ningún lanzamiento de código modifica automáticamente su 01_CONTROL o los parámetros de Google Sheets.
+
+
+## v2.0.41 · Reserva Balancer automática (20% de USDT físico) + modo oscuro
+
+- Los porcentajes APROBADOS en `12_PARAMETROS_KAIROS` (`PORTFOLIO_LIQ_USDT_FRACTION`, `PORTFOLIO_LIQ_BALANCER_FRACTION`, `PORTFOLIO_LIQ_TRADING_FRACTION`) suman 100% y gobiernan las reservas virtuales. `BALANCER_RESERVE_ASSIGNED_USDT` es una fórmula de lectura que recalcula **USDT físico × participación Balancer**, no una entrada manual.
+- El saldo total incluye QF exactamente una vez. La asignación se rechaza si invade los USDT de QF; Balancer no consume USDT semanal; Compras O2/O4 puede extenderse hasta la reserva disponible de Balancer. Los proceeds no acreditados siguen solo en escenarios condicionales.
+- En Configuración → Objetivos de gestión se muestra el importe derivado, sin un segundo campo manual, con validación en vivo. Los fondos se recalculan al variar la liquidez publicada o la mezcla aprobada.
+- Estilos `data-theme=dark` dedicados a tarjetas de objetivos, textos y formularios; en modo claro se conserva la presentación anterior.
+- Validar despliegue de Render y saldos del MASTER después de instalar. No se ejecutan órdenes, fills ni transferencias.

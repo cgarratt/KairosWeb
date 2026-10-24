@@ -273,3 +273,22 @@ html[data-privacy-boot="pending"] .shell{visibility:hidden}
 .goal-field input{width:100%;min-width:0;box-sizing:border-box;padding:11px;border-radius:9px;border:1px solid var(--line);background:var(--input-bg,#fff);color:var(--text)}
 .goal-preview{border-left:3px solid #3081d9;padding:12px 16px;background:var(--surface,#f5f8fc);border-radius:10px;margin-top:16px}
 @media(max-width:680px){.goal-grid,.goal-grid:has(.goal-tier){grid-template-columns:1fr 1fr}.goal-tier{grid-column:1/-1;padding:0}}
+
+/* v2.0.41 — Objetivos de gestión must respect the selected dark theme. */
+:root[data-theme="dark"] .goal-card,
+:root[data-theme="dark"] .goal-preview {
+  background:#1c304b; color:#eef4ff; border-color:#415876;
+}
+:root[data-theme="dark"] .goal-card h4,
+:root[data-theme="dark"] .goal-tier,
+:root[data-theme="dark"] .goal-derived-amount,
+:root[data-theme="dark"] .goal-field span {color:#f2f7ff}
+:root[data-theme="dark"] .goal-field input,
+:root[data-theme="dark"] .goal-card input[type="number"] {
+  color-scheme:dark; background:#0f1d31; color:#edf5ff;
+  border:1px solid #536d91;
+}
+:root[data-theme="dark"] .goal-field input:focus-visible {
+  outline:2px solid #79baff; outline-offset:2px;
+}
+.goal-derived-amount {display:block;margin:12px 0;font-size:1.25rem;color:var(--text)}

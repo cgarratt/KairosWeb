@@ -356,8 +356,6 @@
     const p={group:'portfolio',crypto:goalRead('portfolio.crypto'),liquidity:goalRead('portfolio.liquidity')};
     const t={group:'tiers',T1:goalRead('tiers.T1'),T2:goalRead('tiers.T2'),T3:goalRead('tiers.T3')};
     const l={group:'liquidity',usdt:goalRead('liquidity_mix.usdt'),balancer:goalRead('liquidity_mix.balancer'),trading:goalRead('liquidity_mix.trading')};
-    const assigned=body.querySelector('[data-goal-cash="balancer"]');
-    if(assigned){const amount=Number(assigned.value);if(!Number.isFinite(amount)||amount<0||amount>Number(state.sections.portfolio_goals.usdt_operating_actual)+1e-6)throw Error('Reserva Balancer asignada supera USDT operativo físico.');l.balancer_allocated_usdt=amount;}
     const c=['T1','T2','T3'].map(tier=>({group:'custody',tier,hodl:goalRead('custody.'+tier+'.hodl'),core:goalRead('custody.'+tier+'.core'),exchange:goalRead('custody.'+tier+'.exchange')}));
     for(const [name,vals] of [['Cripto/Liquidez',[p.crypto,p.liquidity]],['Tiers',[t.T1,t.T2,t.T3]],['Liquidez/Reservas',[l.usdt,l.balancer,l.trading]],...c.map(x=>['Custodia '+x.tier,[x.hodl,x.core,x.exchange]])]){
       if(Math.abs(vals.reduce((a,b)=>a+b,0)-1)>1e-8)throw Error(name+' debe sumar exactamente 100%.');
@@ -376,8 +374,17 @@
     }
     const panel=el('div','settings-total-panel goal-sums');summaries.forEach(x=>panel.append(el('span',x.ok?'valid-value':'invalid-value',x.label+': '+(Number.isFinite(x.total)?x.total.toFixed(2)+'%':'N/D')+' / 100%')));totals.append(panel);
     const m=body.querySelector('#goal-preview');
-    const assignment=body.querySelector('[data-goal-cash=\"balancer\"]');
-    if(assignment&&state){const v=Number(assignment.value);const cap=Number(state.sections.portfolio_goals.usdt_operating_actual);if(!assignment.value.trim()||!Number.isFinite(v)||v<0||v>cap+1e-6){valid=false;totals.append(el('p','invalid-value','Reserva Balancer USDT: debe estar entre 0 y el USDT operativo publicado ('+cap.toFixed(2)+').'));}}
+    if(state){
+      const total=Number(state.sections.portfolio_goals.usdt_physical_actual);
+      const free=Number(state.sections.portfolio_goals.usdt_operating_actual);
+      try{
+        const fraction=goalRead('liquidity_mix.balancer');
+        const amount=Math.round((total*fraction+Number.EPSILON)*100)/100;
+        const value=body.querySelector('#balancer-derived-amount');
+        if(value)value.textContent=money(amount)+' = '+(fraction*100).toFixed(2)+'% × '+money(total);
+        if(amount>free+1e-6){valid=false;totals.append(el('p','invalid-value','Reserva Balancer objetivo supera USDT fuera de QF; revisar porcentajes publicados.'));}
+      }catch(_){valid=false;}
+    }
     if(m&&valid&&state){
       const entries=collectGoals(),g=entries[0],t=entries[1],liq=entries[2],cus=entries.slice(3);
       const base=state.sections.portfolio_goals.token_targets;
@@ -398,9 +405,10 @@
       group.fields.forEach(([key,label])=>row.append(goalInput(group.id+'.'+key,values[key],label+' (%)')));
       card.append(row);body.append(card);
     }
-    const assignment=el('section','goal-card');assignment.append(el('h4','','Asignación real de reserva Balancer'),el('p','settings-hint','USDT virtualmente asignado desde la liquidez fuera de Quantfury. No es un porcentaje ni una transferencia real. Compras O2/O4 puede disponer de esta reserva cuando consuma el USDT semanal.'));
-    const cashInput=el('input');cashInput.type='number';cashInput.min='0';cashInput.step='0.01';cashInput.value=String(g.balancer_assigned_usdt||0);cashInput.dataset.goalCash='balancer';cashInput.addEventListener('input',updateGoalTotals);
-    const cashLabel=el('label','goal-field');cashLabel.append(el('span','','Reserva Balancer asignada (USDT)'),cashInput);assignment.append(cashLabel,el('p','settings-hint',`USDT operativo publicado: ${Number(g.usdt_operating_actual).toFixed(2)} · ${g.balancer_assignment_published?'ASIGNACIÓN PUBLICADA':'PENDIENTE: Balancer BUY limitado a USDT 0 hasta publicar asignación'}`));body.append(assignment);
+    const assignment=el('section','goal-card');assignment.append(el('h4','','Reserva Balancer calculada automáticamente'),
+      el('p','settings-hint','La reserva es el porcentaje objetivo de Balancer sobre el USDT físico TOTAL (incluye QF una sola vez). Es una asignación contable, no una transferencia. No puede consumir los fondos físicos de QF.'));
+    const value=el('strong','goal-derived-amount');value.id='balancer-derived-amount';
+    assignment.append(value,el('p','settings-hint',`USDT físico: ${money(g.usdt_physical_actual)} · USDT fuera de QF: ${money(g.usdt_operating_actual)} · ${g.liquidity_mix_published?'Porcentaje publicado en MASTER':'Porcentaje en borrador; pendiente de publicación'}`));body.append(assignment);
     const cust=el('section','goal-card');cust.append(el('h4','','4. Custodia por Tier'),el('p','settings-hint','Cada Tier suma 100% entre HODL, Core y Exchange. Son metas, no transferencias.'));
     ['T1','T2','T3'].forEach(t=>{
       const row=el('div','goal-grid');row.append(el('strong','goal-tier',t));
@@ -409,7 +417,7 @@
     });body.append(cust);
     const preview=el('section','goal-preview');preview.id='goal-preview';body.append(preview);
     body.append(el('p','settings-hint',g.liquidity_mix_published?
-      'Reparto de liquidez publicado en 12_PARAMETROS_KAIROS. El objetivo de ReservaTrading no altera los USDT reales de Quantfury ni la política operativa del Balancer.':
+      'Reparto de liquidez publicado en 12_PARAMETROS_KAIROS. Reserva Balancer calculada automáticamente desde el porcentaje publicado y el USDT físico. ReservaTrading no altera el saldo físico de Quantfury.':
       'Borrador inicial de reservas 70/20/10 tomado de tu distribución propuesta: AÚN NO PUBLICADO. Requiere autorización administrativa y publicación para ser operativo como objetivo.'));
     updateGoalTotals();
   }

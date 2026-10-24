@@ -1,11 +1,10 @@
 """Kairos v2.0.40 shared, fail-closed cash envelopes (simulations only).
 
-QF belongs to physical USDT exactly once. The management percentages in
-12_PARAMETROS_KAIROS are *targets*, not evidence of assigned cash. Therefore a
-Balancer BUY envelope exists only when an approved explicit amount is published.
-A pending/unknown allocation blocks Balancer cash-funded purchases while O2/O4
-may still use all uncommitted non-QF cash. Hypothetical SELL proceeds never
-increase real cash; they may be displayed only in an explicitly conditional plan.
+QF belongs to physical USDT exactly once. The Balancer allocation is derived
+from the APPROVED percentage of TOTAL physical USDT (including QF once), but it
+must fit within the non-QF balance. The remaining non-QF cash funds O2/O4 first.
+Hypothetical SELL proceeds never increase real cash; they may be displayed only
+in an explicitly conditional plan. No physical transfer is implied.
 """
 from __future__ import annotations
 import math
@@ -59,8 +58,48 @@ def calculate_budgets(physical_usdt, qf_usdt, *, balancer_allocated=None,
             'unallocated_cash':weekly if status=='PENDIENTE_ASIGNACION' else 0.}
 
 
-def allocation_from_master(parameters):
-    """Return confirmed Balancer reserve only; never infer it from target %."""
+def derive_balancer_allocation(physical_usdt, qf_usdt, fraction):
+    """Actual USD allocation = fraction of ALL physical USDT, NOT of non-QF cash.
+
+    Reject plans that would need to consume physical QF. The calculation is
+    rounded to cents, never counted as new money, and recomputed on each read.
+    """
+    from decimal import Decimal, ROUND_HALF_UP
+    physical=_amount(physical_usdt,'USDT físico')
+    qf=_amount(qf_usdt,'Reserva QF')
+    if qf>physical+1e-8:
+        raise LiquidityPolicyError('QF supera el USDT físico')
+    if type(fraction) not in (int,float) or not math.isfinite(fraction) or not 0<=fraction<=1:
+        raise LiquidityPolicyError('Porcentaje Balancer inválido')
+    value=float((Decimal(str(physical))*Decimal(str(fraction))).quantize(Decimal('0.01'),rounding=ROUND_HALF_UP))
+    if value>physical-qf+1e-8:
+        raise LiquidityPolicyError('Reserva Balancer objetivo invade QF; revisar reparto publicado')
+    return value
+
+
+def allocation_from_master(parameters, physical_usdt=None, qf_usdt=None):
+    """Prefer the authoritative approved 70/20/10 percentage over legacy USD.
+
+    If liquidity mix exists but is incomplete or not approved, fail closed.
+    Legacy explicitly approved allocations remain compatible for older Sheets.
+    """
+    keys=('PORTFOLIO_LIQ_USDT_FRACTION','PORTFOLIO_LIQ_BALANCER_FRACTION','PORTFOLIO_LIQ_TRADING_FRACTION')
+    records=[parameters.get(key) for key in keys]
+    if any(r is not None for r in records):
+        if any(not isinstance(r,dict) or r.get('status')!='APROBADO' for r in records):
+            return None
+        values=[]
+        for key,r in zip(keys,records):
+            v=r.get('value')
+            if type(v) not in (int,float) or not math.isfinite(v) or v<0 or v>1:
+                raise LiquidityPolicyError(key+': porcentaje inválido')
+            values.append(v)
+        if abs(sum(values)-1)>1e-8:
+            raise LiquidityPolicyError('Reparto publicado de liquidez debe sumar 100%')
+        if physical_usdt is None or qf_usdt is None:
+            # Missing cash readings must never produce an operational allocation.
+            return None
+        return derive_balancer_allocation(physical_usdt,qf_usdt,values[1])
     record=parameters.get('BALANCER_RESERVE_ASSIGNED_USDT')
     if not isinstance(record,dict) or record.get('status')!='APROBADO':
         return None

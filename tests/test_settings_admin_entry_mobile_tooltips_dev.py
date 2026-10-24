@@ -78,7 +78,7 @@ def test_portfolio_title_single_word_and_http_diagnostics():
 
 def test_release_v2019_identity_and_preserved_functions():
     source=(ROOT/'app.py').read_text()
-    assert "APP_VERSION = '2.0.40'" in source
+    assert "APP_VERSION = '2.0.41'" in source
     assert "'portfolio_unrealized_chart':" in source
     assert "'sales_optimizer_engine':" in source
     assert "'sales_optimizer_ui':" in source

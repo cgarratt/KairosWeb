@@ -487,13 +487,21 @@ def portfolio_goals_data(raw):
     elif any(k in params for k in GOAL_LIQ_KEYS.values()):
         raise SettingsError('Reparto de liquidez publicado incompleto')
     else:liq=GOAL_LIQ_DRAFT.copy()
+    physical=sum(float(r[1]) for r in raw[SHEETS['liquidity']][1:] if len(r)>2 and r[2] in ('OPERATIVO','TRADING_QF'))
+    operating=sum(float(r[1]) for r in raw[SHEETS['liquidity']][1:] if len(r)>2 and r[2]=='OPERATIVO')
+    from liquidity_reserves import derive_balancer_allocation, LiquidityPolicyError
+    try:
+        assignment=derive_balancer_allocation(physical,physical-operating,liq['balancer']) if complete else 0.
+    except LiquidityPolicyError as exc:
+        raise SettingsError(str(exc)) from exc
     return {'portfolio':{'crypto':crypto,'liquidity':liquidity},'tiers':tiers,
             'liquidity_mix':liq,'custody':custody,'liquidity_mix_published':complete,
             'token_targets':[{'token':r[0],'tier':r[2],'target':float(r[3])} for r in pos],
             'capital_historical_reference':capital,
-            'usdt_operating_actual':sum(float(r[1]) for r in raw[SHEETS['liquidity']][1:] if len(r)>2 and r[2]=='OPERATIVO'),
-            'balancer_assigned_usdt':float(params['BALANCER_RESERVE_ASSIGNED_USDT'][2]) if 'BALANCER_RESERVE_ASSIGNED_USDT' in params and params['BALANCER_RESERVE_ASSIGNED_USDT'][5]=='APROBADO' else 0.,
-            'balancer_assignment_published': 'BALANCER_RESERVE_ASSIGNED_USDT' in params and params['BALANCER_RESERVE_ASSIGNED_USDT'][5]=='APROBADO'}
+            'usdt_operating_actual':operating, 'usdt_physical_actual':physical,
+            'balancer_assigned_usdt':assignment,
+            'balancer_assignment_published':complete,
+            'balancer_assignment_source':'PERCENT_OF_PHYSICAL_USDT' if complete else 'PENDING_APPROVAL'}
 
 
 def _goal_fraction(value,label):
@@ -527,9 +535,8 @@ def _goal_entries(entries):
     _goal_sum('Distribución por Tier',list(tiers.values()))
     _goal_sum('Liquidez / Reservas',list(liquid.values()))
     for t,vals in custody.items():_goal_sum('Custodia '+t,list(vals.values()))
-    # A real accounting allocation is denominated in USDT, distinct from %.
-    amt=groups['liquidity'].get('balancer_allocated_usdt')
-    if amt is not None: liquid['balancer_allocated_usdt']=_numeric(amt,'Reserva Balancer USDT')
+    if 'balancer_allocated_usdt' in groups['liquidity']:
+        raise SettingsError('La reserva Balancer se deriva automáticamente del porcentaje; no se admite monto manual')
     return portfolio,tiers,liquid,custody
 
 
@@ -604,25 +611,14 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
             else:
                 if _get(b,'parameters',row,5)!='APROBADO':raise SettingsError(key+': no está aprobado')
                 if abs(float(_get(b,'parameters',row,2))-liq_mix[part])>1e-11:change('parameters',row,2,liq_mix[part])
-        if 'balancer_allocated_usdt' in liq_mix:
-            cash_actual=sum(_numeric(r[1],'USDT operativo '+str(r[0])) for r in b[SHEETS['liquidity']][1:] if len(r)>2 and r[2]=='OPERATIVO')
-            assigned=liq_mix['balancer_allocated_usdt']
-            if assigned>cash_actual+1e-8:
-                raise SettingsError('Reserva Balancer asignada no puede superar USDT operativo fuera de QF')
-            key='BALANCER_RESERVE_ASSIGNED_USDT'
-            try:row=_find_row(b,'parameters',key,column=1)
-            except SettingsError:
-                row=len(b[SHEETS['parameters']])
-                meta=['LIQUIDEZ',key,assigned,'number','USDT','APROBADO','OPERATIVO',
-                      'KairosWeb Settings · '+evidence.strip()[:100],
-                      'Asignación contable administrada; no modifica saldo físico ni acredita ventas no confirmadas.', 'ALTA']
-                for col,val in enumerate(meta):change('parameters',row,col,val)
-            else:
-                status=_get(b,'parameters',row,5)
-                if status not in ('APROBADO','PENDIENTE_ASIGNACION'):
-                    raise SettingsError('Reserva Balancer requiere revisión administrativa de la asignación')
-                if status!='APROBADO':change('parameters',row,5,'APROBADO')
-                if abs(float(_get(b,'parameters',row,2))-assigned)>1e-8:change('parameters',row,2,assigned)
+        # New v2.0.41: approved % of physical USDT is the sole budget source.
+        # BALANCER_RESERVE_ASSIGNED_USDT can remain a Sheets calculated display
+        # cell, but MUST NOT be manually overwritten during goal publication.
+        from liquidity_reserves import derive_balancer_allocation, LiquidityPolicyError
+        physical=sum(_numeric(r[1],'USDT '+str(r[0])) for r in b[SHEETS['liquidity']][1:] if len(r)>2 and r[2] in ('OPERATIVO','TRADING_QF'))
+        nonqf=sum(_numeric(r[1],'USDT '+str(r[0])) for r in b[SHEETS['liquidity']][1:] if len(r)>2 and r[2]=='OPERATIVO')
+        try:derive_balancer_allocation(physical,physical-nonqf,liq_mix['balancer'])
+        except LiquidityPolicyError as exc:raise SettingsError(str(exc)) from exc
         # The four independent sums and 12-token totals were validated above;
         # parse_master then verifies all portfolio/accounting invariants.
     if category in ('units','targets','pivots'):

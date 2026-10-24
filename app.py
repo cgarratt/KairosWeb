@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.40'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.41'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -688,7 +688,7 @@ def build_mode_payload(slug, d, observed):
     if slug in ('compras','forecast'):
         p=d['total_value']; cash=d['usdt_total']; trading=d['trading_reserve']
         max_percent=(100*max(0.0,cash-trading)/p) if p else 0.0
-        reserves=calculate_budgets(cash,trading,balancer_allocated=allocation_from_master(g.kairos_state['parameters']))
+        reserves=calculate_budgets(cash,trading,balancer_allocated=allocation_from_master(g.kairos_state['parameters'],cash,trading))
         reference_cap=reserves['compras_max']
         purchase_tokens=[{'token':r['token'],'tier':r['tier'],'price':r['price'],'weight':r['weight'],'target':r['target'],
             'current_usdt':r['value'],'units':r['units'],
@@ -1052,7 +1052,7 @@ def balancer_report(d, observed):
     rows=sorted(d['rows'],key=lambda r:r['value'],reverse=True)
     p=d['total_value']; cash=d['usdt_total']; crypto=d['crypto_value']
     trading=d['trading_reserve']
-    reserves=calculate_budgets(cash,trading,balancer_allocated=allocation_from_master(g.kairos_state['parameters']))
+    reserves=calculate_budgets(cash,trading,balancer_allocated=allocation_from_master(g.kairos_state['parameters'],cash,trading))
     reserve=reserves['balancer_max']
     floor=approved_numeric('STRUCTURAL_USDT_TARGET')*p  # reference target only
     gap=max(0.,floor-cash)
@@ -1081,7 +1081,7 @@ def balancer_report(d, observed):
     sale_total=sum(x['value'] for x in sale_preview)
     current_cash_capacity=reserve
     # Conditional scenario: sale proceeds are hypothetical until fill is verified.
-    projected_cash_capacity=calculate_budgets(cash,trading,balancer_allocated=allocation_from_master(g.kairos_state['parameters']),conditional_sell_proceeds=sale_total)['balancer_with_sales_conditional']
+    projected_cash_capacity=calculate_budgets(cash,trading,balancer_allocated=allocation_from_master(g.kairos_state['parameters'],cash,trading),conditional_sell_proceeds=sale_total)['balancer_with_sales_conditional']
     buy_preview=allocate_infra_buys(rows,current_cash_capacity,band)
     buy_total=sum(x['value'] for x in buy_preview)
     sold_by_token={x['token']:x['value'] for x in sale_preview}
@@ -1797,7 +1797,7 @@ def _deployed_asset_status():
         'portfolio_goals_ui_v2039': ('templates/settings.html', ('data-tab="portfolio_goals"', 'Objetivos de gestión')),
         'portfolio_goals_js_v2039': ('static/settings_master.js', ('collectGoals', 'drawGoals', 'updateGoalTotals')),
         'portfolio_goals_engine_v2039': ('kairos_sheets_features.py', ("if category=='portfolio_goals'", 'portfolio_goals_data(', 'GOAL_LIQ_KEYS')),
-        'liquidity_reserves_v2040': ('liquidity_reserves.py', ('calculate_budgets(', 'allocation_from_master(', 'PENDIENTE_ASIGNACION')),
+        'liquidity_reserves_v2041': ('liquidity_reserves.py', ('calculate_budgets(', 'derive_balancer_allocation(', 'allocation_from_master(')),
         'current_capital_donut_v2035': ('templates/portfolio_integral.html', ('Distribución actual del capital', 'data-source="02_POSICIONES_03_LIQUIDEZ_BINANCE_SPOT"', "capital_distribution['items']", 'ReservaTrading QF')),
         'consolidated_dashboard_v2027': ('templates/portfolio_integral.html', ('id="btc-portfolio-total"', 'data-bsi-chart="archived"', 'data-portfolio-executive="12"', 'class="port-status', 'port-coin-logo')),
         'consolidated_navigation_v2025': ('templates/base.html', ('href="/mode/{{ mode.slug }}"', 'global-nav-link')),

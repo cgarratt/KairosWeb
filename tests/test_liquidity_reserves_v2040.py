@@ -37,3 +37,46 @@ def test_only_approved_explicit_assignment():
     assert allocation_from_master({}) is None
     assert allocation_from_master({'BALANCER_RESERVE_ASSIGNED_USDT':{'value':500,'status':'PENDIENTE'}}) is None
     assert allocation_from_master({'BALANCER_RESERVE_ASSIGNED_USDT':{'value':300,'status':'APROBADO'}})==300
+
+# v2.0.41: percentage of physical USDT is the canonical dynamic envelope.
+def _approved_split(balancer=.2):
+    return {
+        'PORTFOLIO_LIQ_USDT_FRACTION':{'status':'APROBADO','value':.8-balancer},
+        'PORTFOLIO_LIQ_BALANCER_FRACTION':{'status':'APROBADO','value':balancer},
+        'PORTFOLIO_LIQ_TRADING_FRACTION':{'status':'APROBADO','value':.2},
+        'BALANCER_RESERVE_ASSIGNED_USDT':{'status':'PENDIENTE_ASIGNACION','value':0},
+    }
+
+def test_dynamic_assignment_uses_total_physical_cash_and_not_nonqf():
+    p=_approved_split()
+    assert allocation_from_master(p,22795.,4225.)==4559.
+    assert allocation_from_master(p,1000.,200.)==200.
+    assert allocation_from_master(p,1200.,200.)==240.
+    b=calculate_budgets(22795.,4225.,balancer_allocated=allocation_from_master(p,22795.,4225.))
+    assert b['balancer_max']==4559.
+    assert b['weekly_uncommitted']==14011.
+    assert b['compras_max']==18570.
+    assert b['balancer_max']+b['weekly_uncommitted']+b['qf_protected']==22795.
+
+def test_derivation_blocks_any_qf_invasion_and_bad_split():
+    p=_approved_split(balancer=.9)
+    p['PORTFOLIO_LIQ_USDT_FRACTION']['value']=0.0
+    p['PORTFOLIO_LIQ_TRADING_FRACTION']['value']=0.1
+    with pytest.raises(LiquidityPolicyError,match='invade QF'):
+        allocation_from_master(p,1000.,200.)
+    p=_approved_split();p['PORTFOLIO_LIQ_BALANCER_FRACTION']['status']='PENDIENTE'
+    assert allocation_from_master(p,1000.,200.) is None
+    p=_approved_split();p['PORTFOLIO_LIQ_USDT_FRACTION']['value']=.72
+    with pytest.raises(LiquidityPolicyError,match='100%'):
+        allocation_from_master(p,1000.,200.)
+
+def test_auto_assignment_ui_and_dark_theme_contract():
+    from pathlib import Path
+    root=Path(__file__).resolve().parents[1]
+    js=(root/'static/settings_master.js').read_text()
+    css=(root/'static/theme.css').read_text()
+    assert 'balancer-derived-amount' in js
+    assert 'usdt_physical_actual' in js
+    assert 'data-goal-cash' not in js
+    for selector in ('[data-theme="dark"] .goal-card','[data-theme="dark"] .goal-preview','[data-theme="dark"] .goal-field input'):
+        assert selector in css
