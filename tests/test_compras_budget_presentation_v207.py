@@ -25,7 +25,7 @@ def test_backend_maximum_is_cash_less_qf_not_structural_spend():
     root = Path(__file__).resolve().parents[1]
     api = (root / 'app.py').read_text(encoding='utf-8')
     assert 'max_percent=(100*max(0.0,cash-trading)/p) if p else 0.0' in api
-    assert 'reference_cap=max(0.0,cash-trading)' in api
+    assert "reference_cap=reserves['compras_max']" in api
     assert 'requireEligibility:true' in (root/'templates/trade_sim.html').read_text(encoding='utf-8')
 
 

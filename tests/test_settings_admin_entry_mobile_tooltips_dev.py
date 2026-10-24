@@ -50,7 +50,8 @@ def test_two_tier_session_and_guest_redaction_on_server():
     assert "if not _portfolio_authorized():" in script
     assert "session['kairos_portfolio'] = True" in script
     assert "session['kairos_admin']=True" in script
-    assert "return bool(_portfolio_authorized()" in script
+    assert "_portfolio_authorized() and app.secret_key" in script
+    assert "admin_login_at" in script
     assert "request.form.get('login_csrf'" in script
     assert "secrets.compare_digest(password, expected_password)" in script
     assert 'WWW-Authenticate' not in script  # no browser-level Basic prompt
@@ -60,7 +61,7 @@ def test_two_tier_session_and_guest_redaction_on_server():
     assert 'g.kairos_state' not in guest
     assert 'name="username"' in login and 'name="password"' in login
     assert "if portfolio_authenticated" in base
-    assert "@app.route('/logout', methods=['POST'])" in script
+    assert "@app.route('/logout', methods=['GET', 'POST'])" in script
     assert "session.pop('kairos_admin', None)" in script
     for t in ['portfolio_login.html','guest_portfolio.html','portfolio_integral.html','base.html']:
         Environment().parse((ROOT/'templates'/t).read_text())
@@ -77,7 +78,7 @@ def test_portfolio_title_single_word_and_http_diagnostics():
 
 def test_release_v2019_identity_and_preserved_functions():
     source=(ROOT/'app.py').read_text()
-    assert "APP_VERSION = '2.0.36'" in source
+    assert "APP_VERSION = '2.0.40'" in source
     assert "'portfolio_unrealized_chart':" in source
     assert "'sales_optimizer_engine':" in source
     assert "'sales_optimizer_ui':" in source

@@ -9,6 +9,7 @@
     <input type="hidden" name="login_csrf" value="{{ login_csrf }}">
     <label>Usuario<input name="username" autocomplete="username" required maxlength="128"></label>
     <label>Contraseña<input type="password" name="password" autocomplete="current-password" required></label>
+    <label class="remember-choice" style="display:flex;align-items:center;gap:8px;margin:10px 0 16px"><input type="checkbox" name="remember_me" value="on" checked> Mantener sesión iniciada en este dispositivo (30 días de inactividad)</label>
     <button class="btn primary" type="submit">Iniciar sesión</button>
   </form>{% endif %}
   <p style="margin-top:18px"><a class="btn" href="{{ url_for('integral_portfolio_page') }}">Continuar como invitado · Saldos ocultos</a></p>

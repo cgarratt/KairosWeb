@@ -5,6 +5,7 @@ case only a login POST carrying an independent, same-session CSRF token is
 allowed; a cross-site Fetch Metadata header remains an unconditional reject.
 """
 from urllib.parse import urlsplit
+import secrets
 
 
 def allowed_origin_hosts(request_host, *, render_host=None, public_origin=None):
@@ -72,3 +73,8 @@ def same_origin_allowed(*, request_host, origin='', referer='', fetch_site='',
     # Only a form carrying an authenticated, same-session login CSRF token may
     # fall back when *all* provenance metadata is missing or redacted.
     return bool(csrf_protected_login and site in ('', 'none'))
+
+
+def valid_logout_csrf(expected, submitted):
+    """A separate, same-session HTML form CSRF gate for portfolio logout."""
+    return bool(expected and submitted and secrets.compare_digest(expected, submitted))

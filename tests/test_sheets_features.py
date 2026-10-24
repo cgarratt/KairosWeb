@@ -58,10 +58,58 @@ class CapitalAllocationTargetsTests(unittest.TestCase):
         root=Path(__file__).resolve().parents[1]
         js=(root/'static/settings_master.js').read_text()
         html=(root/'templates/settings.html').read_text()
-        assert 'capital_targets' in js and 'capital_targets' in html
-        assert 'Trading · ReservaTrading' in js
-        assert 'deben sumar 100%' in js
+        assert 'portfolio_goals' in js and 'portfolio_goals' in html
+        assert 'ReservaTrading (objetivo)' in js
+        assert 'deben sumar' in js
         assert "'capital_targets'" in (root/'app.py').read_text()
+
+
+class PortfolioGoalManagementTests(unittest.TestCase):
+    @staticmethod
+    def group_set(*,portfolio=(.7,.3),tiers=(.65,.30,.05),liquidity=(.7,.2,.1),t2=(0,.7,.3)):
+        return [{'group':'portfolio','crypto':portfolio[0],'liquidity':portfolio[1]},
+                {'group':'tiers','T1':tiers[0],'T2':tiers[1],'T3':tiers[2]},
+                {'group':'liquidity','usdt':liquidity[0],'balancer':liquidity[1],'trading':liquidity[2]},
+                {'group':'custody','tier':'T1','hodl':.4,'core':.3,'exchange':.3},
+                {'group':'custody','tier':'T2','hodl':t2[0],'core':t2[1],'exchange':t2[2]},
+                {'group':'custody','tier':'T3','hodl':0,'core':0,'exchange':1}]
+
+    def test_one_atomic_target_plan_and_no_real_balances(self):
+        from kairos_sheets_features import portfolio_goals_data, GOAL_LIQ_KEYS
+        raw=demo_master();previous=deepcopy(raw)
+        entries=self.group_set()
+        patches,result=prepare_changes(raw,'portfolio_goals',entries,evidence='Nueva politica de gestión del portafolio')
+        after={(name,row,col):v for name,row,col,v in patches}
+        self.assertEqual(raw,previous)
+        self.assertEqual(sum(result['targets'].values()),1.0)
+        self.assertAlmostEqual(sum(result['targets'][token] for token,tier in result['tiers'].items() if tier=='T1'),.65)
+        self.assertAlmostEqual(sum(result['targets'][token] for token,tier in result['tiers'].items() if tier=='T2'),.30)
+        self.assertEqual(result['custody_policy']['T2'],[0,.7,.3])
+        self.assertEqual(result['snapshot']['physical_total_USDT'],50)
+        self.assertEqual(result['snapshot']['trading_real_fixed_USDT'],10)
+        self.assertTrue(any(name=='integral' for name,row,col,value in patches))
+        self.assertTrue(all(name!='liquidity' for name,row,col,value in patches))
+        for key in GOAL_LIQ_KEYS.values():self.assertIn(key,result['parameters'])
+        updated=portfolio_goals_data({**raw, **{}})
+        self.assertFalse(updated['liquidity_mix_published'])
+
+    def test_bad_sums_and_missing_rows_fail_closed(self):
+        for kwargs in ({'portfolio':(.5,.3)}, {'tiers':(.5,.4,.09)}, {'liquidity':(.7,.2,.2)}, {'t2':(0,.8,.3)}):
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaisesRegex(SettingsError,'100%'):
+                    prepare_changes(demo_master(),'portfolio_goals',self.group_set(**kwargs),evidence='Aprobación explícita de cambios')
+        with self.assertRaisesRegex(SettingsError,'6 grupos'):
+            prepare_changes(demo_master(),'portfolio_goals',self.group_set()[:-1],evidence='Aprobación explícita de cambios')
+
+    def test_ui_separate_liquidity_and_previous_balance_floors(self):
+        root=Path(__file__).resolve().parents[1]
+        js=(root/'static/settings_master.js').read_text()
+        html=(root/'templates/settings.html').read_text()
+        assert 'portfolio_goals' in js and 'Objetivos de gestión' in html
+        assert 'collectGoals' in js and 'goalRead' in js
+        assert 'liquidity_mix_published' in js
+        assert "if body.get('section')=='portfolio_goals'" in (root/'app.py').read_text()
+        assert '02_POSICIONES' not in html.split('data-tab="portfolio_goals"')[0]
 
 
 class BellSheetTests(unittest.TestCase):

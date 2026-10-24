@@ -6,18 +6,16 @@
   <p class="settings-hint">Los formularios nunca generan órdenes, fills ni certifican pivotes o BSI por inferencia. La fecha de la revisión se genera automáticamente en Lima. Guardar requiere una sesión administrativa activa.</p>
   <div class="settings-layout" style="margin-top:22px">
     <aside class="settings-side" id="settings-nav" aria-label="Secciones de configuración">
-      <button class="settings-tab selected" type="button" data-tab="units">Maestro de unidades</button>
-      <button class="settings-tab" type="button" data-tab="targets">Objetivos y Tiers</button>
-      <button class="settings-tab" type="button" data-tab="tier_custody">Custodia por Tier</button>
+      <button class="settings-tab selected" type="button" data-tab="portfolio_goals">Objetivos de gestión</button>
+      <button class="settings-tab" type="button" data-tab="units">Maestro de unidades</button>
       <button class="settings-tab" type="button" data-tab="liquidity">Liquidez por venue</button>
-      <button class="settings-tab" type="button" data-tab="capital_targets">Objetivos de liquidez y ReservaTrading (%)</button>
       <button class="settings-tab" type="button" data-tab="pivots">Pivotes O1–O5</button>
       <button class="settings-tab" type="button" data-tab="parameters">Parámetros</button>
       <button class="settings-tab" type="button" data-tab="mcp">Estado de conexiones MCP</button>
       <div class="settings-theme-box"><strong>Aspecto de KairosWeb</strong><label><input type="radio" name="theme-choice" value="light"> ☀️ Claro</label><label><input type="radio" name="theme-choice" value="dark"> 🌙 Azul marino oscuro</label></div>
     </aside>
     <div class="settings-content">
-      <h3 id="settings-title">Maestro de unidades</h3>
+      <h3 id="settings-title">Objetivos de gestión del portafolio</h3>
       <div id="settings-desc" class="settings-hint"></div>
       <p id="settings-snapshot" class="settings-hint"></p>
       <div id="settings-admin-state" class="settings-hint settings-admin-state"></div>
@@ -49,7 +47,7 @@
       </div>
       <div class="settings-buttons"><button id="settings-save" class="btn primary" type="button" disabled>Guardar cambios</button></div>
       <div class="settings-msg" id="settings-msg" aria-live="polite">Pendiente de conexión a Google Sheets.</div>
-      <p class="settings-hint">Los porcentajes de 08_INTEGRAL representan objetivos históricos: los saldos operativos Quantfury se editan por monto USDT en «Liquidez por venue» y el objetivo estructural de caja se ajusta en «Parámetros». Se validan unidades, objetivos, custodia, liquidez y políticas antes de la publicación. El resultado queda registrado en 01_CONTROL, 10_HISTORIAL y 18_SETTINGS_AUDITORIA. KairosGPT leerá el cambio en su próxima ejecución.</p>
+      <p class="settings-hint">Los porcentajes de Objetivos de gestión representan metas y no saldos reales: los saldos operativos Quantfury se editan por monto USDT en «Liquidez por venue» y el objetivo estructural de caja se ajusta en «Parámetros». Se validan unidades, objetivos, custodia, liquidez y políticas antes de la publicación. El resultado queda registrado en 01_CONTROL, 10_HISTORIAL y 18_SETTINGS_AUDITORIA. KairosGPT leerá el cambio en su próxima ejecución.</p>
     </div>
   </div>
 </section>

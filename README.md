@@ -1,3 +1,7 @@
+# KairosWeb v2.0.37 — Logout seguro corregido
+
+**Cambio focalizado:** el cierre de sesión HTML valida el CSRF del formulario y redirige a invitado con HTTP 303. Se mantiene CSRF administrativo y la lectura privada protegida. Consultar `RELEASE_NOTES_v2.0.37.md`.
+
 # KairosWeb v2.0.35 — Distribución actual del capital
 
 **Aplicación:** `2.0.35` · **Google Sheets schema:** `5.0.0` · **Motor KairosGPT compatible:** v1.3.6.
@@ -179,3 +183,28 @@ La sección 7 de Balancer presenta una fila por token con transferencias desde E
 - Configuración mantiene una SEGUNDA clave (`KAIROS_SETTINGS_ADMIN_KEY`), sesión administrativa y CSRF.
 - Portafolio usa título único “Portafolio”.
 - Error `UPSTREAM_HTTP`: se origina en el proveedor remoto; revisar logs Render con ID y diagnóstico MCP autenticado. No se reutilizan cotizaciones antiguas.
+
+## Release v2.0.38 · Sesión recordada (Portafolio)
+
+- En `/login`, la casilla **Mantener sesión iniciada en este dispositivo (30 días de inactividad)** aparece marcada inicialmente; puede desmarcarse en equipos compartidos. Con la casilla activa se crea una cookie de sesión firmada, `Secure`, `HttpOnly`, `SameSite=Strict`, con vencimiento renovable de 30 días por inactividad. Las visitas regulares renuevan la cookie sin solicitar usuario y contraseña. Con la casilla desmarcada la cookie es de sesión del navegador y, por política del servidor, caduca tras 12 horas sin actividad.
+- El cierre de sesión por POST `/logout` elimina los permisos de usuario y de administrador, incluso si se había elegido recordar el acceso. Un cambio de credenciales de usuario o administrador invalida el nivel correspondiente de las sesiones anteriores.
+- Configuración mantiene una **segunda autenticación administrativa de 30 minutos**, que no se prolonga por navegar Portafolio. La autorización administrativa no vuelve persistente una sesión de usuario marcada como temporal.
+- **Requisito de Render:** conservar `KAIROS_SESSION_SECRET` sin cambios entre despliegues y réplicas; regenerarlo cierra todas las sesiones existentes. Configurar `KAIROS_WEB_USER`, `KAIROS_WEB_PASSWORD` y `KAIROS_SETTINGS_ADMIN_KEY` solo como variables secretas de entorno, nunca en GitHub o el ZIP. En navegación privada, navegadores que eliminan cookies o al cambiar de dispositivo se necesitará iniciar sesión de nuevo.
+- Las sesiones del navegador son cookies firmadas, no contraseñas guardadas. **No registra ni modifica información del MASTER**, no altera permisos de invitado ni autorización de escritura.
+- Tests locales: pruebas de caducidad por inactividad, renovación, login temporal, autorización administrativa independiente, rotación de contraseña, CSRF y logout; ver `RELEASE_NOTES_v2.0.38.md`. La prueba HTTP en Render se realiza después del despliegue.
+
+## v2.0.39 · Objetivos de gestión unificados
+
+Abrir Configuración → **Objetivos de gestión**. El editor concentra objetivos globales Cripto/Liquidez, por Tier, por subreserva y por custodia, sin mostrar tres formularios separados. Seis validaciones al 100%, objetivo derivado para los 12 tokens y previsualización contable antes de publicar. Dos confirmaciones administrativas obligatorias; publicación multihoja con auditoría, snapshot y homologación. Unidades, USDT físico y QF no se modifican.
+
+**Diferencias de origen importantes:** `STRUCTURAL_USDT_TARGET` / `BALANCER_RESERVE_FORMULA` mantienen su régimen operativo hasta una revisión explícita; los nuevos porcentajes de reservas son de planificación. Si no se ha publicado la mezcla de liquidez, 70/20/10 es un borrador de la imagen, no una lectura del MASTER. La custodia inicial de cada Tier viene del MASTER publicado, aunque difiera de la imagen ilustrativa.
+
+El botón de publicación requiere administración vigente, CSRF, preview, confirmación y snapshot sin conflictos. Ver `RELEASE_NOTES_v2.0.39.md`. No hay cambios de credenciales ni despliegue automático.
+
+## v2.0.40 · Gestión USDT: Compras vs Balancer
+
+- `liquidity_reserves.py` concentra los presupuestos de los dos modos y la exclusión QF. **Compras O2/O4** dispone de todo USDT operativo no comprometido, gastando primero la bolsa semanal y después, si hace falta, la asignación Balancer. **Balancer** solo consume su asignación explícitamente publicada y el ingreso *condicional* de sus propias ventas simuladas; los proceeds no se cuentan como efectivo real antes del fill. Nunca se suma QF por segunda vez.
+- La nueva asignación `BALANCER_RESERVE_ASSIGNED_USDT` es un monto en USDT, NO un porcentaje y NO una transferencia; se publica mediante Configuración → Objetivos de gestión, con autorización administrativa y límite igual al USDT operativo físico. Si el campo falta o figura PENDIENTE, el presupuesto BUY actual de Balancer es USDT 0, no se infiere del mix objetivo, ni se transfiere caja semanal. El motor antiguo (25% P) deja de dimensionar Balancer en esta versión.
+- Las ventas del Balancer solo aumentan presupuesto ejecutable tras registro de fills reales y conciliación del efectivo en el MASTER; los escenarios de ventas simuladas siguen identificados como *condicionales*. La aplicación no registra fills ni mueve dinero automáticamente.
+- Los porcentajes de liquidez de Configuración permanecen **objetivos de planificación**; la asignación en USDT es el gate operativo de Balancer. No modificar balances físicos para intentar alcanzar objetivos.
+- Antes de habilitar el flujo en producción, el MASTER debe publicar la política actualizada. Ningún lanzamiento de código modifica automáticamente su 01_CONTROL o los parámetros de Google Sheets.

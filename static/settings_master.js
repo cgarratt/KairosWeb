@@ -1,9 +1,9 @@
 (() => {
   'use strict';
   const fmt=window.KairosFormatting;
-  const names={units:'Maestro de unidades',targets:'Objetivos y Tiers',tier_custody:'Custodia por Tier',
+  const names={portfolio_goals:'Objetivos de gestión del portafolio',units:'Maestro de unidades',targets:'Objetivos y Tiers',tier_custody:'Custodia por Tier',
     liquidity:'Liquidez por venue',capital_targets:'Objetivos de liquidez y ReservaTrading (%)',parameters:'Parámetros',pivots:'Pivotes y referencias',mcp:'Estado de conexiones MCP'};
-  const desc={units:'02_POSICIONES · Unidades HODL, Core y Exchange; inversión remanente. Total y costo medio se calculan automáticamente.',
+  const desc={portfolio_goals:'Una sola vista: Cripto vs Liquidez, Tier 1/2/3, objetivos de USDT/Reservas y HODL/Core/Exchange. Los cuatro grupos se validan y publican en la misma revisión, sin modificar saldos físicos.',units:'02_POSICIONES · Unidades HODL, Core y Exchange; inversión remanente. Total y costo medio se calculan automáticamente.',
     targets:'02_POSICIONES · Objetivos de los 12 activos; la suma debe ser 100%.',
     tier_custody:'04_CUSTODIA · Porcentajes simulados por Tier; no realiza traspasos reales.',
     liquidity:'03_LIQUIDEZ · Saldos USDT reales por venue; Quantfury se cuenta una sola vez. Para porcentajes objetivo abre «Objetivos de liquidez y ReservaTrading (%)».',
@@ -42,7 +42,7 @@
   const status=document.getElementById('settings-msg'), save=document.getElementById('settings-save');
   const hint=document.getElementById('settings-admin-state');const more=document.getElementById('settings-pivots-tools');
   const totals=document.getElementById('settings-totals');
-  let state=null,tab='units',pivots={},archiveLoaded=false,refreshingPivots=false,autoO1Started=false;
+  let state=null,tab='portfolio_goals',pivots={},archiveLoaded=false,refreshingPivots=false,autoO1Started=false;
   const clReviewProofs={};
   const waveReviewProofs={};
 
@@ -279,7 +279,7 @@
   function draw(){
     document.getElementById('settings-title').textContent=names[tab];
     document.getElementById('settings-desc').textContent=desc[tab];
-    save.textContent=tab==='pivots'?'Validar → Publicar pivotes':'Guardar cambios';
+    save.textContent=(tab==='pivots'||tab==='portfolio_goals')?'Validar → Publicar':'Guardar cambios';
     document.getElementById('settings-snapshot').textContent=state?`Snapshot: ${state.snapshot_id} · Corte: ${state.fecha_corte} · Cambios auditados`:'';
     body.replaceChildren();totals.replaceChildren();more.hidden=tab!=='pivots';
     const pivotMatrix=document.getElementById('settings-pivot-matrix');pivotMatrix.hidden=tab!=='pivots';if(tab!=='pivots')pivotMatrix.replaceChildren();
@@ -289,6 +289,7 @@
     if(tab==='mcp'){body.textContent='';return;}
     if(!state){body.textContent='Google Sheets no disponible.';return;}
     if(tab==='pivots'){drawPivotTable();return;}
+    if(tab==='portfolio_goals'){drawGoals();return;}
     updatePivotPublicationHint();
     const rows=state.sections[tab]||[];
     const groupSlots={};
@@ -340,6 +341,78 @@
     }
     updateComputed();
   }
+  // Hierarchical targets: deliberately distinct from balances and operational
+  // Balancer liquidity policy. No write occurs until admin preview + publication.
+  const GOAL_GROUPS = [
+    {id:'portfolio',title:'1. Portafolio global',caption:'Porcentaje del patrimonio objetivo. No representa caja física.',fields:[['crypto','Cripto'],['liquidity','Liquidez total']]},
+    {id:'tiers',title:'2. Capas cripto',caption:'Distribución de la manga cripto entre T1, T2 y T3.',fields:[['T1','Tier 1'],['T2','Tier 2'],['T3','Tier 3']]},
+    {id:'liquidity_mix',title:'3. Distribución de liquidez objetivo',caption:'Porcentajes dentro de la Liquidez total, no sobre patrimonio ni el saldo Quantfury.',fields:[['usdt','USDT operativos'],['balancer','Reserva Balancer (objetivo)'],['trading','ReservaTrading (objetivo)']]},
+  ];
+  function goalRead(key){const input=body.querySelector(`[data-goal="${key}"]`);if(!input)throw Error('Falta el campo '+key);
+    const text=input.value.trim().replace(',','.');if(!/^(?:\d+)(?:\.\d+)?$/.test(text))throw Error('Porcentaje inválido: '+key);
+    const v=Number(text);if(!Number.isFinite(v)||v<0||v>100)throw Error('Porcentaje fuera de 0–100: '+key);return v/100;
+  }
+  function collectGoals(){
+    const p={group:'portfolio',crypto:goalRead('portfolio.crypto'),liquidity:goalRead('portfolio.liquidity')};
+    const t={group:'tiers',T1:goalRead('tiers.T1'),T2:goalRead('tiers.T2'),T3:goalRead('tiers.T3')};
+    const l={group:'liquidity',usdt:goalRead('liquidity_mix.usdt'),balancer:goalRead('liquidity_mix.balancer'),trading:goalRead('liquidity_mix.trading')};
+    const assigned=body.querySelector('[data-goal-cash="balancer"]');
+    if(assigned){const amount=Number(assigned.value);if(!Number.isFinite(amount)||amount<0||amount>Number(state.sections.portfolio_goals.usdt_operating_actual)+1e-6)throw Error('Reserva Balancer asignada supera USDT operativo físico.');l.balancer_allocated_usdt=amount;}
+    const c=['T1','T2','T3'].map(tier=>({group:'custody',tier,hodl:goalRead('custody.'+tier+'.hodl'),core:goalRead('custody.'+tier+'.core'),exchange:goalRead('custody.'+tier+'.exchange')}));
+    for(const [name,vals] of [['Cripto/Liquidez',[p.crypto,p.liquidity]],['Tiers',[t.T1,t.T2,t.T3]],['Liquidez/Reservas',[l.usdt,l.balancer,l.trading]],...c.map(x=>['Custodia '+x.tier,[x.hodl,x.core,x.exchange]])]){
+      if(Math.abs(vals.reduce((a,b)=>a+b,0)-1)>1e-8)throw Error(name+' debe sumar exactamente 100%.');
+    }
+    return [p,t,l,...c];
+  }
+  function goalInput(key,value,label){const holder=el('label','goal-field');holder.append(el('span','',label));
+    const inp=el('input');inp.type='number';inp.step='0.01';inp.min='0';inp.max='100';inp.inputMode='decimal';inp.value=cleanFloat(Number(value)*100);inp.dataset.goal=key;
+    inp.setAttribute('aria-label',label);inp.addEventListener('input',updateGoalTotals);holder.append(inp);return holder;
+  }
+  function updateGoalTotals(){totals.replaceChildren();const summaries=[];let valid=true;
+    for(const [label,keys] of [['Cripto + Liquidez',['portfolio.crypto','portfolio.liquidity']],['Tiers',['tiers.T1','tiers.T2','tiers.T3']],['Liquidez y reservas',['liquidity_mix.usdt','liquidity_mix.balancer','liquidity_mix.trading']],
+      ...['T1','T2','T3'].map(t=>['Custodia '+t,['custody.'+t+'.hodl','custody.'+t+'.core','custody.'+t+'.exchange']])]){
+      try{const total=keys.reduce((acc,k)=>acc+goalRead(k),0)*100;const ok=Math.abs(total-100)<1e-6;valid=valid&&ok;summaries.push({label,total,ok});}
+      catch(_){valid=false;summaries.push({label,total:NaN,ok:false});}
+    }
+    const panel=el('div','settings-total-panel goal-sums');summaries.forEach(x=>panel.append(el('span',x.ok?'valid-value':'invalid-value',x.label+': '+(Number.isFinite(x.total)?x.total.toFixed(2)+'%':'N/D')+' / 100%')));totals.append(panel);
+    const m=body.querySelector('#goal-preview');
+    const assignment=body.querySelector('[data-goal-cash=\"balancer\"]');
+    if(assignment&&state){const v=Number(assignment.value);const cap=Number(state.sections.portfolio_goals.usdt_operating_actual);if(!assignment.value.trim()||!Number.isFinite(v)||v<0||v>cap+1e-6){valid=false;totals.append(el('p','invalid-value','Reserva Balancer USDT: debe estar entre 0 y el USDT operativo publicado ('+cap.toFixed(2)+').'));}}
+    if(m&&valid&&state){
+      const entries=collectGoals(),g=entries[0],t=entries[1],liq=entries[2],cus=entries.slice(3);
+      const base=state.sections.portfolio_goals.token_targets;
+      const old=Object.fromEntries(['T1','T2','T3'].map(tier=>[tier,base.filter(r=>r.tier===tier).reduce((a,r)=>a+Number(r.target),0)]));
+      const targets=base.map(r=>({token:r.token,percent:old[r.tier]?100*t[r.tier]*r.target/old[r.tier]:0}));
+      const h=Object.fromEntries(cus.map(r=>[r.tier,r]));const protectedShare=['T1','T2','T3'].reduce((sum,tier)=>sum+t[tier]*(h[tier].hodl+h[tier].core),0);
+      const totals=[g.crypto*protectedShare,g.crypto*(1-protectedShare),g.liquidity*(liq.usdt+liq.balancer),g.liquidity*liq.trading];
+      m.replaceChildren(el('strong','',`Vista previa: HODL/Core ${(totals[0]*100).toFixed(2)}%, Exchange ${(totals[1]*100).toFixed(2)}%, Liquidez/Reserva Balancer ${(totals[2]*100).toFixed(2)}%, ReservaTrading ${(totals[3]*100).toFixed(2)}% del patrimonio objetivo.`),
+      el('p','settings-hint','Objetivos por token derivados (manga cripto): '+targets.map(x=>x.token+' '+x.percent.toFixed(2)+'%').join(' · ')));
+    }else if(m)m.textContent='Completa las seis validaciones al 100% para generar la vista previa.';
+    save.disabled=!state?.is_admin||!state?.write_configured||!valid;
+  }
+  function drawGoals(){
+    const g=state.sections.portfolio_goals;
+    for(const group of GOAL_GROUPS){
+      const card=el('section','goal-card');card.append(el('h4','',group.title),el('p','settings-hint',group.caption));
+      const row=el('div','goal-grid');const values=group.id==='portfolio'?g.portfolio:group.id==='tiers'?g.tiers:g.liquidity_mix;
+      group.fields.forEach(([key,label])=>row.append(goalInput(group.id+'.'+key,values[key],label+' (%)')));
+      card.append(row);body.append(card);
+    }
+    const assignment=el('section','goal-card');assignment.append(el('h4','','Asignación real de reserva Balancer'),el('p','settings-hint','USDT virtualmente asignado desde la liquidez fuera de Quantfury. No es un porcentaje ni una transferencia real. Compras O2/O4 puede disponer de esta reserva cuando consuma el USDT semanal.'));
+    const cashInput=el('input');cashInput.type='number';cashInput.min='0';cashInput.step='0.01';cashInput.value=String(g.balancer_assigned_usdt||0);cashInput.dataset.goalCash='balancer';cashInput.addEventListener('input',updateGoalTotals);
+    const cashLabel=el('label','goal-field');cashLabel.append(el('span','','Reserva Balancer asignada (USDT)'),cashInput);assignment.append(cashLabel,el('p','settings-hint',`USDT operativo publicado: ${Number(g.usdt_operating_actual).toFixed(2)} · ${g.balancer_assignment_published?'ASIGNACIÓN PUBLICADA':'PENDIENTE: Balancer BUY limitado a USDT 0 hasta publicar asignación'}`));body.append(assignment);
+    const cust=el('section','goal-card');cust.append(el('h4','','4. Custodia por Tier'),el('p','settings-hint','Cada Tier suma 100% entre HODL, Core y Exchange. Son metas, no transferencias.'));
+    ['T1','T2','T3'].forEach(t=>{
+      const row=el('div','goal-grid');row.append(el('strong','goal-tier',t));
+      ['hodl','core','exchange'].forEach(k=>row.append(goalInput('custody.'+t+'.'+k,g.custody[t][k],k==='hodl'?'HODL (%)':k==='core'?'Core (%)':'Exchange (%)')));
+      cust.append(row);
+    });body.append(cust);
+    const preview=el('section','goal-preview');preview.id='goal-preview';body.append(preview);
+    body.append(el('p','settings-hint',g.liquidity_mix_published?
+      'Reparto de liquidez publicado en 12_PARAMETROS_KAIROS. El objetivo de ReservaTrading no altera los USDT reales de Quantfury ni la política operativa del Balancer.':
+      'Borrador inicial de reservas 70/20/10 tomado de tu distribución propuesta: AÚN NO PUBLICADO. Requiere autorización administrativa y publicación para ser operativo como objetivo.'));
+    updateGoalTotals();
+  }
   function fromInput(field,value,entry){
     if(field==='tier')return value;
     if(tab==='parameters'&&field==='value')return fmt.fromDisplay(value,entry);
@@ -353,7 +426,7 @@
     }
     return n;
   }
-  function collect(){if(tab==='pivots')return collectPivotMatrix();const originals=state.sections[tab]||[];const out=[];
+  function collect(){if(tab==='portfolio_goals')return collectGoals();if(tab==='pivots')return collectPivotMatrix();const originals=state.sections[tab]||[];const out=[];
     originals.forEach((entry,index)=>{const data={[rowKey()]:entry[rowKey()]};let dirty=false;
       for(const [field] of sectionFields[tab]){
         const input=body.querySelector(`[data-index="${index}"][data-field="${field}"]`);
@@ -399,7 +472,7 @@
     }catch(e){state=null;draw();message('DATA ERROR: '+e.message);}
   }
   const initialTab=new URLSearchParams(location.search).get('tab');
-  if(initialTab==='mcp'){tab='mcp';nav.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('selected',x.dataset.tab===tab));}
+  if(initialTab&&Array.from(nav.querySelectorAll('[data-tab]')).some(b=>b.dataset.tab===initialTab)){tab=initialTab;nav.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('selected',x.dataset.tab===tab));}
   nav.addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(!b)return;tab=b.dataset.tab;
     nav.querySelectorAll('button').forEach(x=>x.classList.toggle('selected',x===b));draw();message('Edición local; aún no se ha publicado ningún cambio.');
     if(tab==='mcp')document.dispatchEvent(new CustomEvent('kairos-mcp-check'));
@@ -421,16 +494,16 @@
     }catch(e){message('NO VALIDADO: '+e.message);return;}
     const accepted=window.confirm(tab==='pivots'
       ? '¿Validar propuesta de pivotes por onda? Las confirmaciones publicadas serán inmutables y aplicarán a todos los modos.'
-      : 'Se validará y publicará una nueva revisión auditada de Google Sheets. ¿Continuar?');if(!accepted)return;
+      : tab==='portfolio_goals'?'Se validarán seis sumas al 100%, los 12 targets y la custodia de los Tiers. No cambiarán unidades ni USDT físicos. ¿Revisar propuesta?': 'Se validará y publicará una nueva revisión auditada de Google Sheets. ¿Continuar?');if(!accepted)return;
     save.disabled=true;message('Validando integridad, publicando y recargando el Master…');
     try{
       const req={expected_snapshot_id:state.snapshot_id,section:tab,entries,evidence};
       let res;
-      if(tab==='pivots'){
+      if(tab==='pivots'||tab==='portfolio_goals'){
         const response=await fetch('/api/settings/preview',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-Kairos-Csrf':state.csrf_token||''},body:JSON.stringify(req)});
         const preview=await response.json();
         if(!response.ok||preview.status!=='VALIDATED_DRAFT')throw Error(preview.reason||preview.status||'Preview inválido');
-        if(!window.confirm(`Revisión validada (${preview.changed_fields} campos). ¿PUBLICAR ahora los pivotes en una nueva versión del Master?`)){message('Validado, NO publicado.');return;}
+        if(!window.confirm(`Revisión validada (${preview.changed_fields} campos). ¿PUBLICAR ahora estos objetivos en una nueva versión del Master?`)){message('Validado, NO publicado.');return;}
         res=await api('/api/settings/publish',{...req,preview_token:preview.preview_token,confirm:'PUBLICAR'},state.csrf_token);
       }else res=await api('/api/settings/save',req,state.csrf_token);
       message(`PUBLICADO: ${res.snapshot_id}. ${res.written_fields} campos auditados. Recargando…`);

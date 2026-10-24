@@ -15,9 +15,9 @@ def render(trading=7225, cash=27520, reserve=0):
 
 def test_budget_uses_cash_less_qf_not_25_percent_p():
     html=render()
-    assert 'Presupuesto Compras</span><strong>$20,295</strong>' in html
+    assert 'Compras O2/O4 (incl. Balancer)</span><strong>$20,295</strong>' in html
     assert 'Reserva Trading</span><strong>$7,225</strong>' in html
-    assert 'Reserva Balancer estimada</span><strong>$0</strong>' in html
+    assert 'Reserva Balancer asignada</span><strong>$0</strong>' in html
     assert '73.7% USDT físico' in html
     assert '26.3% USDT físico' in html
     assert '$20,957' not in html
@@ -25,11 +25,11 @@ def test_budget_uses_cash_less_qf_not_25_percent_p():
 
 def test_balancer_is_subset_not_double_counted():
     html=render(reserve=1200)
-    assert 'Presupuesto Compras</span><strong>$20,295</strong>' in html
-    assert 'Reserva Balancer estimada</span><strong>$1,200</strong>' in html
-    assert 'Incluida en Compras; no sumar otra vez' in html
-    assert 'Componente Balancer incluido en el presupuesto Compras' in html
+    assert 'Compras O2/O4 (incl. Balancer)</span><strong>$20,295</strong>' in html
+    assert 'Reserva Balancer asignada</span><strong>$1,200</strong>' in html
+    assert 'Solo para Balancer; Compras puede extenderse a ella' in html
+    assert 'Reserva Balancer utilizable por Compras O2/O4; sin contarse dos veces' in html
 
 def test_zero_cash_no_divide_by_zero():
     html=render(cash=0,trading=0)
-    assert 'Presupuesto Compras</span><strong>$0</strong>' in html
+    assert 'Compras O2/O4 (incl. Balancer)</span><strong>$0</strong>' in html

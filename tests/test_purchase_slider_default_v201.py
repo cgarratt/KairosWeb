@@ -6,7 +6,7 @@ def test_compras_slider_uses_available_cash_percent_instead_of_patrimony_percent
     assert "max=\"{{ 100 if mode.slug=='compras' else payload.current.max_percent }}\"" in html
     assert "value=\"{{ 100 if mode.slug=='compras' else payload.current.requested_percent|default(payload.current.default_percent) }}\"" in html
     assert "step=\"{{ 0.1 if mode.slug=='compras' else 'any' }}\"" in html
-    assert "Capital para compras (% de USDT disponible)" in html
+    assert "Capital para compras O2/O4 (% de USDT sin QF)" in html
     assert "100% = Máximo disponible:" in html
     assert "0% · USDT $0" in html
     assert "window.KairosPurchaseWeights.budgetFromAvailablePercent(target,maxBuyCash)" in html

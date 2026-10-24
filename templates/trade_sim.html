@@ -34,7 +34,7 @@
 {% endif %}
 <div class="sim-metric"><small>{{ '◇ Compra simulada' if mode.slug=='compras' else '◇ Ventas simuladas' }}</small><b id="allocation-metric">—</b><small id="allocation-caption">{{ 'Presupuesto definido por el slider, no compra ejecutada' if mode.slug=='compras' else 'Solo escenario, no orden' }}</small></div>
 </div>
-<div class="control-panel"><div class="sim-panel-title"><strong>{{ 'Capital para compras (% de USDT disponible)' if mode.slug=='compras' else 'Liquidez objetivo (% del patrimonio P)' }}</strong><strong id="slider-value" style="font-size:23px;color:#1657a7">—</strong></div>
+<div class="control-panel"><div class="sim-panel-title"><strong>{{ 'Capital para compras O2/O4 (% de USDT sin QF)' if mode.slug=='compras' else 'Liquidez objetivo (% del patrimonio P)' }}</strong><strong id="slider-value" style="font-size:23px;color:#1657a7">—</strong></div>
 <input id="allocation-slider" type="range" aria-label="{{ 'Porcentaje de USDT disponible para compras' if mode.slug=='compras' else 'Porcentaje de liquidez objetivo' }}" min="0" max="{{ 100 if mode.slug=='compras' else payload.current.max_percent }}" step="{{ 0.1 if mode.slug=='compras' else 'any' }}" value="{{ 100 if mode.slug=='compras' else payload.current.requested_percent|default(payload.current.default_percent) }}">
 <div style="display:flex;justify-content:space-between;gap:12px" class="sub"><span>{{ '0% · USDT $0' if mode.slug=='compras' else '0% · No se venden activos si la caja actual supera la meta' }}</span><span>{{ '100% = Máximo disponible:' if mode.slug=='compras' else '100% objetivo teórico (sujeto a Exchange)' }} {% if mode.slug=='compras' %}<strong id="max-buy-slider">—</strong>{% endif %}</span></div>
 {% if mode.slug=='compras' %}<p class="sub" style="margin-top:10px">Capital seleccionado (% de USDT disponible) para Compras: <strong id="selected-buy-budget">—</strong> · Llenado secuencial: primero C1, luego C2, C3 y C4.</p>{% endif %}
@@ -107,6 +107,9 @@ function refreshFiboDraft(){
  return check;
 }
 
+const buckets=source.current.liquidity_reserves||{};
+// Prioridad del gasto O2/O4: primero bolsa semanal, luego Balancer.
+const fundingOrder=`USDT semanal primero: ${Number(buckets.weekly_uncommitted||0).toFixed(2)} · extensión Balancer: ${Number(buckets.balancer_uncommitted||0).toFixed(2)} · QF protegida: ${Number(buckets.qf_protected||0).toFixed(2)}`;
 const symbols={BTC:'bitcoin-btc',ETH:'ethereum-eth',SOL:'solana-sol',LINK:'chainlink-link',HYPE:'hyperliquid-hype',HBAR:'hedera-hbar',SUI:'sui-sui',ONDO:'ondo-finance-ondo',PUMP:'pump-fun-pump',PLUME:'plume-plume',PEPE:'pepe-pepe',VIRTUAL:'virtual-protocol-virtual'};
 const dollar=x=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(x);
 const quantity=x=>new Intl.NumberFormat('en-US',{maximumFractionDigits:x>=100?2:6}).format(x);

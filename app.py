@@ -15,7 +15,7 @@ import httpx
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
-from admin_origin import same_origin_allowed
+from admin_origin import same_origin_allowed, valid_logout_csrf
 
 from flask import Flask, Response, jsonify, render_template, request, abort, redirect, g, session, url_for
 from fastmcp import Client
@@ -26,7 +26,9 @@ from werkzeug.exceptions import HTTPException
 from google_sheets_master import get_state, SheetDataError, public_failure_code, cache_status as sheet_cache_status
 from hype_weekly import aggregate_weeks, HypeHistoryError
 from portfolio_unrealized import summarize_unrealized, portfolio_allocation, category_allocation, pri_valuation_history, btc_equivalent, current_capital_distribution
-from custody_balancer import compare_custody, CustodyError
+from custody_balancer import compare_custody
+from custody_balancer import CustodyError
+from liquidity_reserves import calculate_budgets, allocation_from_master
 from orders_inbox import drift_tone, tradingbot_tokens
 from kairos_sheets_features import (
     unread_alerts, mark_alert_read, mark_all_alerts_read, settings_data, prepare_changes,
@@ -34,11 +36,12 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.36'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.40'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
-                  SESSION_COOKIE_SECURE=True, PERMANENT_SESSION_LIFETIME=timedelta(minutes=30))
+                  SESSION_COOKIE_SECURE=True, SESSION_REFRESH_EACH_REQUEST=True,
+                  PERMANENT_SESSION_LIFETIME=timedelta(days=30))
 app.secret_key = os.getenv('KAIROS_SESSION_SECRET', '') or None
 
 # Bound to validated Google Sheets state, once per request.  No disk JSON source.
@@ -119,17 +122,67 @@ def _login_rate_reset(ip):
         _LOGIN_ATTEMPTS.pop(ip, None)
 
 
+# Persistent login: the signed cookie lasts 30 days since the last active visit.
+# Regular visits renew it; only inactivity, manual logout or signing-key rotation
+# requires another portfolio login. Admin elevation stays short lived.
+PORTFOLIO_IDLE_SECONDS = 30 * 24 * 3600
+PORTFOLIO_SESSION_ONLY_IDLE_SECONDS = 12 * 3600
+ADMIN_ELEVATION_SECONDS = 30 * 60
+SESSION_ACTIVITY_WRITE_SECONDS = 60 * 60
+
+
+def _credential_tag(scope):
+    """Invalidate remembered sessions when the matching password changes.
+
+    The cookie carries a keyed digest, NEVER credentials or a plain password hash.
+    """
+    if not app.secret_key:
+        return ''
+    if scope == 'admin':
+        material = os.getenv('KAIROS_SETTINGS_ADMIN_KEY', '')
+    else:
+        material = os.getenv('KAIROS_WEB_USER', '') + '\0' + os.getenv('KAIROS_WEB_PASSWORD', '')
+    payload = ('kairos:' + scope + ':').encode('utf-8') + material.encode('utf-8')
+    return hmac.new(app.secret_key.encode('utf-8'), payload, hashlib.sha256).hexdigest()
+
+
+def _session_time_valid(value, now, max_age):
+    return (type(value) in (int, float) and 0 <= now - value <= max_age
+            and math.isfinite(value))
+
+
 # Guest access is server-side REDACTED. A browser-only balance toggle is never a security boundary.
 def _portfolio_authorized():
-    return bool(app.secret_key and os.getenv('KAIROS_WEB_PASSWORD') and
-                session.get('kairos_portfolio') is True)
+    if not (app.secret_key and os.getenv('KAIROS_WEB_PASSWORD') and
+            session.get('kairos_portfolio') is True):
+        return False
+    if not hmac.compare_digest(str(session.get('portfolio_credential_tag', '')),
+                               _credential_tag('portfolio')):
+        session.clear()
+        return False
+    now = time.time()
+    issued = session.get('portfolio_login_at')
+    seen = session.get('portfolio_seen_at')
+    # Old cookies from releases without explicit issuance and idle time are
+    # not silently promoted to a 30-day authorization.
+    idle_seconds = (PORTFOLIO_IDLE_SECONDS if session.get('portfolio_remember_me') is True
+                    else PORTFOLIO_SESSION_ONLY_IDLE_SECONDS)
+    if (type(issued) not in (int, float) or not math.isfinite(issued) or
+            issued > now or not _session_time_valid(seen, now, idle_seconds)):
+        session.clear()
+        return False
+    # Bound cookie writes. Flask renews permanent cookies on each response,
+    # but signed session activity needs recording at most hourly.
+    if now - seen >= SESSION_ACTIVITY_WRITE_SECONDS:
+        session['portfolio_seen_at'] = now
+    return True
 
 
 @app.before_request
 def authenticate():
     path = request.path
     # Static assets and Render liveness are public. API values remain private.
-    if path == '/health' or path.startswith('/static/') or path in ('/login', '/api/modes'):
+    if path == '/health' or path.startswith('/static/') or path in ('/login', '/logout', '/api/modes'):
         return None
     if not _portfolio_authorized():
         if path in ('/', '/mode/portafolio'):
@@ -177,9 +230,15 @@ def portfolio_login():
             if secrets.compare_digest(user, expected_user) and secrets.compare_digest(password, expected_password):
                 _login_rate_reset(ip)
                 session.clear()
-                session.permanent = True
+                remember = request.form.get('remember_me') == 'on'
+                session.permanent = remember
                 session['kairos_portfolio'] = True
+                session['portfolio_remember_me'] = remember
+                session['portfolio_credential_tag'] = _credential_tag('portfolio')
+                session['portfolio_login_at'] = time.time()
+                session['portfolio_seen_at'] = time.time()
                 session['csrf_token'] = secrets.token_urlsafe(32)
+                session['logout_csrf'] = secrets.token_urlsafe(32)
                 return redirect(target)
             error = 'Usuario o contraseña incorrectos.'
         _login_rate_fail(ip)
@@ -193,12 +252,23 @@ def portfolio_login():
                            login_csrf=token, destination=destination, error=None)
 
 
-@app.route('/logout', methods=['POST'])
+@app.route('/logout', methods=['GET', 'POST'])
 def portfolio_logout():
-    if not _portfolio_authorized() or not _same_origin() or not _csrf_ok():
-        return jsonify({'status':'FORBIDDEN'}), 403
-    session.clear()
-    return redirect(url_for('integral_portfolio_page'))
+    # A GET never changes authentication state (prevents cross-site logout links).
+    if request.method == 'GET':
+        return redirect(url_for('integral_portfolio_page'))
+    # Guests or expired sessions have nothing to log out from.
+    if not _portfolio_authorized():
+        return redirect(url_for('integral_portfolio_page'), code=303)
+    # HTML forms send csrf as a POST field, not the X-Kairos-Csrf API header.
+    # Keep a dedicated logout token to avoid stale tabs after admin CSRF rotation;
+    # support existing v2.0.36 sessions during a rolling deployment.
+    saved = session.get('logout_csrf') or session.get('csrf_token', '')
+    given = request.form.get('csrf', '')
+    if not _same_origin() or not valid_logout_csrf(saved, given):
+        return jsonify({'status':'FORBIDDEN', 'reason':'LOGOUT_CSRF_OR_ORIGIN'}), 403
+    session.clear()  # Both user and admin levels are invalidated.
+    return redirect(url_for('integral_portfolio_page'), code=303)
 
 @app.before_request
 def bind_published_sheet():
@@ -206,7 +276,7 @@ def bind_published_sheet():
     independent={'/health','/api/mcp-status','/api/mcp-config-check','/api/mcp-diagnostics',
                  '/api/alerts/unread','/api/alerts/read','/api/alerts/read-all',
                  '/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status', '/api/mcp-refresh', '/api/health/diagnostics'}
-    if request.path in independent or request.path in ('/login','/admin/login','/api/admin/session') or request.path=='/settings' or request.path.startswith('/static/'):
+    if request.path in independent or request.path in ('/login','/logout','/admin/login','/api/admin/session') or request.path=='/settings' or request.path.startswith('/static/'):
         return None
     try:
         g.kairos_state=get_state()
@@ -618,7 +688,8 @@ def build_mode_payload(slug, d, observed):
     if slug in ('compras','forecast'):
         p=d['total_value']; cash=d['usdt_total']; trading=d['trading_reserve']
         max_percent=(100*max(0.0,cash-trading)/p) if p else 0.0
-        reference_cap=max(0.0,cash-trading)
+        reserves=calculate_budgets(cash,trading,balancer_allocated=allocation_from_master(g.kairos_state['parameters']))
+        reference_cap=reserves['compras_max']
         purchase_tokens=[{'token':r['token'],'tier':r['tier'],'price':r['price'],'weight':r['weight'],'target':r['target'],
             'current_usdt':r['value'],'units':r['units'],
             'gap_usdt':max(0.0,(r['target']-r['weight'])*d['crypto_value']),
@@ -627,7 +698,8 @@ def build_mode_payload(slug, d, observed):
             for r in d['rows']]
         purchase_current={'P':p,'cash':cash,'trading':trading,'cash_pct':d['usdt_pct']*100,
              'floor':approved_numeric('STRUCTURAL_USDT_TARGET')*p,'max_percent':max_percent,'reference_cap':reference_cap,
-             'crypto_value':d['crypto_value']}
+             'crypto_value':d['crypto_value'], 'liquidity_reserves':reserves,
+             'weekly_first_usdt':reserves['weekly_uncommitted'],'balancer_extension_usdt':reserves['balancer_uncommitted']}
     if slug in ('compras','forecast'):
         # Shared CL -> weekly O1 -> O2 Fibonacci source for every scenario.
         # The historical C1/C2 archive is NEVER inverted to synthesize O1.
@@ -677,7 +749,7 @@ def build_mode_payload(slug, d, observed):
             'weekly_context':weekly_context,
             'drift_band_pp':approved_numeric('DRIFT_BAND_PP'),
             'structural_liquidity_target':approved_numeric('STRUCTURAL_USDT_TARGET'),
-            'notes':['Compras: P1 es el último mínimo semanal fechado (PROPUESTO/VALIDADO/CONFIRMADO); P2 es el mayor máximo semanal cerrado posterior.',
+            'notes':['Presupuesto O2/O4: todo USDT no QF, utiliza primero liquidez semanal y después Reserva Balancer asignada, sin doble asignación.','Compras: P1 es el último mínimo semanal fechado (PROPUESTO/VALIDADO/CONFIRMADO); P2 es el mayor máximo semanal cerrado posterior.',
              'O2 aplica sus pesos; O4 sus pesos; retroceso alcista genérico utiliza pesos O2 publicados.',
              'Sin P1 con fecha/precio válidos o sin máximo semanal posterior P2: USDT 0. PROPUESTO permite simulación, nunca ejecución real; compra solo INFRA y fondo no gastado queda en USDT.',
              'Ventas ordinarias y Forecast hipotético no heredan este bloqueo. Simulación no genera órdenes.']}
@@ -979,22 +1051,17 @@ def balancer_report(d, observed):
     """
     rows=sorted(d['rows'],key=lambda r:r['value'],reverse=True)
     p=d['total_value']; cash=d['usdt_total']; crypto=d['crypto_value']
-    floor=approved_numeric('STRUCTURAL_USDT_TARGET')*p
-    excess=max(0,cash-floor)
-    gap=max(0,floor-cash)
-    operational_25=.25*p  # forecast purchase envelope; legacy C1/C2 are NOT added
-    c1=operational_25; c2=0.0  # read-only compatibility for older templates
     trading=d['trading_reserve']
-    operational_25=.25*p
-    residual_after_bags=cash-operational_25-trading
-    # The 5% P is a non-binding reference. Formula approved by the user displays
-    # what remains in physical USDT after protecting C1+C2 and Trading.
-    if PARAMETERS['BALANCER_RESERVE_FORMULA']['status']!='APROBADO' or PARAMETERS['BALANCER_RESERVE_FORMULA']['value']!='MAX(0,USDT_TOTAL-0.25*P-QF_REAL)':
-        raise SheetDataError('Balancer formula has changed; engine revalidation required')
-    reserve=max(0,residual_after_bags)
+    reserves=calculate_budgets(cash,trading,balancer_allocated=allocation_from_master(g.kairos_state['parameters']))
+    reserve=reserves['balancer_max']
+    floor=approved_numeric('STRUCTURAL_USDT_TARGET')*p  # reference target only
+    gap=max(0.,floor-cash)
+    excess=max(0.,cash-floor)
+    operational_25=.25*p  # legacy informational figure only
+    c1=0.;c2=0.
+    residual_after_bags=reserves['weekly_uncommitted']
     reserve_nominal=policy_numeric('BALANCER_NOMINAL_REFERENCE_P',{'REFERENCIA_NO_TOPE'})*p
-    # Indicative ONLY; actual commitments and reserved bags are not reconciled.
-    theoretical_ceiling=max(0,min(excess,residual_after_bags,reserve+excess))
+    theoretical_ceiling=reserves['compras_max']
     band=approved_numeric('DRIFT_BAND_PP')
     # Custody Balancer: published 02_POSICIONES + 04_CUSTODIA, unit-only calculation.
     # The comparison does not assume orders filled or any custody transfer.
@@ -1014,7 +1081,7 @@ def balancer_report(d, observed):
     sale_total=sum(x['value'] for x in sale_preview)
     current_cash_capacity=reserve
     # Conditional scenario: sale proceeds are hypothetical until fill is verified.
-    projected_cash_capacity=reserve+sale_total
+    projected_cash_capacity=calculate_budgets(cash,trading,balancer_allocated=allocation_from_master(g.kairos_state['parameters']),conditional_sell_proceeds=sale_total)['balancer_with_sales_conditional']
     buy_preview=allocate_infra_buys(rows,current_cash_capacity,band)
     buy_total=sum(x['value'] for x in buy_preview)
     sold_by_token={x['token']:x['value'] for x in sale_preview}
@@ -1044,12 +1111,12 @@ def balancer_report(d, observed):
     sell_weights={r['token']:(r['value']-sold_by_token.get(r['token'],0.))/after_sell_crypto if after_sell_crypto else 0 for r in rows}
     return {'generated_at':observed,'snapshot_note':d['note'],'status_badge':'MCP Spot + Sheets PUBLICADO',
       'current':{'P':p,'cash':cash,'crypto':crypto,'floor':floor,'gap':gap,'excess':excess,
-                 'reserve':reserve,'current_cash_capacity':current_cash_capacity,'projected_cash_capacity':projected_cash_capacity,'reserve_nominal':reserve_nominal,'residual_after_bags':residual_after_bags,'operational_25':operational_25,'c1':c1,'c2':c2,'trading':trading,
+                 'reserve':reserve,'liquidity_reserves':reserves,'current_cash_capacity':current_cash_capacity,'projected_cash_capacity':projected_cash_capacity,'reserve_nominal':reserve_nominal,'residual_after_bags':residual_after_bags,'operational_25':operational_25,'c1':c1,'c2':c2,'trading':trading,
                  'operating':d['usdt_operating'],'buy_ceiling':theoretical_ceiling},
       'metrics':[
         {'label':'USDT físico','value':fmt_money(cash),'help':f"{cash/p*100:.1f}% del patrimonio" if p else '', 'tone':'primary'},
         {'label':'Meta estructural USDT','value':fmt_money(floor),'help':'Protección de liquidez','tone':'neutral'},
-        {'label':'Reserva Balancer estimada','value':fmt_money(reserve),'help':'USDT menos 25% P de presupuesto compras y Reserva Trading, sin límite 40%','tone':'warn'},
+        {'label':'Reserva Balancer asignada','value':fmt_money(reserve),'help':'Solo asignación certificada; no se deriva de la meta porcentual ni se consume USDT semanal','tone':'warn'},
         {'label':'Reserva Trading','value':fmt_money(trading),'help':'Reserva separada Quantfury; incluida en USDT físico','tone':'primary'}],
       'custody_comparison':custody_comparison,
       'buys':buy_preview,'sells':sale_preview,'buy_total':buy_total,'sell_total':sale_total,
@@ -1057,11 +1124,11 @@ def balancer_report(d, observed):
       'buy_chart':[{'token':r['token'],'actual':r['weight']*100,'post':buy_weights[r['token']]*100,'target':r['target']*100} for r in buy_candidates],
       'sell_chart':[{'token':r['token'],'actual':r['weight']*100,'post':sell_weights[r['token']]*100,'target':r['target']*100} for r in sell_candidates],
       'buy_cash_after':cash-buy_total,'sell_cash_after':cash+sale_total,
-      'limitations':'05_ORDENES no contiene órdenes activas según MASTER; el libro privado de Exchange no está verificado. Se respetan topes acumulados por Tier y BTC NEVER SELL. Escenarios independientes: ni ventas ni compras son fills.'}
+      'limitations':'La reserva Balancer no asignada en el MASTER tiene capacidad BUY 0 hasta que sea publicada. Compras O2/O4 puede usar todo USDT libre fuera de QF. 05_ORDENES no contiene órdenes activas según MASTER; el libro privado de Exchange no está verificado. Se respetan topes acumulados por Tier y BTC NEVER SELL. Escenarios independientes: ni ventas ni compras son fills.'}
 
 @app.context_processor
 def common_nav():
-    return {'nav_modes':[m for m in MODE_DEFS if m['slug'] in ENABLED_MODE_SLUGS], 'portfolio_authenticated':_portfolio_authorized(), 'portfolio_csrf':session.get('csrf_token','') if _portfolio_authorized() else ''}
+    return {'nav_modes':[m for m in MODE_DEFS if m['slug'] in ENABLED_MODE_SLUGS], 'portfolio_authenticated':_portfolio_authorized(), 'portfolio_csrf':(session.get('logout_csrf') or session.get('csrf_token','')) if _portfolio_authorized() else ''}
 
 @app.route('/')
 def home():
@@ -1273,7 +1340,7 @@ def alerts_mark_read():
         return jsonify({'status':'DATA_ERROR','message':'No se pudo persistir la lectura en Google Sheets.'}),503
 
 
-_SETTINGS_TABS = frozenset(('units', 'targets', 'tier_custody', 'liquidity', 'capital_targets',
+_SETTINGS_TABS = frozenset(('portfolio_goals','units', 'targets', 'tier_custody', 'liquidity', 'capital_targets',
                            'pivots', 'parameters', 'mcp'))
 
 
@@ -1308,8 +1375,19 @@ def get_settings_data():
 
 
 def _admin_authorized():
-    # Signed, HttpOnly, Secure 30-minute session; never use Basic as write permission.
-    return bool(_portfolio_authorized() and app.secret_key and os.getenv('KAIROS_SETTINGS_ADMIN_KEY') and session.get('kairos_admin'))
+    # Independent administrative elevation: 30 minutes absolute, NOT extended
+    # by the 30-day remembered portfolio cookie or ordinary browsing.
+    if not (_portfolio_authorized() and app.secret_key and
+            os.getenv('KAIROS_SETTINGS_ADMIN_KEY') and session.get('kairos_admin')):
+        return False
+    if (not _session_time_valid(session.get('admin_login_at'), time.time(), ADMIN_ELEVATION_SECONDS)
+            or not hmac.compare_digest(str(session.get('admin_credential_tag', '')),
+                                       _credential_tag('admin'))):
+        session.pop('kairos_admin', None)
+        session.pop('admin_login_at', None)
+        session.pop('admin_credential_tag', None)
+        return False
+    return True
 
 
 def _csrf_ok():
@@ -1346,8 +1424,10 @@ def admin_login():
         supplied=request.form.get('admin_key','')
         expected=os.getenv('KAIROS_SETTINGS_ADMIN_KEY','')
         if supplied and secrets.compare_digest(supplied,expected):
-            session.permanent=True
+            # Do not turn a session-only portfolio login into a remembered one.
             session['kairos_admin']=True
+            session['admin_credential_tag']=_credential_tag('admin')
+            session['admin_login_at']=time.time()
             session['csrf_token']=secrets.token_urlsafe(32)
             return redirect(_settings_destination(selected_tab))
         new_csrf=secrets.token_urlsafe(32)
@@ -1362,7 +1442,7 @@ def admin_login():
 @app.route('/admin/logout',methods=['POST'])
 def admin_logout():
     if not _same_origin() or not _csrf_ok():return jsonify({'status':'FORBIDDEN'}),403
-    session.pop('kairos_admin', None);session['csrf_token']=secrets.token_urlsafe(32);return jsonify({'status':'OK'})
+    session.pop('kairos_admin', None);session.pop('admin_login_at', None);session.pop('admin_credential_tag', None);session['csrf_token']=secrets.token_urlsafe(32);return jsonify({'status':'OK'})
 
 
 @app.route('/api/settings/save',methods=['POST'])
@@ -1371,6 +1451,8 @@ def settings_save():
     if not _admin_authorized() or not _csrf_ok():return jsonify({'status':'ADMIN_AUTH_REQUIRED','reason':'Inicia sesión administrativa para guardar cambios.'}),403
     if not os.getenv('KAIROS_GOOGLE_WRITER_JSON'):return jsonify({'status':'WRITE_DISABLED','reason':'Sin identidad Google editora en Render.'}),503
     body=request.get_json(silent=True) or {}
+    if body.get('section')=='portfolio_goals':
+        return jsonify({'status':'PREVIEW_REQUIRED','reason':'Objetivos de gestión: primero Validar, luego PUBLICAR en una segunda confirmación.'}),409
     # A manual CONFIRMADO pivot must be previewed and explicitly published.
     # Legacy direct-save remains available only for candidates and other settings.
     if body.get('section')=='pivots' and any(
@@ -1699,6 +1781,8 @@ def _deployed_asset_status():
         'integral_donut': ('templates/portfolio_integral.html', ('data-capital-chart="donut"', 'integral-donut-sector')),
         'guest_redaction_v2036': ('templates/guest_portfolio.html', ('SALDOS OCULTOS', 'Requiere acceso de usuario')),
         'user_login_v2036': ('templates/portfolio_login.html', ('name="username"', 'name="password"', 'login_csrf')),
+        'persistent_login_v2038': ('app.py', ('PORTFOLIO_IDLE_SECONDS', 'ADMIN_ELEVATION_SECONDS', 'SESSION_REFRESH_EACH_REQUEST=True')),
+        'remember_ui_v2038': ('templates/portfolio_login.html', ('name="remember_me"', 'Mantener sesión iniciada', '30 días')), 
         'auth_gate_v2036': ('app.py', ("@app.route('/login'", 'PORTFOLIO_AUTH_REQUIRED', "@app.route('/logout'")),
         'portfolio_layout_v2022': ('templates/portfolio_integral.html', ('data-layout-row="1"','data-layout-row="2"','data-layout-row="3"','data-layout-row="4"')),
         'allocation_legend_v2032': ('templates/portfolio_integral.html', ('data-token-columns="6+6"', 'data-allocation-cash="USDT"', 'data-allocation-column=', 'port-alloc-columns')),
@@ -1710,8 +1794,10 @@ def _deployed_asset_status():
         'homologation_contract_v2030': ('google_sheets_master.py', ('HOMOLOGATION_RANGE', 'assess_homologation(', 'SNAPSHOT_REFERENCE_STALE')),
         'homologation_ledger_v2031': ('kairos_sheets_features.py', ('HOMOLOGATION_TAB', '_certificate_append(', 'homologate_current_snapshot(')),
         'homologation_diagnostics_v2033': ('app.py', ('/api/settings/homologation-status', 'HOM_WRITER_MISSING', 'write_may_have_committed')),
-        'capital_targets_ui_v2034': ('templates/settings.html', ('data-tab="capital_targets"', 'Objetivos de liquidez y ReservaTrading (%)')),
-        'capital_targets_engine_v2034': ('kairos_sheets_features.py', ("elif category=='capital_targets'", 'CAPITAL_TARGET_SEGMENTS', 'sumar 100%')),
+        'portfolio_goals_ui_v2039': ('templates/settings.html', ('data-tab="portfolio_goals"', 'Objetivos de gestión')),
+        'portfolio_goals_js_v2039': ('static/settings_master.js', ('collectGoals', 'drawGoals', 'updateGoalTotals')),
+        'portfolio_goals_engine_v2039': ('kairos_sheets_features.py', ("if category=='portfolio_goals'", 'portfolio_goals_data(', 'GOAL_LIQ_KEYS')),
+        'liquidity_reserves_v2040': ('liquidity_reserves.py', ('calculate_budgets(', 'allocation_from_master(', 'PENDIENTE_ASIGNACION')),
         'current_capital_donut_v2035': ('templates/portfolio_integral.html', ('Distribución actual del capital', 'data-source="02_POSICIONES_03_LIQUIDEZ_BINANCE_SPOT"', "capital_distribution['items']", 'ReservaTrading QF')),
         'consolidated_dashboard_v2027': ('templates/portfolio_integral.html', ('id="btc-portfolio-total"', 'data-bsi-chart="archived"', 'data-portfolio-executive="12"', 'class="port-status', 'port-coin-logo')),
         'consolidated_navigation_v2025': ('templates/base.html', ('href="/mode/{{ mode.slug }}"', 'global-nav-link')),
@@ -1741,7 +1827,7 @@ def _deployed_asset_status():
         'buy_postweight_semaphore': ('static/o2_sequential.js', ('function postBuySemaphore(', "state:'green'", "state:'amber'", "state:'red'", "state:'none'")),
         'buy_postweight_color_ui': ('templates/trade_sim.html', ('buy-weight-green', 'buy-weight-amber', 'buy-weight-red', 'postBuySemaphore(amount,postWeight,t.target)', 'USDT &gt; 0')),
         'buy_custom_fibo_weights': ('static/purchase_weights.js', ('function rebalance(', 'function normalize(', 'function asFractions(', 'function waterfall(', 'function validateDraft(')),
-        'buy_slider_percent_available': ('templates/trade_sim.html', ('Capital para compras (% de USDT disponible)', 'budgetFromAvailablePercent(target,maxBuyCash)', 'Llenado secuencial: primero C1, luego C2, C3 y C4')),
+        'buy_slider_percent_available': ('templates/trade_sim.html', ('Capital para compras O2/O4 (% de USDT sin QF)', 'budgetFromAvailablePercent(target,maxBuyCash)', 'Llenado secuencial: primero C1, luego C2, C3 y C4')),
         'buy_waterfall_fixed_percentages': ('static/purchase_weights.js', ('function waterfall(budget,maximum,percentages)', 'function budgetFromAvailablePercent(percent,maximum)', 'function validateDraft(rawValues)')),
         'balancer_math_v2026': ('orders_inbox.py', ('def sell_capacity_usdt(', 'def overweight_sell_plan(', 'def allocate_infra_buys(', 'def tradingbot_tokens(')),
         'balancer_wiring_v2026': ('app.py', ('sale_preview=overweight_sell_plan(rows,band)', 'buy_preview=allocate_infra_buys(rows,current_cash_capacity,band)', 'return drift_tone(d,band)', 'def tradingbot_universe():')),

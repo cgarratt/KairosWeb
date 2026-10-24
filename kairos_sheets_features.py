@@ -39,7 +39,17 @@ EDITABLE_PARAM_KEYS = frozenset({
     'TRIGGER_STRICT_GT','PROXIMITY_BAND',
 }) | ALL_TRANCHE_KEYS
 CAPITAL_TARGET_SEGMENTS = ('HODL + Core','Exchange','Liquidez','Trading')
-VALID_CATEGORIES = frozenset(('units','targets','tier_custody','liquidity','capital_targets','parameters','pivots'))
+# Percentages refer to the LIQUIDITY SLEEVE, not physical USDT/QF balances.
+# These keys are absent from legacy MASTER revisions; their default is only an
+# administrator-reviewed draft from the approved interface reference.
+GOAL_LIQ_KEYS = {
+    'usdt':'PORTFOLIO_LIQ_USDT_FRACTION',
+    'balancer':'PORTFOLIO_LIQ_BALANCER_FRACTION',
+    'trading':'PORTFOLIO_LIQ_TRADING_FRACTION',
+}
+GOAL_LIQ_DRAFT = {'usdt':0.70,'balancer':0.20,'trading':0.10}
+
+VALID_CATEGORIES = frozenset(('units','targets','tier_custody','liquidity','capital_targets','parameters','pivots','portfolio_goals'))
 
 
 class SettingsError(ValueError):
@@ -457,6 +467,72 @@ def _ensure_one(value, prefix):
         raise SettingsError(f'{prefix}: cambios inválidos o demasiados')
 
 
+def portfolio_goals_data(raw):
+    """Single sourced management objectives, never a proxy for physical balances."""
+    pos=[r for r in raw[SHEETS['positions']][1:] if r and r[0] in ('BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMPFUN','PLUME','VIRTUAL','PEPE')]
+    tiers={tier:sum(float(r[3]) for r in pos if r[2]==tier) for tier in ('T1','T2','T3')}
+    custody={r[0]:{'hodl':float(r[1]),'core':float(r[2]),'exchange':float(r[3])}
+             for r in raw[SHEETS['custody']][1:] if r and r[0] in ('T1','T2','T3')}
+    base={r[0]:float(r[1]) for r in raw[SHEETS['integral']] if r and r[0] in ('Capital inicial histórico',)+CAPITAL_TARGET_SEGMENTS}
+    capital=base['Capital inicial histórico']
+    if capital<=0:raise SettingsError('08_INTEGRAL: capital histórico inválido')
+    crypto=(base['HODL + Core']+base['Exchange'])/capital
+    liquidity=(base['Liquidez']+base['Trading'])/capital
+    params={r[1]:r for r in raw[SHEETS['parameters']][1:] if len(r)>5 and r[1]}
+    complete=all(k in params for k in GOAL_LIQ_KEYS.values())
+    if complete:
+        liq={name:float(params[key][2]) for name,key in GOAL_LIQ_KEYS.items()}
+        if any(params[key][5]!='APROBADO' for key in GOAL_LIQ_KEYS.values()) or abs(sum(liq.values())-1)>1e-8 or any(v<0 or v>1 for v in liq.values()):
+            raise SettingsError('El reparto de liquidez publicado es inválido')
+    elif any(k in params for k in GOAL_LIQ_KEYS.values()):
+        raise SettingsError('Reparto de liquidez publicado incompleto')
+    else:liq=GOAL_LIQ_DRAFT.copy()
+    return {'portfolio':{'crypto':crypto,'liquidity':liquidity},'tiers':tiers,
+            'liquidity_mix':liq,'custody':custody,'liquidity_mix_published':complete,
+            'token_targets':[{'token':r[0],'tier':r[2],'target':float(r[3])} for r in pos],
+            'capital_historical_reference':capital,
+            'usdt_operating_actual':sum(float(r[1]) for r in raw[SHEETS['liquidity']][1:] if len(r)>2 and r[2]=='OPERATIVO'),
+            'balancer_assigned_usdt':float(params['BALANCER_RESERVE_ASSIGNED_USDT'][2]) if 'BALANCER_RESERVE_ASSIGNED_USDT' in params and params['BALANCER_RESERVE_ASSIGNED_USDT'][5]=='APROBADO' else 0.,
+            'balancer_assignment_published': 'BALANCER_RESERVE_ASSIGNED_USDT' in params and params['BALANCER_RESERVE_ASSIGNED_USDT'][5]=='APROBADO'}
+
+
+def _goal_fraction(value,label):
+    value=_numeric(value,label)
+    if value>1:raise SettingsError(label+': no puede superar 100%')
+    return value
+
+
+def _goal_sum(name,values):
+    if abs(sum(values)-1)>1e-8:
+        raise SettingsError(name+': los porcentajes deben sumar 100%')
+
+
+def _goal_entries(entries):
+    if len(entries)!=6:raise SettingsError('Objetivos: se requieren 6 grupos completos (incluidos T1/T2/T3)')
+    groups={};custody={}
+    for e in entries:
+        g=e.get('group')
+        if g=='custody':
+            t=e.get('tier')
+            if t not in ('T1','T2','T3') or t in custody:raise SettingsError('Custodia: Tier ausente o duplicado')
+            custody[t]={f:_goal_fraction(e.get(f),t+' '+f) for f in ('hodl','core','exchange')}
+        elif g in ('portfolio','tiers','liquidity') and g not in groups:groups[g]=e
+        else:raise SettingsError('Grupo de objetivos desconocido o duplicado')
+    if set(groups)!=set(('portfolio','tiers','liquidity')) or set(custody)!=set(('T1','T2','T3')):
+        raise SettingsError('Faltan grupos de objetivos o custodias')
+    portfolio={f:_goal_fraction(groups['portfolio'].get(f),'Portafolio '+f) for f in ('crypto','liquidity')}
+    tiers={t:_goal_fraction(groups['tiers'].get(t), 'Peso '+t) for t in ('T1','T2','T3')}
+    liquid={f:_goal_fraction(groups['liquidity'].get(f),'Liquidez '+f) for f in ('usdt','balancer','trading')}
+    _goal_sum('Cripto vs Liquidez',list(portfolio.values()))
+    _goal_sum('Distribución por Tier',list(tiers.values()))
+    _goal_sum('Liquidez / Reservas',list(liquid.values()))
+    for t,vals in custody.items():_goal_sum('Custodia '+t,list(vals.values()))
+    # A real accounting allocation is denominated in USDT, distinct from %.
+    amt=groups['liquidity'].get('balancer_allocated_usdt')
+    if amt is not None: liquid['balancer_allocated_usdt']=_numeric(amt,'Reserva Balancer USDT')
+    return portfolio,tiers,liquid,custody
+
+
 def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
     """Preview against complete source copy, then return address/value writes.
     User cannot send arbitrary A1 ranges. Confirming a pivot requires a
@@ -480,6 +556,75 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
         if k in seen:raise SettingsError('Campo duplicado')
         seen.add(k);_set(b,name,row,col,value);updates.append((name,row,col,value))
     positions={r[0]:i for i,r in enumerate(b[SHEETS['positions']]) if r and r[0] in ('BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMPFUN','PLUME','VIRTUAL','PEPE')}
+    if category=='portfolio_goals':
+        portfolio, tier_shares,liq_mix,custody_shares=_goal_entries(entries)
+        # Rebalance all twelve target percentages preserving relative weights
+        # within each tier, as published before this revision. Do not reassign
+        # tokens to different tiers or change physical custody units.
+        for tier,portion in tier_shares.items():
+            members=[(token,row) for token,row in positions.items() if _get(b,'positions',row,2)==tier]
+            if not members:raise SettingsError('Sin tokens en '+tier)
+            old_total=sum(float(_get(b,'positions',row,3)) for _,row in members)
+            if old_total<=0 and portion>0:raise SettingsError('No se puede redistribuir '+tier+' sin objetivos base; configura los tokens primero')
+            assigned=0.0
+            for idx,(token,row) in enumerate(members):
+                target=(round(portion-assigned,10) if idx==len(members)-1 else round(portion*float(_get(b,'positions',row,3))/old_total,10)) if old_total else 0.0
+                assigned+=target
+                if abs(float(_get(b,'positions',row,3))-target)>1e-11:
+                    change('positions',row,3,target)
+        for tier,parts in custody_shares.items():
+            row=_find_row(b,'custody',tier)
+            for col,k in [(1,'hodl'),(2,'core'),(3,'exchange')]:
+                if abs(float(_get(b,'custody',row,col))-parts[k])>1e-11:change('custody',row,col,parts[k])
+        # 08_INTEGRAL remains target-only and is recalculated for compatibility
+        # with the historical goal table; registered C/E historical cells stay untouched.
+        base=_numeric(_get(b,'integral',_find_row(b,'integral','Capital inicial histórico'),1),'capital histórico')
+        protected=sum(tier_shares[t]*(custody_shares[t]['hodl']+custody_shares[t]['core']) for t in tier_shares)
+        allocations={'HODL + Core':base*portfolio['crypto']*protected,
+                     'Exchange':base*portfolio['crypto']*(1-protected),
+                     'Liquidez':base*portfolio['liquidity']*(liq_mix['usdt']+liq_mix['balancer']),
+                     'Trading':base*portfolio['liquidity']*liq_mix['trading']}
+        values={key:round(amount,2) for key,amount in allocations.items()}
+        values['Exchange']=round(values['Exchange']+(base-sum(values.values())),2)
+        for segment,amount in values.items():
+            row=_find_row(b,'integral',segment)
+            if abs(float(_get(b,'integral',row,1))-amount)>1e-8:change('integral',row,1,amount)
+        # Store the previously missing liquidity split as a SINGLE complete
+        # approval, instead of guessing that Balancer's executable floor equals
+        # its strategic planning percentage.
+        for part,key in GOAL_LIQ_KEYS.items():
+            try:row=_find_row(b,'parameters',key,column=1)
+            except SettingsError:
+                row=len(b[SHEETS['parameters']])
+                if row>=175:raise SettingsError('Sin espacio para objetivos nuevos en 12_PARAMETROS_KAIROS')
+                metadata=['GESTION_PORTAFOLIO',key,liq_mix[part],'number','fraction_liquidity',
+                          'APROBADO','PLANIFICACION','KairosWeb Settings · '+evidence.strip()[:100],
+                          'Porcentaje objetivo de liquidez; NO acredita reservas ni altera reglas de ejecución.', 'ALTA']
+                for col,val in enumerate(metadata):change('parameters',row,col,val)
+            else:
+                if _get(b,'parameters',row,5)!='APROBADO':raise SettingsError(key+': no está aprobado')
+                if abs(float(_get(b,'parameters',row,2))-liq_mix[part])>1e-11:change('parameters',row,2,liq_mix[part])
+        if 'balancer_allocated_usdt' in liq_mix:
+            cash_actual=sum(_numeric(r[1],'USDT operativo '+str(r[0])) for r in b[SHEETS['liquidity']][1:] if len(r)>2 and r[2]=='OPERATIVO')
+            assigned=liq_mix['balancer_allocated_usdt']
+            if assigned>cash_actual+1e-8:
+                raise SettingsError('Reserva Balancer asignada no puede superar USDT operativo fuera de QF')
+            key='BALANCER_RESERVE_ASSIGNED_USDT'
+            try:row=_find_row(b,'parameters',key,column=1)
+            except SettingsError:
+                row=len(b[SHEETS['parameters']])
+                meta=['LIQUIDEZ',key,assigned,'number','USDT','APROBADO','OPERATIVO',
+                      'KairosWeb Settings · '+evidence.strip()[:100],
+                      'Asignación contable administrada; no modifica saldo físico ni acredita ventas no confirmadas.', 'ALTA']
+                for col,val in enumerate(meta):change('parameters',row,col,val)
+            else:
+                status=_get(b,'parameters',row,5)
+                if status not in ('APROBADO','PENDIENTE_ASIGNACION'):
+                    raise SettingsError('Reserva Balancer requiere revisión administrativa de la asignación')
+                if status!='APROBADO':change('parameters',row,5,'APROBADO')
+                if abs(float(_get(b,'parameters',row,2))-assigned)>1e-8:change('parameters',row,2,assigned)
+        # The four independent sums and 12-token totals were validated above;
+        # parse_master then verifies all portfolio/accounting invariants.
     if category in ('units','targets','pivots'):
         for x in entries:
             token=x.get('token')
@@ -735,7 +880,7 @@ def settings_data():
         pivots.append(record)
     return {'status':'OK','snapshot_id':state['control']['snapshot_id'], 'fecha_corte':state['control']['fecha_corte'],
             'schema_version':'5.0.0','write_configured':bool(os.getenv('KAIROS_GOOGLE_WRITER_JSON')),
-            'sections':{'units':positions,'targets':positions,'tier_custody':custody,'liquidity':liquidity,'capital_targets':capital_targets,'parameters':params,'pivots':pivots},
+            'sections':{'portfolio_goals':portfolio_goals_data(raw),'units':positions,'targets':positions,'tier_custody':custody,'liquidity':liquidity,'capital_targets':capital_targets,'parameters':params,'pivots':pivots},
             'blocked':{'BSI_SELL':'No homologado','TRADINGBOT':'WATCH', 'PIVOTS':'Certificación manual pendiente'}}
 
 
