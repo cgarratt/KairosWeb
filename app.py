@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.41'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.42'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -287,7 +287,7 @@ def bind_published_sheet():
         msg='Google Sheets Master no disponible o no cumple el esquema PUBLICADO 5.0.0. No se utilizan snapshots locales.'
         if request.path.startswith('/api/'):
             return jsonify({'status':'DATA_ERROR','origin':'GOOGLE_SHEETS','reason':msg,'category':public_failure_code(exc),'error_id':incident}),503
-        return render_template('sheet_error.html',master=APP_VERSION,error_id=incident,message=msg),503
+        return render_template('sheet_error.html',master=APP_VERSION,error_id=incident,message=msg,error_category=public_failure_code(exc)),503
 
 @app.after_request
 def headers(resp):

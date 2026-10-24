@@ -273,7 +273,10 @@ def parse_master(raw):
         'orders':'Al poblar órdenes: identificador único (Venue, Order ID), separar órdenes abiertas de fills, y reservar USDT antes de cualquier propuesta BUY.',
         'fills':'Jamás derivar fills de niveles tocados, simulaciones o LIMIT colocadas. Propuestas no son ejecución.',
     }
-    _order_keys=set();_fill_keys=set();historical_orders=0;historical_fills=0
+    # Historical execution ledgers are evidence only: published units and USDT
+    # already include their effects. Never add fills to the snapshot again.
+    _order_keys=set();_order_records={};_fill_keys=set()
+    _fill_forms_by_order={};historical_orders=0;historical_fills=0
     for section in ('orders','fills'):
         for rownum,r in enumerate(blocks[section][1:],start=5):
             if not any(v not in (None,'') for v in r):continue
@@ -282,32 +285,67 @@ def parse_master(raw):
                 venue=str(_cell(r,0,'')).strip();order_id=str(_cell(r,1,'')).strip()
                 token=str(_cell(r,2,'')).strip();side=str(_cell(r,3,'')).upper().strip()
                 status=str(_cell(r,11,'')).upper().strip();reconciled=str(_cell(r,15,'')).upper().strip()
+                # The published MASTER writes a longer, explicit link to the
+                # reconciled fill ("CONCILIADO · 06_FILLS fila5; ..."). The old
+                # exact-string gate incorrectly rejected that verified format.
+                linked_reconciled=bool(re.match(r'^CONCILIADO\s*[·-]\s*06_FILLS\s+FILA\s*\d+\b',reconciled))
                 if not (venue and order_id and token in SYMBOLS.union({'PUMP'}) and side in ('BUY','SELL')
                         and status in ('FILLED','COMPLETED','CANCELLED','CANCELED','REJECTED','EXPIRED')
-                        and reconciled in ('CONCILIADO','VERIFICADO')):
+                        and (reconciled in ('CONCILIADO','VERIFICADO') or linked_reconciled)):
                     raise SheetDataError(f'orders: operational or unverified entry at row {rownum}; reconcile before use')
                 key=(venue,order_id)
                 if key in _order_keys:raise SheetDataError(f'orders: duplicate (venue,order_id) at row {rownum}')
-                _order_keys.add(key);historical_orders+=1
+                _order_keys.add(key);_order_records[key]={'token':token,'side':side,'status':status,
+                    'qty_executed':_cell(r,8), 'evidence':str(_cell(r,14,'') or ''),
+                    'linked_reconciled':linked_reconciled}
+                historical_orders+=1
             else:
                 venue=str(_cell(r,0,'')).strip();order_id=str(_cell(r,1,'')).strip()
-                trade_id=str(_cell(r,2,'')).strip();token=str(_cell(r,3,'')).strip()
+                trade_id=str(_cell(r,2,'') or '').strip();token=str(_cell(r,3,'')).strip()
                 side=str(_cell(r,4,'')).upper().strip();confirmed=str(_cell(r,13,'')).upper().strip()
-                if not (venue and order_id and trade_id and token in SYMBOLS.union({'PUMP'}) and side in ('BUY','SELL')
-                        and confirmed in ('TRUE','CONCILIADO','VERIFICADO')):
+                ledger_key=str(_cell(r,15,'') or '').strip()
+                order=_order_records.get((venue,order_id))
+                # Trade IDs and timezone are not always exposed in screenshot
+                # evidence. Permit an ORDER-LEVEL AGGREGATE only if it has a
+                # dedicated, non-duplicable provenance key, a reconciled FILLED
+                # order, evidence on both ledgers, and matching quantities.
+                aggregate=(not trade_id and ledger_key==f'{venue}|{order_id}|ORDER_AGGREGATE_NO_TRADE_IDS')
+                closed_link=(order and order['status'] in ('FILLED','COMPLETED')
+                             and order['side']==side and order['token']==token
+                             and order['linked_reconciled'] and order['evidence']
+                             and str(_cell(r,14,'') or '').strip())
+                if not (venue and order_id and token in SYMBOLS.union({'PUMP'}) and side in ('BUY','SELL')
+                        and ((aggregate and confirmed in ('SI','TRUE','CONCILIADO','VERIFICADO') and closed_link)
+                             or (trade_id and confirmed in ('TRUE','CONCILIADO','VERIFICADO')))):
                     raise SheetDataError(f'fills: operational or unverified entry at row {rownum}; reconcile before use')
                 gross=_number(_cell(r,6),f'fills row {rownum} gross qty')
                 net=_number(_cell(r,9),f'fills row {rownum} net qty')
-                _number(_cell(r,10),f'fills row {rownum} gross USDT')
-                if gross<=0 or net>gross:raise SheetDataError(f'fills: inconsistent gross/net units at row {rownum}')
+                gross_usdt=_number(_cell(r,10),f'fills row {rownum} gross USDT')
+                if gross<=0 or gross_usdt<=0 or net>gross or net<=0:
+                    raise SheetDataError(f'fills: inconsistent gross/net units at row {rownum}')
                 for i in (7,11):
                     if _cell(r,i) is not None:_number(_cell(r,i),f'fills row {rownum} fee')
-                try:
-                    ftime=datetime.fromisoformat(str(_cell(r,5,'')).replace('Z','+00:00'))
-                    if ftime.tzinfo is None:raise ValueError('naive')
-                except ValueError as e:raise SheetDataError(f'fills: invalid timestamp at row {rownum}') from e
-                key=(venue,order_id,trade_id)
-                if key in _fill_keys:raise SheetDataError(f'fills: duplicate (venue,order_id,trade_id) at row {rownum}')
+                raw_time=_cell(r,5)
+                if raw_time not in (None,''):
+                    try:
+                        ftime=datetime.fromisoformat(str(raw_time).replace('Z','+00:00'))
+                        if ftime.tzinfo is None:raise ValueError('naive')
+                    except ValueError as e:raise SheetDataError(f'fills: invalid timestamp at row {rownum}') from e
+                elif not aggregate:
+                    raise SheetDataError(f'fills: missing UTC timestamp at row {rownum}; reconcile before use')
+                if aggregate:
+                    if not _almost(_number(order['qty_executed'],f'orders qty matched row {rownum}'),gross,eps=1e-8):
+                        raise SheetDataError(f'fills: aggregate quantity does not match linked order at row {rownum}')
+                    fee=_cell(r,7,0)
+                    if str(_cell(r,8,''))==token and not _almost(gross-_number(fee,'fee'),net,eps=1e-7):
+                        raise SheetDataError(f'fills: aggregate token fee mismatch at row {rownum}')
+                form='aggregate' if aggregate else 'trade'
+                forms=_fill_forms_by_order.setdefault((venue,order_id),set())
+                if forms and form not in forms:
+                    raise SheetDataError(f'fills: aggregate and trade-level records overlap at row {rownum}')
+                forms.add(form)
+                key=('AGG',venue,order_id) if aggregate else ('TRADE',venue,order_id,trade_id)
+                if key in _fill_keys:raise SheetDataError(f'fills: duplicate evidence key at row {rownum}')
                 _fill_keys.add(key);historical_fills+=1
     from wave_pivots import wave_row, fib_from_anchors, WavePivotError
     pivot_levels={}; wave_pivots={}; old_pivot_sources=set()

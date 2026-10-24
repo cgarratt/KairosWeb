@@ -358,7 +358,7 @@ def test_v2033_homologation_diagnostics_and_units_contract_in_release():
     app=(root/'app.py').read_text()
     mcp=(root/'static/mcp_settings.js').read_text()
     html=(root/'templates/balancer.html').read_text()
-    assert "APP_VERSION = '2.0.41'" in app
+    assert "APP_VERSION = '2.0.42'" in app
     assert "/api/settings/homologation-status" in app
     assert 'HOM_WRITER_MISSING' in app
     assert 'write_may_have_committed' in app
@@ -375,3 +375,75 @@ def test_v2033_homologation_diagnostics_and_units_contract_in_release():
     assert '17,857.39' in out
     assert '17,857.38754194' not in out
     assert 'TOTAL VENTAS USDT' in out
+
+# 2.0.42: exact representation of user-confirmed order-level aggregate receipts.
+# The platform must NOT create missing exchange Trade IDs or assume UTC timestamps.
+def _aggregate_evidence_master():
+    raw=fake_master()
+    order=['Binance','123456789','ONDO','BUY','LIMIT','O2C2',0.414,845.4,845.4,0,0,
+           'FILLED',None,None,'Captura de orden completada; usuario confirmó fill',
+           'CONCILIADO · 06_FILLS fila5; O2C2 EJECUTADA por usuario; no sumar otra vez']
+    fill=['Binance','123456789',None,'ONDO','BUY',None,845.4,0.8454,'ONDO',844.5546,
+          349.9956,0,'Exchange','SI',
+          'Captura de ejecución y conciliación confirmada por usuario',
+          'Binance|123456789|ORDER_AGGREGATE_NO_TRADE_IDS']
+    raw[gs.SHEETS['orders']].append(order)
+    raw[gs.SHEETS['fills']].append(fill)
+    return raw
+
+
+def test_aggregated_fill_without_trade_id_or_utc_is_read_only_reconciled():
+    state=gs.parse_master(_aggregate_evidence_master())
+    assert state['historical_ledger_counts']=={'orders':1,'fills':1}
+    assert state['snapshot']['holdings_total']['ONDO']==1  # No replay of order-level receipt.
+
+
+def test_aggregate_must_link_to_conciliated_filled_order_and_evidence():
+    raw=_aggregate_evidence_master()
+    raw[gs.SHEETS['orders']][1][15]='CONCILIADO'  # Missing explicit fill row link
+    with pytest.raises(gs.SheetDataError,match='reconcile'):
+        gs.parse_master(raw)
+    raw=_aggregate_evidence_master()
+    raw[gs.SHEETS['fills']][1][14]=''  # No source evidence
+    with pytest.raises(gs.SheetDataError,match='reconcile'):
+        gs.parse_master(raw)
+    raw=_aggregate_evidence_master()
+    raw[gs.SHEETS['orders']][1][11]='OPEN'
+    with pytest.raises(gs.SheetDataError,match='reconcile'):
+        gs.parse_master(raw)
+
+
+def test_aggregate_quantity_fee_and_key_must_reconcile():
+    raw=_aggregate_evidence_master()
+    raw[gs.SHEETS['fills']][1][6]=846.4
+    with pytest.raises(gs.SheetDataError,match='quantity'):
+        gs.parse_master(raw)
+    raw=_aggregate_evidence_master()
+    raw[gs.SHEETS['fills']][1][9]=844.0
+    with pytest.raises(gs.SheetDataError,match='fee mismatch'):
+        gs.parse_master(raw)
+    raw=_aggregate_evidence_master()
+    raw[gs.SHEETS['fills']][1][15]='UNVERIFIED_AGGREGATE'
+    with pytest.raises(gs.SheetDataError,match='reconcile'):
+        gs.parse_master(raw)
+
+
+def test_aggregate_duplicate_and_trade_level_overlap_fail_closed():
+    raw=_aggregate_evidence_master()
+    raw[gs.SHEETS['fills']].append(list(raw[gs.SHEETS['fills']][1]))
+    with pytest.raises(gs.SheetDataError,match='duplicate'):
+        gs.parse_master(raw)
+    raw=_aggregate_evidence_master()
+    raw[gs.SHEETS['fills']].append([
+        'Binance','123456789','tr-001','ONDO','BUY','2026-10-23T12:00:00Z',1,0,'ONDO',1,1,0,
+        'Exchange','TRUE','Captura','Binance|123456789|tr-001'])
+    with pytest.raises(gs.SheetDataError,match='overlap'):
+        gs.parse_master(raw)
+
+
+def test_only_order_level_evidence_may_omit_trade_utc_time():
+    raw=_aggregate_evidence_master()
+    raw[gs.SHEETS['fills']][1][2]='trade-001'
+    raw[gs.SHEETS['fills']][1][13]='TRUE'
+    with pytest.raises(gs.SheetDataError,match='missing UTC timestamp'):
+        gs.parse_master(raw)

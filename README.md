@@ -217,3 +217,11 @@ El botón de publicación requiere administración vigente, CSRF, preview, confi
 - En Configuración → Objetivos de gestión se muestra el importe derivado, sin un segundo campo manual, con validación en vivo. Los fondos se recalculan al variar la liquidez publicada o la mezcla aprobada.
 - Estilos `data-theme=dark` dedicados a tarjetas de objetivos, textos y formularios; en modo claro se conserva la presentación anterior.
 - Validar despliegue de Render y saldos del MASTER después de instalar. No se ejecutan órdenes, fills ni transferencias.
+
+## v2.0.42 · Hotfix conciliación de fills agregados en Google Sheets
+
+- Mantiene la publicación del MASTER y la exigencia de 12 tokens/100% targets/QF una sola vez.
+- El lector `google_sheets_master.py` admite evidencia **agregada por orden** de una compra ya completada, cuando el exchange no ha proporcionado Trade IDs individuales o la captura no permite certificar zona horaria UTC. Requiere orden `FILLED/COMPLETED` explícitamente conciliada con una fila `06_FILLS`, clave única de procedencia `VENUE|ORDER_ID|ORDER_AGGREGATE_NO_TRADE_IDS`, fuente verificable en ambas hojas, coincidencia de token/lado/cantidad y neteo de fee en token.
+- Es evidencia de recepción agregada, **no un Trade ID ni un timestamp inventado**, y **no suma de nuevo las unidades o USDT al snapshot**. Duplicados, fondos sin evidencia, mezcla agregados+trades, órdenes abiertas o reservas sin conciliar siguen bloqueadas.
+- Si persiste `DATA ERROR`, Portafolio mostrará la categoría segura (`ORDERS_FILLS_RECONCILIATION_REQUIRED`, `GOOGLE_SHEETS_HTTP_403`, etc.) y el ID de incidente. La causa detallada queda en logs de Render, sin divulgar secretos.
+- Instalación: desplegar el ZIP descomprimido, comprobar `/health` versión `2.0.42` y después consultar Portafolio/Balancer con el MASTER vigente. Ninguna operación real se ha realizado desde este hotfix.
