@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Kairos · Órdenes propuestas{% endblock %}
+{% block title %}Kairos · Gestión de órdenes{% endblock %}
 {% block head %}
 <style>
 .orders-tools{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:14px 0}
@@ -39,14 +39,65 @@
 .orders-tools select{max-width:180px;min-width:100px}
 #orders-list{min-width:1210px}
 [data-theme="dark"] .order-state-green{color:#7ee7bc}[data-theme="dark"] .order-state-amber{color:#ffcf7b}[data-theme="dark"] .orders-source{color:#a2c9fb}[data-theme="dark"] .orders-source.source-balance{color:#dabaff}
+
+.orders-state-panel{border:1px solid var(--line,#cbd8e8);border-radius:14px;padding:16px;margin-top:12px}
+.order-management-help{font-size:13px;line-height:1.6;color:var(--muted,#7991b2)}
+.orders-manage{font-size:12px;padding:8px 10px;border-radius:10px;background:var(--soft,#eaf2ff);border:1px solid var(--line,#cbd8e8);color:inherit;cursor:pointer}
+.orders-manage:hover{border-color:#56a1ed}
+.orders-manager-dialog{max-width:min(560px,92vw);width:90%;max-height:85vh;overflow:auto;padding:22px;border:1px solid var(--line,#3d5874);border-radius:18px;background:var(--panel,#fff);color:inherit;box-shadow:0 20px 80px #0007}
+.orders-manager-dialog::backdrop{background:#0009}
+.orders-manager-dialog form{display:grid;gap:12px}
+.orders-manager-dialog label{display:grid;gap:4px;font-size:13px;font-weight:650}
+.orders-manager-dialog input{border:1px solid var(--line,#cbd8e8);border-radius:8px;padding:10px;background:var(--soft,#edf3fa);color:inherit;font:inherit}
+.orders-manager-dialog menu{display:flex;justify-content:flex-end;gap:12px;padding:0}
+.order-manager-summary{font-size:13px;color:var(--muted,#7991b2)}
+.order-workflow-warning{border:1px solid #b98835;border-radius:10px;padding:11px 14px;background:rgba(221,153,45,.08);margin:12px 0}
+@media(max-width:680px){.orders-manager-dialog{width:95%;padding:14px}}
 </style>
 {% endblock %}
 {% block content %}
-<div class="grid" id="orders-inbox">
+<div class="grid" id="orders-inbox" data-snapshot-id="{{ snapshot or '' }}" data-management-ready="{{ 'false' if managed_orders and managed_orders.error else 'true' }}">
   <section class="panel span-12 hero">
-    <div><h2>Órdenes</h2><p>Propuestas independientes por balance del portafolio y por estructura semanal de precios.</p></div>
-    <div class="badge info">FASE 1 · SOLO PROPUESTAS</div>
+    <div><h2>Órdenes · Seguimiento</h2><p>Propuesta → Confirmada → Parcial/Ejecutada · registro manual con evidencia y conciliación posterior.</p></div>
+    <div class="badge info">GESTIÓN · SIN EJECUCIÓN REMOTA</div>
   </section>
+<section class="panel span-12" aria-label="Gestión de estados de órdenes">
+  <h3>Registro y seguimiento de órdenes</h3>
+  <p class="order-management-help">Esta tabla conserva el historial en <strong>26_ORDENES_GESTION</strong>. "Confirmada" significa orden colocada según tu evidencia, <strong>no ejecutada</strong>. "Ejecutada" registra unidades e importe reales, pero necesita conciliación con 05_ORDENES, 06_FILLS y el snapshot. Ningún botón opera en Binance, KuCoin ni Hyperliquid.</p>
+  {% if managed_orders and managed_orders.error %}<div class="order-workflow-warning">{{ managed_orders.error }}</div>{% endif %}
+  {% if managed_orders and managed_orders.unreconciled %}<div class="order-workflow-warning">{{ managed_orders.unreconciled }} orden(es) colocada(s) o ejecutada(s) pendiente(s) de conciliación. Sus compromisos deben verificarse antes de nuevas compras/ventas; ninguna ejecución se acredita automáticamente al patrimonio.</div>{% endif %}
+  <div class="orders-table-wrap">
+   <table class="orders-table" id="managed-orders" style="min-width:1080px"><thead><tr><th>Token / tramo</th><th>Exchange</th><th>Lado</th><th>Estado</th><th>Orden Exchange</th><th>Unidades previstas</th><th>Unidades ejecutadas</th><th>Importe ejecutado</th><th>Conciliación</th><th>Acciones</th></tr></thead><tbody>
+    {% for x in (managed_orders.records if managed_orders else []) %}
+    <tr><td>{{ x.token }} · {{ x.tramo }}</td><td>{{ x.venue }}</td><td><span class="order-side {{ 'buy' if x.lado=='BUY' else 'sell' }}">{{ x.lado }}</span></td><td><strong>{{ x.estado }}</strong></td><td>{{ x.exchange_order_id or '—' }}</td><td>{{ '{:,.8f}'.format(x.unidades_previstas|float).rstrip('0').rstrip('.') }}</td><td>{{ '{:,.8f}'.format(x.unidades_ejecutadas|float).rstrip('0').rstrip('.') }}</td><td>{{ '{:,.2f}'.format(x.importe_ejecutado|float) }} {{ x.moneda_cotizada }}</td><td>{{ (x.conciliacion or 'N/D').replace('_',' ') }}</td><td>
+      {% if x.estado=='PROPUESTA' %}<button class="orders-manage" type="button" data-manage="CONFIRMADA" data-id="{{ x.kairos_order_id }}" data-revision="{{ x.revision }}" data-token="{{ x.token }}" data-venue="{{ x.venue }}" data-units="{{ x.unidades_previstas }}" data-amount="{{ x.importe_previsto }}" data-currency="{{ x.moneda_cotizada }}">Confirmar</button> <button class="orders-manage" type="button" data-manage="EJECUTADA" data-id="{{ x.kairos_order_id }}" data-revision="{{ x.revision }}" data-token="{{ x.token }}" data-venue="{{ x.venue }}" data-units="{{ x.unidades_previstas }}" data-amount="{{ x.importe_previsto }}" data-currency="{{ x.moneda_cotizada }}">Ejecución directa</button>
+      {% elif x.estado in ('CONFIRMADA','PARCIAL') %}<button class="orders-manage" type="button" data-manage="EJECUTADA" data-id="{{ x.kairos_order_id }}" data-revision="{{ x.revision }}" data-token="{{ x.token }}" data-venue="{{ x.venue }}" data-units="{{ x.unidades_previstas }}" data-amount="{{ x.importe_previsto }}" data-order-id="{{ x.exchange_order_id }}" data-currency="{{ x.moneda_cotizada }}">Registrar ejecución</button> <button class="orders-manage" type="button" data-manage="PARCIAL" data-id="{{ x.kairos_order_id }}" data-revision="{{ x.revision }}" data-token="{{ x.token }}" data-venue="{{ x.venue }}" data-units="{{ x.unidades_previstas }}" data-amount="{{ x.importe_previsto }}" data-order-id="{{ x.exchange_order_id }}" data-currency="{{ x.moneda_cotizada }}">Fill parcial</button>{% else %}Registrada{% endif %}
+    </td></tr>
+    {% else %}<tr><td colspan="10">Todavía no hay órdenes registradas en el flujo nuevo.</td></tr>{% endfor %}
+   </tbody></table>
+  </div>
+  {% if managed_orders and managed_orders.historical %}
+  <p class="order-management-help">Hay {{ managed_orders.historical|length }} orden(es) ejecutada(s) previamente en 05_ORDENES. <strong>No las registres otra vez</strong> salvo que necesites conciliar una diferencia específica.</p>
+  {% endif %}
+  <p class="order-management-help" id="orders-management-feedback" role="status" aria-live="polite">Los cambios de estado requieren autenticación administrativa y se publican como eventos inmutables en el MASTER.</p>
+</section>
+<dialog class="orders-manager-dialog" id="orders-management-dialog" aria-label="Registrar estado de orden">
+  <form method="dialog" id="orders-management-form">
+    <h3 id="order-management-title">Registrar orden</h3>
+    <p id="order-management-details" class="order-manager-summary"></p>
+    <label data-field="exchange_order_id">ID de orden del exchange <input id="order-exchange-id" name="exchange_order_id" maxlength="120" autocomplete="off"></label>
+    <label data-field="planned_units">Unidades previstas <input id="order-planned-units" name="planned_units" type="number" min="0" step="any"></label>
+    <label data-field="planned_usdt">Importe previsto en USDT/USDC <input id="order-planned-usdt" name="planned_usdt" type="number" min="0" step="any"></label>
+    <label data-field="executed_units">Unidades ejecutadas en este fill (incrementales) <input id="order-executed-units" name="executed_units" type="number" min="0" step="any"></label>
+    <label data-field="executed_usdt">Importe de este fill en USDT/USDC (incremental) <input id="order-executed-usdt" name="executed_usdt" type="number" min="0" step="any"></label>
+    <label data-field="fee_units">Comisión en unidades del token <input id="order-fee-units" name="fee_units" type="number" min="0" step="any" value="0"></label>
+    <label data-field="fee_quote">Comisión en USDT/USDC <input id="order-fee-quote" name="fee_quote" type="number" min="0" step="any" value="0"></label>
+    <label data-field="evidence">Evidencia (ID, referencia a captura o registro verificable) <input id="order-evidence" name="evidence" maxlength="500" autocomplete="off"></label>
+    <label>Observaciones <input id="order-note" name="note" maxlength="350"></label>
+    <p class="order-management-help">Los importes corresponden a datos declarados por ti. Este registro no acreditará automáticamente balances, fills ni operaciones remotas.</p>
+    <menu><button type="button" class="orders-manage" id="order-cancel">Cancelar</button><button type="submit" class="btn primary" id="order-submit">Guardar estado</button></menu>
+  </form>
+</dialog>
 {% if error %}
   <section class="panel span-12"><h3>DATA ERROR</h3><p>{{ error }}</p><p>Etapa: {{ error_stage or 'N/D' }} · Código: {{ error_id or 'N/D' }}</p><p>No se generan ni se envían órdenes. Consultar los logs de Render con el código anterior.</p></section>
 {% else %}
@@ -109,7 +160,7 @@
     <p class="orders-muted"><span class="orders-light light-green" aria-hidden="true"></span> ≤2% de proximidad · <span class="orders-light light-amber" aria-hidden="true"></span> 2–5% · <span class="orders-light light-muted" aria-hidden="true"></span> Más de 5% o sin cotización homogénea · <span class="orders-light light-red" aria-hidden="true"></span> Nivel superado. Son indicadores de distancia, <strong>no señales de ejecución</strong>.</p>
     <div class="orders-table-wrap">
       <table class="orders-table" id="orders-list" data-orders-venue="Todos" data-orders-category="Todos">
-        <thead><tr><th>Token</th><th>Exchange</th><th>Lado</th><th>Origen</th><th>Nivel</th><th>Spot</th><th>LIMIT</th><th>Distancia</th><th>USDT ref.</th><th>Unidades ref.</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Token</th><th>Exchange</th><th>Lado</th><th>Origen</th><th>Nivel</th><th>Spot</th><th>LIMIT</th><th>Distancia</th><th>USDT ref.</th><th>Unidades ref.</th><th>Estado</th><th>Gestión</th></tr></thead>
         <tbody>
           {% for item in inbox.candidates %}
           {% set order_tier=(tier_by_token|default({})).get(item.token, 'N/D') %}
@@ -129,6 +180,7 @@
             <td>{{ '${:,.2f}'.format(item.usdt) if item.usdt is not none else 'POR DEFINIR' }}</td>
             <td>{{ '{:,.8f}'.format(item.quantity).rstrip('0').rstrip('.') if item.quantity is not none else 'POR DEFINIR' }}</td>
             <td><span class="order-state order-state-{{ tone }}"><i class="orders-light light-{{ tone }}" aria-hidden="true"></i>{{ item.proximity.replace('_',' ') }}</span><small class="orders-origin">No colocada · {{ item.sizing_status }}</small></td>
+            <td><button type="button" class="orders-manage" data-manage="PROPUESTA" data-token="{{ item.token }}" data-venue="{{ item.venue }}" data-side="{{ item.side }}" data-stage="{{ item.stage }}" data-source="{{ item.category }}" data-units="{{ item.quantity if item.quantity is not none else 0 }}" data-amount="{{ item.usdt if item.usdt is not none else 0 }}" data-currency="{{ item.quote_currency }}">Registrar propuesta</button></td>
           </tr>
           {% endfor %}
         </tbody>
@@ -140,7 +192,7 @@
     <p class="orders-readonly"><strong>Regla de proximidad:</strong> precio FUTURO disponible a una distancia de 0 a +{{ '%.1f'|format(inbox.proximity_pct) }}% desde Spot. Niveles ya superados no se confunden con órdenes LIMIT futuras. El objetivo más cercano puede estar lejos; no implica recomendación inmediata.</p>
     <p class="orders-readonly">HYPE se conserva en Hyperliquid y no se reasigna a Binance/KuCoin. Sus niveles macro están expresados en USDC: hasta obtener Spot HYPE/USDC homologado, no calculamos proximidad ni presentamos esa referencia como orden activable. Los importes del portafolio no se mezclan con compromisos hipotéticos de estructura. Cuota QF protegida.</p>
   </section>
-  <section class="panel span-12"><h3>Separación entre propuestas y órdenes reales</h3><p>Fase 1 <strong>no envía, cancela, ni modifica órdenes</strong>, no acredita fills y no escribe propuestas en `05_ORDENES`. El Master declaró 0 órdenes abiertas al último corte, sin verificar libros privados. Conexión autenticada, reservas, tamaños SELL y envío LIMIT requieren aprobación y desarrollo de fase 2.</p></section>
+  <section class="panel span-12"><h3>Separación entre gestión y ejecución real</h3><p>La gestión de estados registra evidencia en <code>26_ORDENES_GESTION</code> (append-only). No envía, cancela ni modifica órdenes de exchange ni acredita fills. La contabilidad de 05/06, unidades, caja y QF requiere conciliación adicional independiente. Nunca reutilizar importes comprometidos sin revisar órdenes confirmadas.</p></section>
 {% endif %}
 </div>
 <script defer src="{{ url_for('static', filename='orders_inbox.js') }}?v={{ master }}"></script>

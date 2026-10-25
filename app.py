@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.42'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.43'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -73,7 +73,7 @@ MODE_DEFS = [
     {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Retrocesos desde P1 semanal PROPUESTO/VALIDADO/CONFIRMADO y P2 máximo posterior; solo simulaciones INFRA.'},
     {'slug':'ventas','name':'Ventas','subtitle':'Objetivo USDT','description':'Propuestas solo SELL para acercarse a la meta de liquidez y reducir sobrepeso.'},
     {'slug':'forecast','name':'Forecast','subtitle':'Cycle Low → O5','description':'Tabla de niveles O2C1–O2C4 y ondas/pivotes proyectados; todo es simulación.'},
-    {'slug':'ordenes','name':'Órdenes','subtitle':'Bandeja de propuestas','description':'Balance de portafolio y objetivos LIMIT Fibonacci 1W, por exchange y token; fase 1 solo lectura.'},
+    {'slug':'ordenes','name':'Órdenes','subtitle':'Seguimiento de órdenes','description':'Propuestas, confirmaciones de órdenes colocadas y registro manual de ejecuciones con evidencia.'},
     {'slug':'tradingbot','name':'TradingBot','subtitle':'Táctico 4H','description':'Vista táctica preliminar para la reserva de trading y activos de seguimiento.'},
 ]
 # Future mode enablement is centralized: disabled modes do not appear in any global nav.
@@ -499,7 +499,8 @@ def core_dashboard(prices):
         custody = SNAPSHOT['custody_core_blocked__core_strategic__exchange'].get(key, [0,0,0])
         rows.append({'token':market_key,'tier':TIERS[token], 'target':TARGETS[token],
                      'units':units,'hodl_units':float(custody[0]),'core_units':float(custody[1]),
-                     'exchange_units':float(custody[2]),'price':price,'value':value,
+                     'exchange_units':float(custody[2]),'reserved_sell_units':float(SNAPSHOT.get('reserved_sell_units_by_token',{}).get(key,0)),
+                     'price':price,'value':value,
                      'avg_cost':float(COST_BASIS[market_key]) if isinstance(COST_BASIS.get(market_key),(int,float)) and COST_BASIS.get(market_key)>0 else None,
                      'pnl_pct':(price/float(COST_BASIS[market_key])-1)*100 if isinstance(COST_BASIS.get(market_key),(int,float)) and COST_BASIS.get(market_key)>0 else None})
     for row in rows:
@@ -516,7 +517,8 @@ def core_dashboard(prices):
         'rows': rows,
         'crypto_value': portfolio_crypto,
         'usdt_total':liquidity,
-        'usdt_operating':SNAPSHOT['kairos_operating_USDT_before_commitments'],
+        'usdt_operating':max(0,SNAPSHOT['kairos_operating_USDT_before_commitments']-SNAPSHOT.get('reserved_buy_usdt',0)),
+        'pending_buy_usdt':SNAPSHOT.get('reserved_buy_usdt',0),
         'trading_reserve':trading,
         'total_value':total_value,
         'total_btc_equivalent':total_btc_equivalent,
@@ -688,7 +690,8 @@ def build_mode_payload(slug, d, observed):
     if slug in ('compras','forecast'):
         p=d['total_value']; cash=d['usdt_total']; trading=d['trading_reserve']
         max_percent=(100*max(0.0,cash-trading)/p) if p else 0.0
-        reserves=calculate_budgets(cash,trading,balancer_allocated=allocation_from_master(g.kairos_state['parameters'],cash,trading))
+        reserves=calculate_budgets(cash,trading,balancer_allocated=allocation_from_master(g.kairos_state['parameters'],cash,trading),
+                               buy_commitments=d.get('pending_buy_usdt',0))
         reference_cap=reserves['compras_max']
         purchase_tokens=[{'token':r['token'],'tier':r['tier'],'price':r['price'],'weight':r['weight'],'target':r['target'],
             'current_usdt':r['value'],'units':r['units'],
@@ -1052,7 +1055,8 @@ def balancer_report(d, observed):
     rows=sorted(d['rows'],key=lambda r:r['value'],reverse=True)
     p=d['total_value']; cash=d['usdt_total']; crypto=d['crypto_value']
     trading=d['trading_reserve']
-    reserves=calculate_budgets(cash,trading,balancer_allocated=allocation_from_master(g.kairos_state['parameters'],cash,trading))
+    reserves=calculate_budgets(cash,trading,balancer_allocated=allocation_from_master(g.kairos_state['parameters'],cash,trading),
+                               buy_commitments=d.get('pending_buy_usdt',0))
     reserve=reserves['balancer_max']
     floor=approved_numeric('STRUCTURAL_USDT_TARGET')*p  # reference target only
     gap=max(0.,floor-cash)
@@ -1081,7 +1085,7 @@ def balancer_report(d, observed):
     sale_total=sum(x['value'] for x in sale_preview)
     current_cash_capacity=reserve
     # Conditional scenario: sale proceeds are hypothetical until fill is verified.
-    projected_cash_capacity=calculate_budgets(cash,trading,balancer_allocated=allocation_from_master(g.kairos_state['parameters'],cash,trading),conditional_sell_proceeds=sale_total)['balancer_with_sales_conditional']
+    projected_cash_capacity=calculate_budgets(cash,trading,balancer_allocated=allocation_from_master(g.kairos_state['parameters'],cash,trading),buy_commitments=d.get('pending_buy_usdt',0),conditional_sell_proceeds=sale_total)['balancer_with_sales_conditional']
     buy_preview=allocate_infra_buys(rows,current_cash_capacity,band)
     buy_total=sum(x['value'] for x in buy_preview)
     sold_by_token={x['token']:x['value'] for x in sale_preview}
@@ -1207,6 +1211,13 @@ def orders_inbox_page():
     balance proposals. All outputs remain phase-1, non-executable.
     """
     mode=MODES_BY_SLUG['ordenes']
+    from orders_workflow import registered_orders
+    stage='Registro de órdenes'
+    try:
+        managed_orders=registered_orders()
+    except Exception as exc:
+        app.logger.error('Orders lifecycle read error class=%s',type(exc).__name__)
+        managed_orders={'records':[],'historical':[],'ledger_present':False,'error':'No se pudo leer el registro de órdenes; no se admitirán cambios.'}
     stage='MASTER y Spot MCP'
     try:
         observed,d=load_live_dashboard()  # MUST remain fail-closed.
@@ -1236,14 +1247,38 @@ def orders_inbox_page():
         return render_template('ordenes.html',mode=mode,inbox=inbox,observed=observed,
                                snapshot=g.kairos_state['control']['snapshot_id'],master=APP_VERSION,error=None,
                                structural_note=structural_note,
+                               managed_orders=managed_orders,
                                tier_by_token={row['token']:row['tier'] for row in d['rows']})
     except Exception as exc:
         incident=uuid.uuid4().hex[:10]
         app.logger.exception('Orders inbox DATA_ERROR id=%s stage=%s',incident,stage)
         # Do not leak raw MCP credentials, response bodies or sensitive traces.
         return render_template('ordenes.html',mode=mode,inbox=None,observed=None,
-                               snapshot=None,master=APP_VERSION,error='No se pudo verificar '+stage+'. Ninguna propuesta nueva mostrada.',
-                               structural_note=None,error_id=incident,error_stage=stage),503
+                               snapshot=g.kairos_state['control']['snapshot_id'],master=APP_VERSION,error='No se pudo verificar '+stage+'. Ninguna propuesta nueva mostrada.',
+                               structural_note=None,error_id=incident,error_stage=stage,
+                               managed_orders=managed_orders),503
+
+@app.route('/api/orders/manage',methods=['POST'])
+def manage_order_lifecycle():
+    """Administrative workflow recording ONLY; never sends trades or credits balances."""
+    if not _same_origin():return jsonify({'status':'FORBIDDEN_ORIGIN'}),403
+    if not _admin_authorized() or not _csrf_ok():
+        return jsonify({'status':'ADMIN_AUTH_REQUIRED','reason':'Se requiere contraseña administrativa para confirmar o registrar ejecuciones.'}),403
+    if not os.getenv('KAIROS_GOOGLE_WRITER_JSON'):
+        return jsonify({'status':'WRITE_DISABLED','reason':'Falta KAIROS_GOOGLE_WRITER_JSON.'}),503
+    body=request.get_json(silent=True)
+    if not isinstance(body,dict):return jsonify({'status':'INVALID'}),400
+    from orders_workflow import write_event,WorkflowError
+    try:
+        saved=write_event(body,expected_snapshot_id=body.get('expected_snapshot_id'))
+        return jsonify(saved)
+    except WorkflowError as exc:
+        return jsonify({'status':'INVALID','error_code':exc.code,'reason':str(exc)}),409
+    except Exception as exc:
+        incident=uuid.uuid4().hex[:10]
+        app.logger.error('Orders management write unknown outcome id=%s class=%s',incident,type(exc).__name__)
+        return jsonify({'status':'DATA_ERROR','error_id':incident,'reason':'No se pudo certificar la escritura. Consulta el historial antes de volver a intentar: la operación podría haberse registrado.'}),503
+
 
 @app.route('/mode/<slug>')
 def mode_page(slug):
@@ -1811,7 +1846,7 @@ def _deployed_asset_status():
         'buy_weekly_ui': ('templates/trade_sim.html', ('buy_eligibility', 'requireEligibility')),
         'buy_p1p2_anchors': ('templates/trade_sim.html', ('Maestro de Precios - Retrocesos Fibo', '<th>P1</th><th>P2</th>', 'pivot-anchor-dot')),
         'buy_p1p2_policy': ('buy_weekly_policy.py', ('def select_p1_p2_buy_impulse(', 'P1_ADMITIDO_P2_MAXIMO_SEMANAL_POSTERIOR')),
-        'orders_page': ('templates/ordenes.html', ('Backlog de Ordenes Compra / Venta', 'Próximas órdenes por Token', 'USDT compra', 'Unidades venta', 'id="orders-level"', 'FASE 1 · SOLO PROPUESTAS')),
+        'orders_page': ('templates/ordenes.html', ('Backlog de Ordenes Compra / Venta', 'Próximas órdenes por Token', 'USDT compra', 'Unidades venta', 'id="orders-level"', 'GESTIÓN · SIN EJECUCIÓN REMOTA')),
         'orders_partial_structural_fallback': ('app.py', ('def orders_inbox_page(', 'Estructura semanal MCP', 'build_order_inbox(d,buy,bal')),
         'orders_engine': ('orders_inbox.py', ('def build_order_inbox(', 'def structural_sell_candidates(', 'def portfolio_candidates(', "'buy_usdt':", "'sell_units':")),
         'orders_filters': ('static/orders_inbox.js', ('function visible(', 'orders-venue', 'orders-tier', 'orders-side', 'orders-token', 'orders-level')), 
@@ -1837,6 +1872,8 @@ def _deployed_asset_status():
         'balancer_custody_ui': ('templates/balancer.html', ('id="custody-balancer"', 'Movimientos y distribución posterior', 'r.feasible_pct.hodl', 'payload.custody_comparison')), 
         'buy_custom_fibo_ui': ('templates/trade_sim.html', ('id="fibo-split-reset"', 'id="fibo-split-apply"', 'refreshFiboDraft', 'showFiboControls();paint();')),
         'forecast_elliott_table': ('templates/forecast.html', ('Simulación - Ondas Elliott', '<th>O5 (SH3)</th>')),
+        'orders_workflow': ('orders_workflow.py', ('def registered_orders(', 'def validate_transition(', 'def write_event(', 'PENDIENTE_CONCILIACION')),
+        'orders_management_api': ('app.py', ('def manage_order_lifecycle(',"'/api/orders/manage'")),
         'orders_simple_filters': ('templates/ordenes.html', ('Backlog de Ordenes Compra / Venta','id="orders-venue"','id="orders-tier"','id="orders-side"','id="orders-token"')),
         'forecast_master_pivots': ('app.py', ("'published_cl':w.get('cycle_low')", "'cl_status':w.get('cl_status','PROPUESTO')", "'waves':w.get('waves',{})")),
     }

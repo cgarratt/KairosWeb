@@ -225,3 +225,12 @@ El botón de publicación requiere administración vigente, CSRF, preview, confi
 - Es evidencia de recepción agregada, **no un Trade ID ni un timestamp inventado**, y **no suma de nuevo las unidades o USDT al snapshot**. Duplicados, fondos sin evidencia, mezcla agregados+trades, órdenes abiertas o reservas sin conciliar siguen bloqueadas.
 - Si persiste `DATA ERROR`, Portafolio mostrará la categoría segura (`ORDERS_FILLS_RECONCILIATION_REQUIRED`, `GOOGLE_SHEETS_HTTP_403`, etc.) y el ID de incidente. La causa detallada queda en logs de Render, sin divulgar secretos.
 - Instalación: desplegar el ZIP descomprimido, comprobar `/health` versión `2.0.42` y después consultar Portafolio/Balancer con el MASTER vigente. Ninguna operación real se ha realizado desde este hotfix.
+
+## v2.0.43 · Órdenes — seguimiento de estados con evidencia
+
+- Gestión administrativa **Propuesta → Confirmada → Parcial / Ejecutada** en `/mode/ordenes`.
+- Primera escritura autorizada crea `26_ORDENES_GESTION` en el MASTER, sin modificar el inventario. Se preserva historial append-only y cada transición requiere revisión de versión para evitar sobrescrituras silenciosas.
+- Se registran **unidades previstas y ejecutadas**, importe de USDT/USDC, comisiones, ID del exchange y evidencia. Los fills históricos de `05_ORDENES` / `06_FILLS` se preservan; no deben registrarse de nuevo.
+- Confirmada = declarada como colocada, pero sin fill acreditado; Ejecutada = evidencia declarada **pendiente de conciliación contable**, sin crédito automático de saldo. La validación del MASTER reserva capacidad para evitar reutilizar los presupuestos pendientes y mantiene QF protegida.
+- Requiere identidad lectora y editora Google; solo administradores pueden registrar cambios de estado; el resto de usuarios autenticados pueden revisar.
+- `/health` debe informar `2.0.43` y consistencia del paquete. No ofrece ni presume envío, cancelación ni sincronización real con exchanges.

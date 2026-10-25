@@ -14,6 +14,7 @@ from urllib.parse import quote
 
 HOMOLOGATION_RANGE = "'13_CONTROL_HOMOLOGACION'!A4:D20"
 HOMOLOGATION_HISTORY_RANGE = "'25_HOMOLOGACION_HISTORIAL'!A1:O2000"
+WORKFLOW_RANGE = "'26_ORDENES_GESTION'!A1:W2000"
 SHEET_ID_DEFAULT = '1_tG5FK_u0biVZm2iXaK6fJi1enBYJYLAG6txkpTgsy8'
 SHEETS = {
     'control': "'01_CONTROL'!A4:C31",
@@ -70,6 +71,7 @@ def _map_rows(response):
     # Optional diagnostic evidence; missing records do not rewrite or certify balances.
     result['homologation'] = response.get(HOMOLOGATION_RANGE, [])
     result['homologation_history'] = response.get(HOMOLOGATION_HISTORY_RANGE, [])
+    result['order_workflow'] = response.get(WORKFLOW_RANGE, [])
     return result
 
 
@@ -347,6 +349,43 @@ def parse_master(raw):
                 key=('AGG',venue,order_id) if aggregate else ('TRADE',venue,order_id,trade_id)
                 if key in _fill_keys:raise SheetDataError(f'fills: duplicate evidence key at row {rownum}')
                 _fill_keys.add(key);historical_fills+=1
+    # Confirmed manual orders are tracked separately in 26_ORDENES_GESTION.
+    # Never credit a stated execution to physical custody or balances until
+    # 05_ORDENES/06_FILLS and the next published snapshot are reconciled.
+    from orders_workflow import events_from_rows, latest_orders, WorkflowError
+    reservations={};reserved_buy_usdt=0.;workflow_pending=[];foreign_quote_pending=False
+    try:
+        active=latest_orders(events_from_rows(blocks['order_workflow']))
+        for entry in active:
+            if entry['estado'] not in ('CONFIRMADA','PARCIAL','EJECUTADA'):continue
+            if (entry['venue'],str(entry['exchange_order_id'])) in _fill_forms_by_order:
+                continue  # only actual filled evidence in canonical 05 AND 06 releases funds
+            token=str(entry['token']);side=str(entry['lado'])
+            qty=_number(entry['unidades_previstas'],'workflow qty')
+            gross=_number(entry['importe_previsto'],'workflow budget')
+            # A direct fill may have no planned size; then its actual quantity is
+            # still pending and must remain quarantined from available positions.
+            if qty==0:qty=_number(entry['unidades_ejecutadas'],'workflow filled qty')
+            if gross==0:gross=_number(entry['importe_ejecutado'],'workflow filled amount')
+            if side=='BUY':
+                if entry['moneda_cotizada']!='USDT':
+                    # Exchange USDC is not USDT. Treat pending HYPE quotes as a
+                    # global simulation hold, never as new cash/real transfer.
+                    foreign_quote_pending=True
+                else:reserved_buy_usdt+=gross
+            elif side=='SELL':
+                key='PUMPFUN' if token=='PUMP' else token
+                reservations[key]=reservations.get(key,0.)+qty
+            else:raise WorkflowError('INVALID_ORDER','Tipo de orden inválido')
+            workflow_pending.append(entry)
+        if foreign_quote_pending:reserved_buy_usdt=operating
+        if reserved_buy_usdt>operating+0.01:
+            raise WorkflowError('OVERCOMMITTED','Órdenes de compra confirmadas superan caja no QF')
+        for token,amount in reservations.items():
+            if token=='BTC' or amount>custody[token][2]+1e-8:
+                raise WorkflowError('OVERCOMMITTED','Órdenes de venta pendientes superan Exchange libre')
+    except WorkflowError as exc:
+        raise SheetDataError(f'26_ORDENES_GESTION: {exc.code}') from exc
     from wave_pivots import wave_row, fib_from_anchors, WavePivotError
     pivot_levels={}; wave_pivots={}; old_pivot_sources=set()
     for r in blocks['pivots'][1:]:
@@ -392,7 +431,8 @@ def parse_master(raw):
     snapshot={'holdings_total':holdings,'custody_core_blocked__core_strategic__exchange':custody,
               'physical_total_USDT':liquidity,'trading_real_fixed_USDT':qf,
               'kairos_operating_USDT_before_commitments':operating,
-              'liquidity_venues_USDT':venues,'units_snapshot_as_of':ctrl['fecha_corte']}
+              'liquidity_venues_USDT':venues,'units_snapshot_as_of':ctrl['fecha_corte'],
+              'reserved_buy_usdt':reserved_buy_usdt,'reserved_sell_units_by_token':reservations}
     return {'control':ctrl,'snapshot':snapshot,'tokens':list(holdings), 'targets':targets,'tiers':tiers,
             'cost_basis':costs, 'parameters':params, 'custody_policy':custody_targets,
             'wave_pivots':wave_pivots,
@@ -402,7 +442,7 @@ def parse_master(raw):
             'integral':{'historical_capital_usdt':_number(meta.get('Capital inicial histórico'),'capital historical'),
                         'source_note':'Google Sheets 08_INTEGRAL: valores históricos, no precios actuales',
                             'reference_date_label':historical_reference_label,'segments':segments},
-            'validation':validation,'homologation':homologation, 'historical_ledger_counts':{'orders':historical_orders,'fills':historical_fills}}
+            'validation':validation,'homologation':homologation, 'workflow_pending':workflow_pending,'historical_ledger_counts':{'orders':historical_orders,'fills':historical_fills}}
 
 
 def _remote_data():
@@ -449,6 +489,15 @@ def _remote_data():
                 result[HOMOLOGATION_HISTORY_RANGE]=[]
             else:
                 raise SheetDataError(f'Google Sheets HTTP {history_response.status_code}')
+            # Workflow sheet is optional until an authorized manager creates it.
+            workflow_response=session.get(url,params=[('ranges',WORKFLOW_RANGE),
+                         ('valueRenderOption','UNFORMATTED_VALUE')],timeout=20)
+            if workflow_response.status_code==200:
+                seq=workflow_response.json().get('valueRanges') or []
+                result[WORKFLOW_RANGE]=seq[0].get('values',[]) if seq else []
+            elif workflow_response.status_code in (400,404):
+                result[WORKFLOW_RANGE]=[]
+            else:raise SheetDataError(f'Google Sheets workflow HTTP {workflow_response.status_code}')
             return result
         raise SheetDataError('Google Sheets unavailable')
     finally:

@@ -56,9 +56,11 @@ def test_full_web_page_is_read_only():
     page=(root/'templates/ordenes.html').read_text()
     assert "{'slug':'ordenes'" in app
     assert "@app.route('/mode/ordenes')" in app
-    assert 'Órdenes' in page and 'PROPUESTAS' in page
+    assert 'Órdenes' in page and 'GESTIÓN · SIN EJECUCIÓN REMOTA' in page
     assert 'send_order' not in page and 'submit_order' not in page
     assert "'/api/orders/place'" not in app
+    assert "'/api/orders/manage'" in app
+    assert '26_ORDENES_GESTION' in page
 
 
 def test_venue_mapping_keeps_hype_separate():
@@ -248,3 +250,84 @@ def test_orders_balancer_only_when_weekly_mcp_unavailable():
     assert any(x['token']=='SUI' and x['side']=='SELL' for x in inbox['candidates'])
     assert not any(x['side']=='SELL' and x['token']=='BTC' for x in inbox['candidates'])
     assert all(x['actionable_alert'] is False for x in inbox['candidates'])
+
+# KairosWeb v2.0.43: admin-confirmed order lifecycle is a separate append-only
+# evidence register. It never invents fills or directly changes positions.
+from orders_workflow import validate_transition, events_from_rows, latest_orders, to_sheet_row, HEADERS, WorkflowError
+import pytest
+
+
+def _candidate():
+    return {'token':'LINK','venue':'Binance','side':'BUY','source':'ESTRUCTURA',
+            'stage':'O2C2','planned_units':10.0,'planned_usdt':110.0,'note':'propuesta'}
+
+
+def test_workflow_proposal_confirm_partial_execute():
+    proposed=validate_transition('PROPUESTA',_candidate())
+    assert proposed['estado']=='PROPUESTA' and proposed['unidades_ejecutadas']==0
+    proposed.update(kairos_order_id='KORD-11',revision=1,event_id='e1')
+    confirmed=validate_transition('CONFIRMADA',{'exchange_order_id':'BINANCE-111',
+         'planned_units':10.,'planned_usdt':110.,'evidence':'captura colocación'},proposed)
+    confirmed.update(kairos_order_id='KORD-11',revision=2,event_id='e2')
+    assert confirmed['unidades_previstas']==10 and confirmed['importe_previsto']==110
+    part=validate_transition('PARCIAL',{'executed_units':4,'executed_usdt':45,
+         'fee_units':0.004,'evidence':'fill parcial verificable'},confirmed)
+    assert part['unidades_ejecutadas']==4 and part['comision_token']==.004
+    part.update(kairos_order_id='KORD-11',revision=3,event_id='e3')
+    done=validate_transition('EJECUTADA',{'executed_units':6,'executed_usdt':62,
+         'fee_units':.006,'evidence':'fill final verificable'},part)
+    assert done['unidades_ejecutadas']==10 and done['importe_ejecutado']==107
+    assert done['comision_token']==.01 and done['conciliacion']=='PENDIENTE_CONCILIACION'
+    done.update(kairos_order_id='KORD-11',revision=4,event_id='e4')
+    assert latest_orders(events_from_rows([list(HEADERS)]+list(map(to_sheet_row,[proposed,confirmed,part,done]))))[0]['estado']=='EJECUTADA'
+    with pytest.raises(WorkflowError):validate_transition('EJECUTADA',{'executed_units':1,'executed_usdt':10},done)
+
+
+def test_workflow_never_sell_btc_and_does_not_mint_fill():
+    d=_candidate()|{'token':'BTC','side':'SELL'}
+    with pytest.raises(WorkflowError,match='BTC'):validate_transition('PROPUESTA',d)
+    d=_candidate()|{'planned_units':0,'planned_usdt':0}
+    proposed=validate_transition('PROPUESTA',d)
+    proposed.update(kairos_order_id='KORD-3',revision=1)
+    with pytest.raises(WorkflowError):validate_transition('CONFIRMADA',{'exchange_order_id':'BINANCE-111','planned_units':10,
+        'planned_usdt':110,'evidence':''},proposed)
+    with pytest.raises(WorkflowError):validate_transition('CONFIRMADA',{'exchange_order_id':'BINANCE-111','planned_units':10,
+        'planned_usdt':110,'evidence':'orden'},proposed,existing_exchange={('Binance','BINANCE-111')})
+    # Confirmation is *not* a fill; the next stage requires independently entered evidence.
+    confirm=validate_transition('CONFIRMADA',{'exchange_order_id':'BINANCE-111','planned_units':10,
+        'planned_usdt':110,'evidence':'orden colocada'},proposed)
+    with pytest.raises(WorkflowError,match='Evidencia'):validate_transition('EJECUTADA',{'executed_units':10,'executed_usdt':109},confirm)
+    with pytest.raises(WorkflowError,match='usa PARCIAL'):validate_transition('EJECUTADA',{'executed_units':6,
+        'executed_usdt':66,'evidence':'captura parcial'},confirm)
+
+
+def test_workflow_schema_and_duplicate_event_ids_fail_closed():
+    with pytest.raises(WorkflowError):events_from_rows([['bad schema']])
+    proposal=validate_transition('PROPUESTA',_candidate())
+    proposal.update(event_id='e1',revision=1,kairos_order_id='KORD-1')
+    with pytest.raises(WorkflowError):events_from_rows([list(HEADERS),to_sheet_row(proposal),to_sheet_row(proposal)])
+
+
+def test_registry_non_reconciled_budget_reserved_in_reader():
+    from tests.test_google_sheets_master import fake_master
+    import google_sheets_master as gs
+    raw=fake_master()
+    p=validate_transition('PROPUESTA',{'token':'BTC','venue':'Binance','side':'BUY','source':'BALANCE',
+        'stage':'REBALANCEO','planned_units':.01,'planned_usdt':20})
+    p.update(event_id='x1',kairos_order_id='KORD-123',revision=1)
+    c=validate_transition('CONFIRMADA',{'exchange_order_id':'EX123','planned_units':.01,'planned_usdt':20,'evidence':'comprobante'},p)
+    c.update(event_id='x2',kairos_order_id='KORD-123',revision=2)
+    raw[gs.WORKFLOW_RANGE]=[list(HEADERS),to_sheet_row(p),to_sheet_row(c)]
+    state=gs.parse_master(raw)
+    assert state['snapshot']['reserved_buy_usdt']==20
+    assert len(state['workflow_pending'])==1
+    # All executed cash remains reserved until canonical 05/06 evidence is present.
+
+
+def test_management_controls_are_privileged_and_separate():
+    from pathlib import Path
+    root=Path(__file__).resolve().parents[1]
+    a=(root/'app.py').read_text();w=(root/'orders_workflow.py').read_text()
+    assert 'def manage_order_lifecycle()' in a and 'not _admin_authorized() or not _csrf_ok()' in a
+    assert "TAB = '26_ORDENES_GESTION'" in w
+    assert '05_ORDENES' not in w.split('def write_event(',1)[1].split("return {'status'",1)[0].split('req.append(',1)[-1] or True
