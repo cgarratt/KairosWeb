@@ -264,9 +264,11 @@ def parse_master(raw):
         if not _almost(sum(vals),1.0) or _cell(r,4)!='OK':raise SheetDataError('04_CUSTODIA: invalid tier split')
         custody_targets[r[0]]=vals
     if set(custody_targets)!=set(('T1','T2','T3')):raise SheetDataError('04_CUSTODIA: missing tiers')
-    # The user declared no open orders/fills pending; this is not remote exchange proof.
-    for key in ('ordenes_activas_declaradas','fills_pendientes_registro_declarados'):
-        if str(ctrl.get(key))!='0':raise SheetDataError(f'01_CONTROL: {key} requires current reconciliation')
+    # Open orders are allowed when individually documented and reserved below.
+    # A declared count is not evidence of exchange execution.
+    declared_open=_number(int(str(ctrl.get('ordenes_activas_declaradas','0'))), 'declared open orders') if str(ctrl.get('ordenes_activas_declaradas','0')).isdigit() else None
+    if declared_open is None or str(ctrl.get('fills_pendientes_registro_declarados','0'))!='0':
+        raise SheetDataError('01_CONTROL: unresolved orders/fills declaration')
     # Editorial notes are not transactions. Reconciled historical ledger rows may
     # remain on the Sheet; they must not change already-published holdings.
     # An OPEN or partially-filled order, an unverified fill or a duplicate key
@@ -278,7 +280,7 @@ def parse_master(raw):
     # Historical execution ledgers are evidence only: published units and USDT
     # already include their effects. Never add fills to the snapshot again.
     _order_keys=set();_order_records={};_fill_keys=set()
-    _fill_forms_by_order={};historical_orders=0;historical_fills=0
+    _fill_forms_by_order={};historical_orders=0;historical_fills=0;pending_ledger=[]
     for section in ('orders','fills'):
         for rownum,r in enumerate(blocks[section][1:],start=5):
             if not any(v not in (None,'') for v in r):continue
@@ -291,15 +293,37 @@ def parse_master(raw):
                 # reconciled fill ("CONCILIADO · 06_FILLS fila5; ..."). The old
                 # exact-string gate incorrectly rejected that verified format.
                 linked_reconciled=bool(re.match(r'^CONCILIADO\s*[·-]\s*06_FILLS\s+FILA\s*\d+\b',reconciled))
-                if not (venue and order_id and token in SYMBOLS.union({'PUMP'}) and side in ('BUY','SELL')
-                        and status in ('FILLED','COMPLETED','CANCELLED','CANCELED','REJECTED','EXPIRED')
-                        and (reconciled in ('CONCILIADO','VERIFICADO') or linked_reconciled)):
-                    raise SheetDataError(f'orders: operational or unverified entry at row {rownum}; reconcile before use')
-                key=(venue,order_id)
-                if key in _order_keys:raise SheetDataError(f'orders: duplicate (venue,order_id) at row {rownum}')
-                _order_keys.add(key);_order_records[key]={'token':token,'side':side,'status':status,
-                    'qty_executed':_cell(r,8), 'evidence':str(_cell(r,14,'') or ''),
-                    'linked_reconciled':linked_reconciled}
+                is_pending=status in ('PENDIENT','PENDIENTE','OPEN','NEW','PARTIALLY_FILLED','PARCIAL','CONFIRMADA')
+                is_closed=status in ('FILLED','COMPLETED','CANCELLED','CANCELED','REJECTED','EXPIRED')
+                evidence=str(_cell(r,14,'') or '').strip()
+                if not (venue and token in SYMBOLS.union({'PUMP'}) and side in ('BUY','SELL')
+                        and (is_pending or is_closed) and evidence):
+                    raise SheetDataError(f'orders: reconcile unverified entry at row {rownum}')
+                if is_pending:
+                    # A local reference is NOT an exchange order ID. Require a
+                    # deterministic source reference and the missing-ID flag.
+                    if not order_id and not ('PENDIENTE_ID_EXCHANGE' in reconciled and 'Referencia local' in evidence):
+                        raise SheetDataError(f'orders: missing provisional reference at row {rownum}')
+                    if not _almost(_number(_cell(r,8,0), 'executed qty'),0):
+                        raise SheetDataError(f'orders: reconcile partial execution needs fill at row {rownum}')
+                    price=_number(_cell(r,6), 'pending LIMIT price')
+                    quantity=_number(_cell(r,7), 'pending qty')
+                    budget=_number(_cell(r,9), 'pending commitment')
+                    if price<=0 or quantity<=0 or not _almost(price*quantity,budget,eps=.05):
+                        raise SheetDataError(f'orders: pending budget mismatch at row {rownum}')
+                    key=(venue,order_id or evidence.split('Referencia local (NOOrderID):',1)[-1].split('"',1)[0].strip())
+                else:
+                    if not (order_id and (reconciled in ('CONCILIADO','VERIFICADO') or linked_reconciled)):
+                        raise SheetDataError(f'orders: closed entry not reconciled at row {rownum}')
+                    key=(venue,order_id)
+                if key in _order_keys:raise SheetDataError(f'orders: duplicate key at row {rownum}')
+                _order_keys.add(key)
+                if is_pending:
+                    pending_ledger.append((venue,token,side,quantity,budget,key))
+                else:
+                    _order_records[key]={'token':token,'side':side,'status':status,
+                        'qty_executed':_cell(r,8), 'evidence':evidence,
+                        'linked_reconciled':linked_reconciled}
                 historical_orders+=1
             else:
                 venue=str(_cell(r,0,'')).strip();order_id=str(_cell(r,1,'')).strip()
@@ -354,6 +378,17 @@ def parse_master(raw):
     # 05_ORDENES/06_FILLS and the next published snapshot are reconciled.
     from orders_workflow import events_from_rows, latest_orders, WorkflowError
     reservations={};reserved_buy_usdt=0.;workflow_pending=[];foreign_quote_pending=False
+    for venue,token,side,qty,budget,key in pending_ledger:
+        if side=='BUY':
+            if token=='HYPE' and venue=='Hyperliquid':
+                foreign_quote_pending=True  # HYPE USDC: do not treat as USDT
+            else:reserved_buy_usdt+=budget
+        else:
+            symbol='PUMPFUN' if token=='PUMP' else token
+            if symbol=='BTC':raise SheetDataError('orders: BTC NEVER SELL')
+            reservations[symbol]=reservations.get(symbol,0.)+qty
+    if declared_open!=len(pending_ledger):
+        raise SheetDataError(f'orders: reconcile declared open count {declared_open} differs from {len(pending_ledger)} verified')
     try:
         active=latest_orders(events_from_rows(blocks['order_workflow']))
         for entry in active:
@@ -442,7 +477,7 @@ def parse_master(raw):
             'integral':{'historical_capital_usdt':_number(meta.get('Capital inicial histórico'),'capital historical'),
                         'source_note':'Google Sheets 08_INTEGRAL: valores históricos, no precios actuales',
                             'reference_date_label':historical_reference_label,'segments':segments},
-            'validation':validation,'homologation':homologation, 'workflow_pending':workflow_pending,'historical_ledger_counts':{'orders':historical_orders,'fills':historical_fills}}
+            'validation':validation,'homologation':homologation, 'workflow_pending':workflow_pending,'historical_ledger_counts':{'orders':historical_orders,'fills':historical_fills},'pending_ledger_count':len(pending_ledger)}
 
 
 def _remote_data():

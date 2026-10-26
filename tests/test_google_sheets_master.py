@@ -358,7 +358,7 @@ def test_v2033_homologation_diagnostics_and_units_contract_in_release():
     app=(root/'app.py').read_text()
     mcp=(root/'static/mcp_settings.js').read_text()
     html=(root/'templates/balancer.html').read_text()
-    assert "APP_VERSION = '2.0.43'" in app
+    assert "APP_VERSION = '2.0.44'" in app
     assert "/api/settings/homologation-status" in app
     assert 'HOM_WRITER_MISSING' in app
     assert 'write_may_have_committed' in app
@@ -446,4 +446,31 @@ def test_only_order_level_evidence_may_omit_trade_utc_time():
     raw[gs.SHEETS['fills']][1][2]='trade-001'
     raw[gs.SHEETS['fills']][1][13]='TRUE'
     with pytest.raises(gs.SheetDataError,match='missing UTC timestamp'):
+        gs.parse_master(raw)
+
+def test_pending_orders_are_reserved_not_fills():
+    raw=fake_master()
+    control=raw[gs.SHEETS['control']]
+    next(r for r in control if r[0]=='ordenes_activas_declaradas')[1]='2'
+    for token,qty,price in [('ETH',.1,2),('SOL',.2,3)]:
+        raw[gs.SHEETS['orders']].append(['Binance',None,token,'BUY','LIMIT','O2C2',price,qty,0,price*qty,None,'PENDIENTE',None,None,
+            f'Evidencia de orden; Referencia local (NOOrderID):Binance|{token}|BUY|2026-10-24|12:00|{price}|{qty}',
+            'PENDIENTE_ID_EXCHANGE;0ejecutada;NOFILL'])
+    parsed=gs.parse_master(raw)
+    assert parsed['pending_ledger_count']==2
+    assert abs(parsed['snapshot']['reserved_buy_usdt']-.8)<1e-9
+    assert parsed['historical_ledger_counts']['fills']==0
+    control[-1][1]='0' if control[-1][0]=='ordenes_activas_declaradas' else control[-1][1]
+    next(r for r in control if r[0]=='ordenes_activas_declaradas')[1]='0'
+    with pytest.raises(gs.SheetDataError,match='declared open count'):
+        gs.parse_master(raw)
+
+def test_pending_orders_duplicate_provisional_reference_rejected():
+    raw=fake_master()
+    next(r for r in raw[gs.SHEETS['control']] if r[0]=='ordenes_activas_declaradas')[1]='2'
+    row=['Binance',None,'ETH','BUY','LIMIT','O2C2',2,.1,0,.2,None,'PENDIENTE',None,None,
+         'Evidencia; Referencia local (NOOrderID):Binance|ETH|BUY|2026-10-24|12:00|2|0.1',
+         'PENDIENTE_ID_EXCHANGE;0ejecutada;NOFILL']
+    raw[gs.SHEETS['orders']].extend([row,list(row)])
+    with pytest.raises(gs.SheetDataError,match='duplicate'):
         gs.parse_master(raw)

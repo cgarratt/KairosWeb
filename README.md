@@ -234,3 +234,7 @@ El botón de publicación requiere administración vigente, CSRF, preview, confi
 - Confirmada = declarada como colocada, pero sin fill acreditado; Ejecutada = evidencia declarada **pendiente de conciliación contable**, sin crédito automático de saldo. La validación del MASTER reserva capacidad para evitar reutilizar los presupuestos pendientes y mantiene QF protegida.
 - Requiere identidad lectora y editora Google; solo administradores pueden registrar cambios de estado; el resto de usuarios autenticados pueden revisar.
 - `/health` debe informar `2.0.43` y consistencia del paquete. No ofrece ni presume envío, cancelación ni sincronización real con exchanges.
+
+
+## v2.0.44 · Hotfix órdenes abiertas
+Permite órdenes pendientes documentadas en 05_ORDENES con reserva de USDT/unidades, conteo conciliado y referencias locales cuando no se dispone de Exchange Order ID. No acredita fills ni altera saldos.
