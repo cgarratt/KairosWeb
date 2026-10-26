@@ -390,11 +390,15 @@ def parse_master(raw):
     # 05_ORDENES/06_FILLS and the next published snapshot are reconciled.
     from orders_workflow import events_from_rows, latest_orders, WorkflowError
     reservations={};reserved_buy_usdt=0.;workflow_pending=[];foreign_quote_pending=False
+    reserved_buy_by_venue={};pending_foreign_quotes=[]
     for venue,token,side,qty,budget,key in pending_ledger:
         if side=='BUY':
             if token=='HYPE' and venue=='Hyperliquid':
                 foreign_quote_pending=True  # HYPE USDC: do not treat as USDT
-            else:reserved_buy_usdt+=budget
+                pending_foreign_quotes.append({"venue":venue,"token":token,"amount":budget,"currency":"USDC_UNVERIFIED"})
+            else:
+                reserved_buy_usdt+=budget
+                reserved_buy_by_venue[venue]=reserved_buy_by_venue.get(venue,0.)+budget
         else:
             symbol='PUMPFUN' if token=='PUMP' else token
             if symbol=='BTC':raise SheetDataError('orders: BTC NEVER SELL')
@@ -419,13 +423,21 @@ def parse_master(raw):
                     # Exchange USDC is not USDT. Treat pending HYPE quotes as a
                     # global simulation hold, never as new cash/real transfer.
                     foreign_quote_pending=True
-                else:reserved_buy_usdt+=gross
+                    pending_foreign_quotes.append({"venue":entry["venue"],"token":token,"amount":gross,"currency":entry["moneda_cotizada"]})
+                else:
+                    reserved_buy_usdt+=gross
+                    reserved_buy_by_venue[entry["venue"]]=reserved_buy_by_venue.get(entry["venue"],0.)+gross
             elif side=='SELL':
                 key='PUMPFUN' if token=='PUMP' else token
                 reservations[key]=reservations.get(key,0.)+qty
             else:raise WorkflowError('INVALID_ORDER','Tipo de orden inválido')
             workflow_pending.append(entry)
-        if foreign_quote_pending:reserved_buy_usdt=operating
+        # Foreign-quoted HYPE orders cannot be deducted from USDT as if USDC.
+        # Quarantine only the affected venue's USDT balance until independently
+        # verified; never block unrelated Binance/KuCoin balances.
+        quarantined_venue_usdt=sum(float(venues.get(v,0)) for v in {e['venue'] for e in pending_foreign_quotes})
+        # Venue-level availability is reported separately; unverified venue
+        # settlement must not be assumed to release committed funds.
         if reserved_buy_usdt>operating+0.01:
             raise WorkflowError('OVERCOMMITTED','Órdenes de compra confirmadas superan caja no QF')
         for token,amount in reservations.items():
@@ -479,7 +491,12 @@ def parse_master(raw):
               'physical_total_USDT':liquidity,'trading_real_fixed_USDT':qf,
               'kairos_operating_USDT_before_commitments':operating,
               'liquidity_venues_USDT':venues,'units_snapshot_as_of':ctrl['fecha_corte'],
-              'reserved_buy_usdt':reserved_buy_usdt,'reserved_sell_units_by_token':reservations}
+              'reserved_buy_usdt':reserved_buy_usdt+quarantined_venue_usdt,
+              'reserved_buy_usdt_verified':reserved_buy_usdt,
+              'reserved_buy_usdt_by_venue':reserved_buy_by_venue,
+              'foreign_quote_pending':pending_foreign_quotes,
+              'quarantined_venue_usdt':quarantined_venue_usdt,
+              'reserved_sell_units_by_token':reservations}
     return {'control':ctrl,'snapshot':snapshot,'tokens':list(holdings), 'targets':targets,'tiers':tiers,
             'cost_basis':costs, 'parameters':params, 'custody_policy':custody_targets,
             'wave_pivots':wave_pivots,

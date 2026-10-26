@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.45'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.46'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -519,6 +519,9 @@ def core_dashboard(prices):
         'usdt_total':liquidity,
         'usdt_operating':max(0,SNAPSHOT['kairos_operating_USDT_before_commitments']-SNAPSHOT.get('reserved_buy_usdt',0)),
         'pending_buy_usdt':SNAPSHOT.get('reserved_buy_usdt',0),
+        'pending_buy_usdt_verified':SNAPSHOT.get('reserved_buy_usdt_verified',0),
+        'quarantined_venue_usdt':SNAPSHOT.get('quarantined_venue_usdt',0),
+        'foreign_quote_pending':SNAPSHOT.get('foreign_quote_pending',[]),
         'trading_reserve':trading,
         'total_value':total_value,
         'total_btc_equivalent':total_btc_equivalent,

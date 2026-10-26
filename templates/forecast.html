@@ -21,7 +21,7 @@
 [data-theme="dark"] .fc-tables td.fc-level-near{background:rgba(228,151,37,.32)!important;color:#ffe1a0}
 
 .fc-muted{font-size:12px;color:#667993}.fc-warning{border:1px solid #f2d69e;border-radius:12px;background:#fff9e9;padding:12px 15px;color:#845700;font-size:13px;margin:12px 0}
-.fc-chart{width:100%;height:310px;border:1px solid #dfebf6;border-radius:15px;background:linear-gradient(#fafcff,#f1f7ff)}
+.fc-chart{width:100%;height:490px;border:1px solid #dfebf6;border-radius:15px;background:linear-gradient(#fafcff,#f1f7ff)}
 .fc-line{stroke:#3276cc;stroke-width:3;fill:none;stroke-linejoin:round}.fc-dot{fill:#2680d5;stroke:white;stroke-width:2}
 .fc-spot-line{stroke:#db8640;stroke-width:2;stroke-dasharray:9 6;vector-effect:non-scaling-stroke}.fc-spot-label{fill:#db8640;font-size:12px;font-weight:800}
 .fc-legend{font-size:12px;color:#536b8a;line-height:1.6}
@@ -67,7 +67,7 @@
 <div class="fc-field"><label for="o3-choice">O3 · extensión desde O2</label><select id="o3-choice"><option value="1.618">O3V1 · Fib 1.618</option><option value="2.618">O3V2 · Fib 2.618</option><option value="3.618">O3V3 · Fib 3.618</option><option value="4.618">O3V4 · Fib 4.618</option></select></div>
 <div class="fc-field"><label for="o4-choice">O4 · retroceso O2→O3</label><select id="o4-choice"><option value="0.382">O4C1 · Fib 38.2%</option><option value="0.5" selected>O4C2 · Fib 50%</option><option value="0.618">O4C3 · Fib 61.8%</option><option value="0.786">O4C4 · Fib 78.6%</option></select></div>
 <div class="fc-field"><label for="o5-choice">O5 · extensión desde O4</label><select id="o5-choice"><option value="1.618">O5V1 · Fib 1.618</option><option value="2.618">O5V2 · Fib 2.618</option><option value="3.618">O5V3 · Fib 3.618</option><option value="4.618">O5V4 · Fib 4.618</option></select></div>
-</div><svg id="waves-chart" class="fc-chart" viewBox="0 0 740 310" role="img" aria-label="Precios hipotéticos por onda"></svg><p class="fc-legend" id="chart-info">Selecciona un token con referencias disponibles.</p></section>
+</div><svg id="waves-chart" class="fc-chart" viewBox="0 0 740 490" role="img" aria-label="Precios hipotéticos por onda"></svg><p class="fc-legend" id="chart-info">Selecciona un token con referencias disponibles.</p></section>
 
 <section class="panel span-12">
 <h2>Simulación - Ondas Elliott</h2><p class="sub">Escenario por token. Cycle Low/O1 proceden de estructura semanal UTC (confirmada o candidata), nunca se infieren de Fibonacci; O2–O5 son niveles hipotéticos según las extensiones y retrocesos elegidos.</p>
@@ -177,18 +177,18 @@ function drawCurve(waves){
  const prices=choice.values;
  const domain=validSpot?[...prices,spot]:prices;
  const lo=Math.min(...domain),hi=Math.max(...domain),span=(hi-lo)||1;
- const xx=i=>64+i*123, yy=n=>252-(n-lo)/span*190;
+ const xx=i=>95+i*116, yy=n=>407-(n-lo)/span*340;
  const points=prices.map((p,i)=>[xx(i),yy(p)]);
  const names=['Cycle Low','O1','O2','O3','O4','O5'];
  const ns='http://www.w3.org/2000/svg';svg.replaceChildren();
  function node(tag,attrs,text){const e=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,String(v)));if(text!=null)e.textContent=text;svg.appendChild(e);return e}
- for(let i=0;i<4;i++){let y=52+i*62;node('line',{x1:44,y1:y,x2:703,y2:y,stroke:'#e1eaf8','stroke-width':1})}
+ for(let i=0;i<5;i++){const y=67+i*85;node('line',{x1:44,y1:y,x2:703,y2:y,stroke:'#e1eaf8','stroke-width':1});node('text',{x:39,y:y+4,'text-anchor':'end',class:'fc-muted','font-size':'10'},price(hi-(i/4)*span));}
  if(validSpot){
   const ySpot=yy(spot);
   const line=node('line',{x1:44,y1:ySpot,x2:703,y2:ySpot,class:'fc-spot-line','data-spot-reference':'binance-mcp',
     'aria-label':`Spot actual ${choice.token} ${price(spot)} observado ${fc.generated_at||'N/D'}`});
   const tooltip=document.createElementNS(ns,'title');tooltip.textContent=`Spot Binance MCP: ${price(spot)} · Observado: ${fc.generated_at||'N/D'} · Referencia informativa; no modifica ondas.`;line.appendChild(tooltip);
-  const labelY=ySpot>228?ySpot-10:ySpot+17;
+  const labelY=ySpot>390?ySpot-10:ySpot+17;
   node('text',{x:701,y:labelY,'text-anchor':'end',class:'fc-spot-label'},`Spot ${price(spot)}`);
  }
  node('polyline',{points:points.map(p=>p.join(',')).join(' '),fill:'none',stroke:'#2877c8','stroke-width':3,'stroke-linecap':'round','stroke-linejoin':'round'});
@@ -200,7 +200,7 @@ function drawCurve(waves){
   const marker=node('circle',{cx:x,cy:y,r:locked?8:7,fill,stroke:'white','stroke-width':2,tabindex:0,
     'data-wave-status':status,'data-wave-fixed':locked?'true':'false','aria-label':label});
   const tip=document.createElementNS(ns,'title');tip.textContent=label;marker.appendChild(tip);
-  node('text',{x,y:286,class:'wave-stage-label','text-anchor':'middle'},names[i]);
+  node('text',{x,y:451,class:'wave-stage-label','text-anchor':'middle'},names[i]);
   node('text',{x,y:Math.max(20,y-17),class:'wave-price-label','text-anchor':'middle'},price(prices[i]));
  });
  const fixed=choice.locked?.length?' · Fijos del Master: '+choice.locked.map(k=>k.toUpperCase()+' '+choice.statuses[k]).join(', '):'';

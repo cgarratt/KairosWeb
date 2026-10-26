@@ -242,3 +242,6 @@ Permite órdenes pendientes documentadas en 05_ORDENES con reserva de USDT/unida
 
 ## v2.0.45 · Hotfix HYPE pending quote-only
 See RELEASE_NOTES_v2.0.45.md.
+
+## v2.0.46 · Conciliación USDC por venue y gráfico Forecast ampliado
+Ver RELEASE_NOTES_v2.0.46.md.
