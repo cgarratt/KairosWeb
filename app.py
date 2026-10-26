@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.52'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.53'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1319,6 +1319,25 @@ def orders_inbox_page():
                                snapshot=g.kairos_state['control']['snapshot_id'],master=APP_VERSION,error='No se pudo verificar '+stage+'. Ninguna propuesta nueva mostrada.',
                                structural_note=None,error_id=incident,error_stage=stage,
                                managed_orders=managed_orders),503
+
+@app.route('/api/orders/extract-image', methods=['POST'])
+def extract_order_image():
+    """Admin-only image interpretation, never a trade or an automatic journal write."""
+    if not _same_origin():return jsonify({'status':'FORBIDDEN_ORIGIN'}),403
+    if not _admin_authorized() or not _csrf_ok():return jsonify({'status':'ADMIN_AUTH_REQUIRED'}),403
+    from order_image_extract import extract_image, ImageExtractError
+    try:
+        uploaded=request.files.get('image')
+        if uploaded is None:return jsonify({'status':'INVALID','reason':'Falta captura'}),400
+        raw=uploaded.stream.read(5*1024*1024+1)
+        result=extract_image(raw,uploaded.mimetype)
+        return jsonify({'status':'OK',**result})
+    except ImageExtractError as exc:
+        return jsonify({'status':'EXTRACTION_UNAVAILABLE','reason':str(exc)}),422
+    except Exception:
+        incident=uuid.uuid4().hex[:10]
+        app.logger.exception('Orders extraction failed incident=%s',incident)
+        return jsonify({'status':'DATA_ERROR','reason':'No se pudo extraer la captura; utiliza ingreso manual.','error_id':incident}),503
 
 @app.route('/api/orders/manage',methods=['POST'])
 def manage_order_lifecycle():

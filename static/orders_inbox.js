@@ -43,6 +43,8 @@ function init(doc){
  const form=doc.getElementById('orders-management-form');
  if(!dialog||!form)return;
  const feedback=doc.getElementById('orders-management-feedback');
+ const extractFeedback=doc.getElementById('order-extract-feedback');
+ const upload=doc.getElementById('order-image');
  const fields={exchange_order_id:'order-exchange-id',planned_units:'order-planned-units',planned_usdt:'order-planned-usdt',
    executed_units:'order-executed-units',executed_usdt:'order-executed-usdt',fee_units:'order-fee-units',fee_quote:'order-fee-quote',
    evidence:'order-evidence',note:'order-note'};
@@ -67,21 +69,42 @@ function init(doc){
    feedback.textContent='No disponible: el historial no pudo leerse. Reintenta más tarde.';return;
   }
   current=initialFields(btn);
-  form.reset();
+  form.reset();if(extractFeedback)extractFeedback.textContent='La extracción es opcional; revisa los campos antes de guardar.';
   for(const [key,id] of Object.entries(fields)){
    const el=doc.getElementById(id);if(el&&current[key]!==undefined)el.value=current[key];
   }
-  doc.getElementById('order-management-title').textContent=({PROPUESTA:'Registrar propuesta',CONFIRMADA:'Confirmar orden colocada',CONFIRMAR_RECOMENDACION:'Confirmar recomendación colocada',
+  doc.getElementById('order-management-title').textContent=({PROPUESTA:'Registrar propuesta',CONFIRMADA:'Confirmar orden colocada',CONFIRMAR_RECOMENDACION:'Confirmar recomendación colocada',EJECUTAR_RECOMENDACION:'Registrar ejecución de recomendación',
       PARCIAL:'Registrar ejecución parcial',EJECUTADA:'Registrar orden ejecutada'})[current.action]||current.action;
   doc.getElementById('order-management-details').textContent=[current.token,current.venue,current.side,current.stage,current.moneda_cotizada||btn.dataset.currency||''].filter(Boolean).join(' · ');
+  if(current.action==='EJECUTAR_RECOMENDACION'){current.action='EJECUTAR_RECOMENDACION';doc.getElementById('order-executed-units').value=current.planned_units;doc.getElementById('order-executed-usdt').value=current.planned_usdt;}
   setVisible(current.action);
   dialog.showModal();
+ });
+ doc.getElementById('order-extract')?.addEventListener('click',async()=>{
+  const file=upload?.files?.[0];if(!file){extractFeedback.textContent='Selecciona una imagen.';return;}
+  if(file.size>5*1024*1024){extractFeedback.textContent='La captura supera 5 MB.';return;}
+  const btn=doc.getElementById('order-extract');btn.disabled=true;
+  try{
+   const auth=await fetch('/api/admin/session',{credentials:'same-origin'}).then(r=>r.json());
+   if(!auth.is_admin||!auth.csrf_token)throw new Error('Se requiere autenticación administrativa.');
+   const body=new FormData();body.append('image',file);
+   const res=await fetch('/api/orders/extract-image',{method:'POST',credentials:'same-origin',headers:{'X-Kairos-Csrf':auth.csrf_token},body});
+   const data=await res.json();if(!res.ok||data.status!=='OK')throw new Error(data.reason||data.status);
+   const map={exchange_order_id:'order-exchange-id',planned_units:'order-planned-units',planned_usdt:'order-planned-usdt',executed_units:'order-executed-units',executed_usdt:'order-executed-usdt',fee_units:'order-fee-units',fee_quote:'order-fee-quote'};
+   for(const [key,id] of Object.entries(map)){if(data.fields[key]!==null&&data.fields[key]!==undefined&&data.fields[key]!=='')doc.getElementById(id).value=data.fields[key];}
+   const mismatches=[];for(const [key,value] of Object.entries({token:current.token,venue:current.venue,side:current.side})){if(data.fields[key]&&String(data.fields[key]).toUpperCase()!==String(value).toUpperCase())mismatches.push(key);}
+   if(mismatches.length)throw new Error('La imagen no coincide con la orden seleccionada: '+mismatches.join(', ')+'. No se guardó nada.');
+   doc.getElementById('order-evidence').value='IMAGE_SHA256:'+data.sha256;
+   extractFeedback.textContent='Datos extraídos para revisión. Comprueba ID, unidades, importe, comisiones y estado antes de guardar. La imagen no se conserva en Sheets; referencia SHA256 registrada.';
+  }catch(e){extractFeedback.textContent=String(e.message||e);}finally{btn.disabled=false;}
  });
  doc.getElementById('order-cancel')?.addEventListener('click',()=>dialog.close());
  form.addEventListener('submit',async ev=>{
   ev.preventDefault();if(!current)return;
   const payload={...current,expected_snapshot_id:page.dataset.snapshotId};
   for(const [key,id] of Object.entries(fields))payload[key]=doc.getElementById(id)?.value||'';
+  // One visible action, 'Ejecutada': a smaller verified fill is saved as PARCIAL.
+  if(current.action==='EJECUTADA' && Number(payload.executed_units)>0 && Number(payload.executed_units)<Number(current.planned_units)-1e-8){payload.action='PARCIAL';}
   if(current.action==='PROPUESTA'){delete payload.exchange_order_id;delete payload.evidence;}
   // Explicit local confirmation before writing financial evidence into the MASTER.
   if(!root.confirm('Registrar estado '+current.action+' en el MASTER? No ejecuta órdenes ni altera saldos.'))return;
