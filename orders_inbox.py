@@ -464,3 +464,36 @@ def build_order_inbox(d, buy_payload, balancer_payload, proximity_pct=1.0, wave_
             'excluded_hype_count':sum(x['venue']=='Hyperliquid' for x in combined),
             'proximity_pct':threshold,
             'note':'Solo propuestas. Balance sin LIMIT técnico; extensiones SELL sin tamaño aprobado. No se envían órdenes ni se acreditan fills.'}
+
+
+def annotate_authorized_coverage(candidates, managed_records):
+    """Display-only level coverage; never infer a manual fill's level.
+
+    Requires explicit authorization marker in the reconciled journal entry.
+    The journal's original transaction remains intact.  A proposal can be
+    partially covered without turning an unfilled remainder into EJECUTADA.
+    """
+    for candidate in candidates:
+        candidate['display_status']='PROPUESTA' if (candidate.get('usdt') or 0)>0 else 'NO_APLICA'
+        candidate['credited_usdt']=0.0
+        candidate['remaining_usdt']=max(0.,float(candidate.get('usdt') or 0.))
+        budget=candidate['remaining_usdt']
+        if candidate.get('side')!='BUY' or budget<=0:continue
+        stage=str(candidate.get('stage','')).upper()
+        credited=0.
+        for entry in managed_records:
+            if (entry.get('token')!=candidate.get('token') or
+                entry.get('venue')!=candidate.get('venue') or
+                entry.get('lado')!='BUY' or
+                entry.get('estado')!='EJECUTADA' or
+                entry.get('conciliacion')!='CONCILIADA_EN_05'):
+                continue
+            note=str(entry.get('observaciones') or '')
+            if ('ASOCIACION_AUTORIZADA:'+stage) not in note:
+                continue
+            credited+=max(0.,float(entry.get('importe_ejecutado') or 0.))
+        candidate['credited_usdt']=min(budget,credited)
+        candidate['remaining_usdt']=max(0.,budget-credited)
+        if credited>0:
+            candidate['display_status']='EJECUTADA' if credited>=budget-0.01 else 'PARCIAL'
+    return candidates

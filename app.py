@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.55'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.56'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1306,6 +1306,8 @@ def orders_inbox_page():
         wave_levels=published_wave_levels(g.kairos_state['wave_pivots'])
         inbox=build_order_inbox(d,buy,bal,wave_levels=wave_levels)
         inbox['candidates']=[x for x in inbox['candidates'] if _cycle_order_allowed(x.get('side'),x.get('stage'))]
+        from orders_inbox import annotate_authorized_coverage
+        annotate_authorized_coverage(inbox['candidates'],managed_orders.get('records',[]))
         return render_template('ordenes.html',mode=mode,inbox=inbox,observed=observed,
                                snapshot=g.kairos_state['control']['snapshot_id'],master=APP_VERSION,error=None,
                                structural_note=structural_note,
