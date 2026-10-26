@@ -324,6 +324,20 @@ def parse_master(raw):
                         key=(venue,'HYPE_QUOTE|'+str(price)+'|'+str(budget)+'|'+evidence)
                     else:
                         key=(venue,order_id or evidence.split('Referencia local (NOOrderID):',1)[-1].split('"',1)[0].strip())
+                elif status in ('CANCELLED','CANCELED'):
+                    # Cancellation is not a fill. The user can attest that a
+                    # pending order was cancelled even when the exchange ID
+                    # was absent from the original screenshot. No liquidity is
+                    # added; its prior commitment simply ceases to be reserved.
+                    if ('CANCELACION_DECLARADA_USUARIO_2026-10-26' not in reconciled
+                            or 'NO_VERIFICADA_API' not in reconciled
+                            or not _almost(_number(_cell(r,8,0),'cancelled executed qty'),0)):
+                        raise SheetDataError(f'orders: cancelled entry lacks attestation at row {rownum}')
+                    price=_number(_cell(r,6),'cancelled limit price')
+                    budget=_number(_cell(r,9),'cancelled commitment')
+                    if price<=0 or budget<=0 or side!='BUY':
+                        raise SheetDataError(f'orders: invalid cancelled order at row {rownum}')
+                    key=(venue,order_id or f'CANCELLED|{token}|{price}|{budget}|{rownum}')
                 else:
                     if not (order_id and (reconciled in ('CONCILIADO','VERIFICADO') or linked_reconciled)):
                         raise SheetDataError(f'orders: closed entry not reconciled at row {rownum}')

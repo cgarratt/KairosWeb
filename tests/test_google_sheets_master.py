@@ -358,7 +358,7 @@ def test_v2033_homologation_diagnostics_and_units_contract_in_release():
     app=(root/'app.py').read_text()
     mcp=(root/'static/mcp_settings.js').read_text()
     html=(root/'templates/balancer.html').read_text()
-    assert "APP_VERSION = '2.0.50'" in app
+    assert "APP_VERSION = '2.0.51'" in app
     assert "/api/settings/homologation-status" in app
     assert 'HOM_WRITER_MISSING' in app
     assert 'write_may_have_committed' in app
@@ -548,3 +548,22 @@ def test_spot_snapshot_manual_refresh_contract_v2048():
     assert "'refresh_policy':'MANUAL'" in source
     assert 'spot-refresh' in base and 'spot_refresh.js' in base
     assert 'data-csrf=' in base
+
+
+def test_declared_cancelled_buy_without_exchange_id_is_not_reserved():
+    raw=fake_master()
+    raw[gs.SHEETS['orders']].append([
+        'Hyperliquid',None,'HYPE','BUY','LIMIT','O2C4',61,None,0,1000,None,'CANCELLED',
+        None,None,'Usuario: orden cancelada en exchange; captura original',
+        'CANCELACION_DECLARADA_USUARIO_2026-10-26; NO_VERIFICADA_API; NO_FILL'])
+    state=gs.parse_master(raw)
+    assert state['historical_ledger_counts']['orders']==1
+    assert state['snapshot']['reserved_buy_usdt']==0
+
+def test_cancelled_without_user_attestation_rejected():
+    raw=fake_master()
+    raw[gs.SHEETS['orders']].append([
+        'Binance',None,'ETH','BUY','LIMIT','O2C2',100,1,0,100,None,'CANCELLED',
+        None,None,'Screenshot', 'UNKNOWN'])
+    with pytest.raises(gs.SheetDataError,match='cancelled entry lacks attestation'):
+        gs.parse_master(raw)

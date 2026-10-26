@@ -15,7 +15,7 @@ def test_release_ui_has_live_sheet_adapter_and_health_markers():
     root=Path(__file__).resolve().parents[1]
     app=(root/'app.py').read_text()
     html=(root/'templates/balancer.html').read_text()
-    assert "APP_VERSION = '2.0.50'" in app
+    assert "APP_VERSION = '2.0.51'" in app
     assert "g.kairos_state['custody_policy']" in app
     assert "compare_custody(custody_positions" in app
     assert "'custody_comparison':custody_comparison" in app

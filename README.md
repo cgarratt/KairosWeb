@@ -1,4 +1,4 @@
-# KairosWeb v2.0.50 — Spot snapshot on first use; manual refresh in header.
+# KairosWeb v2.0.51 — Spot snapshot on first use; manual refresh in header.
 # KairosWeb v2.0.37 — Logout seguro corregido
 
 **Cambio focalizado:** el cierre de sesión HTML valida el CSRF del formulario y redirige a invitado con HTTP 303. Se mantiene CSRF administrativo y la lectura privada protegida. Consultar `RELEASE_NOTES_v2.0.37.md`.
@@ -248,8 +248,8 @@ See RELEASE_NOTES_v2.0.45.md.
 Ver RELEASE_NOTES_v2.0.46.md.
 
 
-## Rendimiento de Compras y Forecast (v2.0.50)
+## Rendimiento de Compras y Forecast (v2.0.51)
 Las series diarias MCP se cachean en memoria por día UTC y parámetros; el botón Actualizar Spot invalida la caché histórica. La primera consulta histórica sigue siendo necesaria.
 
-## v2.0.50
+## v2.0.51
 TradingBot retirado de navegación y API deshabilitada; Compras presenta disponibilidad libre separada de techo bruto no QF. Las órdenes declaradas canceladas deben conciliarse en MASTER, nunca borrarse.
