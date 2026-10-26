@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.48'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.50'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -74,7 +74,6 @@ MODE_DEFS = [
     {'slug':'ventas','name':'Ventas','subtitle':'Objetivo USDT','description':'Propuestas solo SELL para acercarse a la meta de liquidez y reducir sobrepeso.'},
     {'slug':'forecast','name':'Forecast','subtitle':'Cycle Low → O5','description':'Tabla de niveles O2C1–O2C4 y ondas/pivotes proyectados; todo es simulación.'},
     {'slug':'ordenes','name':'Órdenes','subtitle':'Seguimiento de órdenes','description':'Propuestas, confirmaciones de órdenes colocadas y registro manual de ejecuciones con evidencia.'},
-    {'slug':'tradingbot','name':'TradingBot','subtitle':'Táctico 4H','description':'Vista táctica preliminar para la reserva de trading y activos de seguimiento.'},
 ]
 # Future mode enablement is centralized: disabled modes do not appear in any global nav.
 ENABLED_MODE_SLUGS = tuple(x['slug'] for x in MODE_DEFS)
@@ -324,12 +323,59 @@ async def call_mcp(env_name, tool, args=None):
                 return value
     raise RuntimeError(f'{tool}: respuesta MCP no reconocida')
 
+# Historical closed-day candles are shared by Compras and Forecast. This is
+# separate from the Spot cache: the key includes the UTC date so a new daily
+# close cannot silently reuse the previous day's candle set. No disk cache.
+_HIST_LOCK = threading.RLock()
+_HIST_CACHE = {}
+_HIST_KEY_LOCKS = {}
+_HIST_MAX_KEYS = 80
+
+def _historical_key(env_name, tool, args):
+    if tool not in ('get_kairos_ohlcv', 'get_hype_spot_ohlcv'):
+        return None
+    if str((args or {}).get('interval', '')).lower() not in ('1d', '1D'):
+        return None
+    return (datetime.now(timezone.utc).date().isoformat(), env_name, tool,
+            json.dumps(args or {}, sort_keys=True, separators=(',', ':')))
+
+def historical_cache_status():
+    with _HIST_LOCK:
+        return {'daily_series_cached':len(_HIST_CACHE),
+                'cache_day_utc':datetime.now(timezone.utc).date().isoformat(),
+                'policy':'UTC_DAY_AND_MANUAL_REFRESH', 'is_spot':False}
+
+def _invalidate_historical_cache():
+    with _HIST_LOCK:
+        _HIST_CACHE.clear()
+
 def call_mcp_resilient(env_name, tool, args=None):
     """Fresh MCP sessions each attempt; retry only gateway errors/timeouts.
 
     Keep diagnostics/HTML and the live market loader on a shared retry policy.
     Never retry authorization, application errors, or malformed URLs.
     """
+    key = _historical_key(env_name, tool, args)
+    if key is not None:
+        with _HIST_LOCK:
+            if key in _HIST_CACHE:
+                return json.loads(json.dumps(_HIST_CACHE[key]))
+            key_lock = _HIST_KEY_LOCKS.setdefault(key, threading.Lock())
+        with key_lock:
+            with _HIST_LOCK:
+                if key in _HIST_CACHE:
+                    return json.loads(json.dumps(_HIST_CACHE[key]))
+            result = _call_mcp_with_retries(env_name, tool, args)
+            if isinstance(result, dict) and result.get('status') != 'DATA_ERROR':
+                with _HIST_LOCK:
+                    # Bounded memory; retain only today's closed daily history.
+                    if len(_HIST_CACHE) >= _HIST_MAX_KEYS:
+                        _HIST_CACHE.clear()
+                    _HIST_CACHE[key] = json.loads(json.dumps(result))
+            return result
+    return _call_mcp_with_retries(env_name, tool, args)
+
+def _call_mcp_with_retries(env_name, tool, args):
     for attempt in range(len(MCP_RETRY_DELAYS) + 1):
         try:
             return asyncio.run(call_mcp(env_name, tool, args))
@@ -703,7 +749,7 @@ def build_mode_payload(slug, d, observed):
             'c2_price':None}
             for r in d['rows']]
         purchase_current={'P':p,'cash':cash,'trading':trading,'cash_pct':d['usdt_pct']*100,
-             'floor':approved_numeric('STRUCTURAL_USDT_TARGET')*p,'max_percent':max_percent,'reference_cap':reference_cap,
+             'floor':approved_numeric('STRUCTURAL_USDT_TARGET')*p,'max_percent':max_percent,'reference_cap':reference_cap,'gross_non_qf_cap':max(0.0,cash-trading),'confirmed_buy_commitments':d.get('pending_buy_usdt',0),
              'crypto_value':d['crypto_value'], 'liquidity_reserves':reserves,
              'weekly_first_usdt':reserves['weekly_uncommitted'],'balancer_extension_usdt':reserves['balancer_uncommitted']}
     if slug in ('compras','forecast'):
@@ -840,7 +886,7 @@ def build_mode_payload(slug, d, observed):
             'callouts':[{'tone':'info','title':'Lectura del modo','text':'La vista replica el espíritu del reporte de Ventas en ChatGPT: objetivo de liquidez, activos fuente y restricciones principales.'}]
         }
 
-    if slug == 'tradingbot':
+    if slug == 'tradingbot' and False: # disabled in KairosWeb; GPT-only
         tb_policy={'reserve_usdt':d['trading_reserve'],
             'max_loss_fraction':approved_numeric('QF_ACCOUNT_RISK_PER_TRADE'),
             'max_margin_fraction':approved_numeric('QF_MARGIN_CAP_PER_POSITION'),
@@ -1781,6 +1827,7 @@ def tradingbot_universe():
         raise SheetDataError(str(exc)) from exc
 @app.route('/api/tradingbot/candidates')
 def tradingbot_candidates():
+    return jsonify({'status':'DISABLED','detail':'TradingBot disponible únicamente en KairosGPT'}),404
     symbol=request.args.get('token','ETH').upper()
     try:
         if symbol not in tradingbot_universe():return jsonify({'status':'INVALID_TOKEN'}),400
@@ -2075,7 +2122,9 @@ def spot_refresh():
         return jsonify({'status':'FORBIDDEN'}), 403
     try:
         observed, _ = load_live_dashboard(force=True)
-        return jsonify({'status':'OK','observed_at':observed, **market_cache_status()})
+        _invalidate_historical_cache()
+        return jsonify({'status':'OK','observed_at':observed, **market_cache_status(),
+                        'history':'INVALIDATED_ON_REFRESH'})
     except Exception as exc:
         diag=diagnostic_error(exc,'spot:manual-refresh')
         # Previous snapshot stays labeled with its original observation time;

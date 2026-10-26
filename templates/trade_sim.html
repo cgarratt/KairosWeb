@@ -30,7 +30,7 @@
 <div class="sim-metric"><small>◈ USDT físico</small><b id="cash-metric">—</b><small id="cash-pct">—</small></div>
 <div class="sim-metric"><small>{{ '▣ Reserva Trading' if mode.slug=='compras' else '◎ Objetivo USDT' }}</small><b id="third-metric">—</b><small>{{ 'No se utiliza para Compras' if mode.slug=='compras' else 'Sobre patrimonio actual' }}</small></div>
 {% if mode.slug=='compras' %}
-<div class="sim-metric"><small>◇ Máximo disponible para Compras</small><b id="max-buy-metric">—</b><small>USDT físico − Reserva Trading QF</small></div>
+<div class="sim-metric"><small>◇ Disponible libre para nuevas Compras</small><b id="max-buy-metric">—</b><small>Descontando órdenes confirmadas vigentes; techo bruto = USDT físico − QF</small></div>
 {% endif %}
 <div class="sim-metric"><small>{{ '◇ Compra simulada' if mode.slug=='compras' else '◇ Ventas simuladas' }}</small><b id="allocation-metric">—</b><small id="allocation-caption">{{ 'Presupuesto definido por el slider, no compra ejecutada' if mode.slug=='compras' else 'Solo escenario, no orden' }}</small></div>
 </div>
@@ -79,6 +79,7 @@ const o2Weights={{ payload.forecast_o2_allocation|default([0,60,40,0])|tojson }}
 const source={{ payload|tojson }};
 const P=source.current.P, cash=source.current.cash, trading=source.current.trading||0;
 const maxBuyCash=Math.max(0,Number(source.current.reference_cap ?? (cash-trading)));
+const grossBuyCash=Math.max(0,Number(source.current.gross_non_qf_cap ?? (cash-trading)));
 // Start from the effective published Master O2/O4 mix. This is a local UI
 // override only: nothing here writes Google Sheets or changes the Orders mode.
 const fiboMasterMix=mode==='compras'
@@ -162,6 +163,7 @@ if(mode==='compras'){
   // Ventas conserva su escala independiente de patrimonio.
   const referenceCapacity=window.KairosPurchaseWeights.budgetFromAvailablePercent(target,maxBuyCash);
   el('max-buy-metric').textContent=dollar(maxBuyCash);
+  el('max-buy-metric').title='Techo bruto: '+dollar(grossBuyCash)+' · Compromisos/cuarentenas: '+dollar(Math.max(0,grossBuyCash-maxBuyCash));
   el('max-buy-slider').textContent=dollar(maxBuyCash)+' del USDT operativo';
   const customFractions=fiboCustom?window.KairosPurchaseWeights.asFractions(fiboPercentages):null;
   const appliedWeights=customFractions||o2Weights;

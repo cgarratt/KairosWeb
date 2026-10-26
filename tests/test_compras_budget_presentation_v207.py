@@ -4,7 +4,7 @@ from pathlib import Path
 def test_compras_single_maximum_and_slider_budget_independent_of_eligibility():
     root = Path(__file__).resolve().parents[1]
     html = (root / 'templates/trade_sim.html').read_text(encoding='utf-8')
-    assert 'Máximo disponible para Compras' in html
+    assert 'Disponible libre para nuevas Compras' in html
     assert 'id="max-buy-metric"' in html
     assert 'id="max-buy-slider"' in html
     assert 'Compra simulada elegible' not in html
