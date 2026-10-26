@@ -37,7 +37,7 @@
 .orders-table td small.orders-origin{display:block;line-height:1.5}
 .orders-tools label{font-weight:650;font-size:12px}
 .orders-tools select{max-width:180px;min-width:100px}
-#orders-list{min-width:1210px}
+#orders-list{min-width:850px}
 [data-theme="dark"] .order-state-green{color:#7ee7bc}[data-theme="dark"] .order-state-amber{color:#ffcf7b}[data-theme="dark"] .orders-source{color:#a2c9fb}[data-theme="dark"] .orders-source.source-balance{color:#dabaff}
 
 .orders-state-panel{border:1px solid var(--line,#cbd8e8);border-radius:14px;padding:16px;margin-top:12px}
@@ -57,30 +57,44 @@
 {% endblock %}
 {% block content %}
 <div class="grid" id="orders-inbox" data-snapshot-id="{{ snapshot or '' }}" data-management-ready="{{ 'false' if managed_orders and managed_orders.error else 'true' }}">
-  <section class="panel span-12 hero">
-    <div><h2>Órdenes · Seguimiento</h2><p>Propuesta → Confirmada → Parcial/Ejecutada · registro manual con evidencia y conciliación posterior.</p></div>
-    <div class="badge info">GESTIÓN · SIN EJECUCIÓN REMOTA</div>
-  </section>
-<section class="panel span-12" aria-label="Gestión de estados de órdenes">
-  <h3>Registro y seguimiento de órdenes</h3>
-  <p class="order-management-help">Esta tabla conserva el historial en <strong>26_ORDENES_GESTION</strong>. "Confirmada" significa orden colocada según tu evidencia, <strong>no ejecutada</strong>. "Ejecutada" registra unidades e importe reales, pero necesita conciliación con 05_ORDENES, 06_FILLS y el snapshot. Ningún botón opera en Binance, KuCoin ni Hyperliquid.</p>
-  {% if managed_orders and managed_orders.error %}<div class="order-workflow-warning">{{ managed_orders.error }}</div>{% endif %}
-  {% if managed_orders and managed_orders.unreconciled %}<div class="order-workflow-warning">{{ managed_orders.unreconciled }} orden(es) colocada(s) o ejecutada(s) pendiente(s) de conciliación. Sus compromisos deben verificarse antes de nuevas compras/ventas; ninguna ejecución se acredita automáticamente al patrimonio.</div>{% endif %}
-  <div class="orders-table-wrap">
-   <table class="orders-table" id="managed-orders" style="min-width:1080px"><thead><tr><th>Token / tramo</th><th>Exchange</th><th>Lado</th><th>Estado</th><th>Orden Exchange</th><th>Unidades previstas</th><th>Unidades ejecutadas</th><th>Importe ejecutado</th><th>Conciliación</th><th>Acciones</th></tr></thead><tbody>
-    {% for x in (managed_orders.records if managed_orders else []) %}
-    <tr><td>{{ x.token }} · {{ x.tramo }}</td><td>{{ x.venue }}</td><td><span class="order-side {{ 'buy' if x.lado=='BUY' else 'sell' }}">{{ x.lado }}</span></td><td><strong>{{ x.estado }}</strong></td><td>{{ x.exchange_order_id or '—' }}</td><td>{{ '{:,.8f}'.format(x.unidades_previstas|float).rstrip('0').rstrip('.') }}</td><td>{{ '{:,.8f}'.format(x.unidades_ejecutadas|float).rstrip('0').rstrip('.') }}</td><td>{{ '{:,.2f}'.format(x.importe_ejecutado|float) }} {{ x.moneda_cotizada }}</td><td>{{ (x.conciliacion or 'N/D').replace('_',' ') }}</td><td>
-      {% if x.estado=='PROPUESTA' %}<button class="orders-manage" type="button" data-manage="CONFIRMADA" data-id="{{ x.kairos_order_id }}" data-revision="{{ x.revision }}" data-token="{{ x.token }}" data-venue="{{ x.venue }}" data-units="{{ x.unidades_previstas }}" data-amount="{{ x.importe_previsto }}" data-currency="{{ x.moneda_cotizada }}">Confirmar</button> <button class="orders-manage" type="button" data-manage="EJECUTADA" data-id="{{ x.kairos_order_id }}" data-revision="{{ x.revision }}" data-token="{{ x.token }}" data-venue="{{ x.venue }}" data-units="{{ x.unidades_previstas }}" data-amount="{{ x.importe_previsto }}" data-currency="{{ x.moneda_cotizada }}">Ejecución directa</button>
-      {% elif x.estado in ('CONFIRMADA','PARCIAL') %}<button class="orders-manage" type="button" data-manage="EJECUTADA" data-id="{{ x.kairos_order_id }}" data-revision="{{ x.revision }}" data-token="{{ x.token }}" data-venue="{{ x.venue }}" data-units="{{ x.unidades_previstas }}" data-amount="{{ x.importe_previsto }}" data-order-id="{{ x.exchange_order_id }}" data-currency="{{ x.moneda_cotizada }}">Registrar ejecución</button> <button class="orders-manage" type="button" data-manage="PARCIAL" data-id="{{ x.kairos_order_id }}" data-revision="{{ x.revision }}" data-token="{{ x.token }}" data-venue="{{ x.venue }}" data-units="{{ x.unidades_previstas }}" data-amount="{{ x.importe_previsto }}" data-order-id="{{ x.exchange_order_id }}" data-currency="{{ x.moneda_cotizada }}">Fill parcial</button>{% else %}Registrada{% endif %}
-    </td></tr>
-    {% else %}<tr><td colspan="10">Todavía no hay órdenes registradas en el flujo nuevo.</td></tr>{% endfor %}
-   </tbody></table>
+<section class="panel span-12 hero"><div><h2>Órdenes recomendadas</h2><p>Recomendaciones por token y seguimiento de estados · Propuesta → Confirmada → Ejecutada</p></div><div class="badge info">SIN ÓRDENES REMOTAS</div></section>
+{% if managed_orders and managed_orders.error %}<section class="panel span-12"><p class="order-workflow-warning">{{ managed_orders.error }}</p></section>{% endif %}
+{% if error %}<section class="panel span-12"><h3>DATA ERROR</h3><p>{{ error }}</p><p>Etapa: {{ error_stage or 'N/D' }} · Referencia: {{ error_id or 'N/D' }}</p></section>{% else %}
+<section class="panel span-12">
+  <div class="orders-kpi" aria-label="Resumen de estados">
+    <div><small>Propuestas nuevas</small><strong>{{ inbox.candidates|length }}</strong></div>
+    <div><small>Confirmadas</small><strong>{{ (managed_orders.records|selectattr('estado','equalto','CONFIRMADA')|list|length) if managed_orders else 0 }}</strong></div>
+    <div><small>Parciales</small><strong>{{ (managed_orders.records|selectattr('estado','equalto','PARCIAL')|list|length) if managed_orders else 0 }}</strong></div>
+    <div><small>Ejecutadas registradas</small><strong>{{ (managed_orders.records|selectattr('estado','equalto','EJECUTADA')|list|length) if managed_orders else 0 }}</strong></div>
   </div>
-  {% if managed_orders and managed_orders.historical %}
-  <p class="order-management-help">Hay {{ managed_orders.historical|length }} orden(es) ejecutada(s) previamente en 05_ORDENES. <strong>No las registres otra vez</strong> salvo que necesites conciliar una diferencia específica.</p>
-  {% endif %}
-  <p class="order-management-help" id="orders-management-feedback" role="status" aria-live="polite">Los cambios de estado requieren autenticación administrativa y se publican como eventos inmutables en el MASTER.</p>
+  <p class="order-management-help">Propuesta no reserva fondos. Confirmada reserva caja o unidades del exchange correspondiente. Ejecutada requiere evidencia y conciliación contable; nunca altera saldos por sí sola. El seguimiento se guarda en 26_ORDENES_GESTION. Las órdenes existentes en 05_ORDENES conservan sus compromisos; no deben registrarse de nuevo.</p>
+  <div class="orders-tools" aria-label="Filtros de órdenes">
+    <label for="orders-venue">Exchange</label><select id="orders-venue"><option value="Todos">Todos</option>{% for v in ['Binance','KuCoin','Hyperliquid'] %}<option value="{{ v }}">{{ v }}</option>{% endfor %}</select>
+    <label for="orders-tier">Tier</label><select id="orders-tier"><option value="Todos">Todos</option>{% for v in ['T1','T2','T3'] %}<option value="{{ v }}">{{ v }}</option>{% endfor %}</select>
+    <label for="orders-side">Operación</label><select id="orders-side"><option value="Todos">BUY + SELL</option><option value="BUY">BUY</option><option value="SELL">SELL</option></select>
+    <label for="orders-token">Token</label><select id="orders-token"><option value="Todos">Todos</option>{% for t in (tier_by_token|default({})|list|sort) %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select>
+    <label for="orders-level">Nivel</label><select id="orders-level"><option value="Todos">Todos</option>{% for l in ((inbox.candidates|map(attribute='stage')|list) + ((managed_orders.records|map(attribute='tramo')|list) if managed_orders else []))|unique|sort %}<option value="{{ l }}">{{ l }}</option>{% endfor %}</select>
+    <label for="orders-status">Estado</label><select id="orders-status"><option value="Todos">Todos</option><option value="PROPUESTA">Propuesta</option><option value="CONFIRMADA">Confirmada</option><option value="PARCIAL">Parcial</option><option value="EJECUTADA">Ejecutada</option></select>
+    <button id="orders-clear-filters" type="button">Limpiar filtros</button>
+  </div>
+  <div class="orders-table-wrap"><table class="orders-table" id="orders-list"><thead><tr><th>Token</th><th>Exchange</th><th>BUY/SELL</th><th>Nivel</th><th>LIMIT</th><th>Importe ref.</th><th>Unidades</th><th>Estado</th><th>Acción</th></tr></thead><tbody>
+  {% for x in (managed_orders.records if managed_orders else []) %}
+    <tr data-orders-venue="{{ x.venue }}" data-orders-tier="{{ tier_by_token.get(x.token, 'N/D') }}" data-side="{{ x.lado }}" data-token="{{ x.token }}" data-stage="{{ x.tramo }}" data-status="{{ x.estado }}">
+      <td><strong>{{ x.token }}</strong><small class="orders-origin">{{ tier_by_token.get(x.token,'N/D') }}</small></td><td>{{ x.venue }}</td><td><span class="order-side {{ 'buy' if x.lado=='BUY' else 'sell' }}">{{ x.lado }}</span></td><td>{{ x.tramo }}</td><td>—</td><td>{{ '{:,.2f}'.format(x.importe_previsto|float) }} {{ x.moneda_cotizada }}</td><td>{{ '{:,.8f}'.format(x.unidades_previstas|float).rstrip('0').rstrip('.') }}</td><td><strong>{{ x.estado }}</strong>{% if x.estado=='EJECUTADA' %}<small class="orders-origin">{{ x.conciliacion }}</small>{% endif %}</td>
+      <td>{% if x.estado=='PROPUESTA' %}<button class="orders-manage" type="button" data-manage="CONFIRMADA" data-id="{{ x.kairos_order_id }}" data-revision="{{ x.revision }}" data-token="{{ x.token }}" data-venue="{{ x.venue }}" data-side="{{ x.lado }}" data-stage="{{ x.tramo }}" data-units="{{ x.unidades_previstas }}" data-amount="{{ x.importe_previsto }}" data-currency="{{ x.moneda_cotizada }}">Confirmar</button><button class="orders-manage" type="button" data-manage="EJECUTADA" data-id="{{ x.kairos_order_id }}" data-revision="{{ x.revision }}" data-token="{{ x.token }}" data-venue="{{ x.venue }}" data-side="{{ x.lado }}" data-stage="{{ x.tramo }}" data-units="{{ x.unidades_previstas }}" data-amount="{{ x.importe_previsto }}" data-currency="{{ x.moneda_cotizada }}">Ejecutada</button>
+      {% elif x.estado in ('CONFIRMADA','PARCIAL') %}<button class="orders-manage" type="button" data-manage="EJECUTADA" data-id="{{ x.kairos_order_id }}" data-revision="{{ x.revision }}" data-token="{{ x.token }}" data-venue="{{ x.venue }}" data-side="{{ x.lado }}" data-stage="{{ x.tramo }}" data-units="{{ x.unidades_previstas }}" data-amount="{{ x.importe_previsto }}" data-order-id="{{ x.exchange_order_id }}" data-currency="{{ x.moneda_cotizada }}">Registrar fill</button><button class="orders-manage" type="button" data-manage="PARCIAL" data-id="{{ x.kairos_order_id }}" data-revision="{{ x.revision }}" data-token="{{ x.token }}" data-venue="{{ x.venue }}" data-side="{{ x.lado }}" data-stage="{{ x.tramo }}" data-units="{{ x.unidades_previstas }}" data-amount="{{ x.importe_previsto }}" data-order-id="{{ x.exchange_order_id }}" data-currency="{{ x.moneda_cotizada }}">Parcial</button>{% else %}—{% endif %}</td>
+    </tr>
+  {% endfor %}
+  {% for item in inbox.candidates %}
+    {% set exists=namespace(found=false) %}{% for x in (managed_orders.records if managed_orders else []) %}{% if x.token==item.token and x.venue==item.venue and x.lado==item.side and x.tramo==item.stage %}{% set exists.found=true %}{% endif %}{% endfor %}
+    {% if not exists.found %}<tr data-orders-venue="{{ item.venue }}" data-orders-tier="{{ tier_by_token.get(item.token, 'N/D') }}" data-side="{{ item.side }}" data-token="{{ item.token }}" data-stage="{{ item.stage }}" data-status="PROPUESTA">
+      <td><strong>{{ item.token }}</strong><small class="orders-origin">{{ tier_by_token.get(item.token,'N/D') }}</small></td><td>{{ item.venue }}</td><td><span class="order-side {{ 'buy' if item.side=='BUY' else 'sell' }}">{{ item.side }}</span></td><td>{{ item.stage }}</td><td>{{ ('${:,.8f}'.format(item.limit).rstrip('0').rstrip('.') ~ ' ' ~ item.quote_currency) if item.limit is not none else 'N/D' }}</td><td>{{ '${:,.2f}'.format(item.usdt) if item.usdt is not none else 'N/D' }}</td><td>{{ '{:,.8f}'.format(item.quantity).rstrip('0').rstrip('.') if item.quantity is not none else 'N/D' }}</td><td>PROPUESTA</td><td><button type="button" class="orders-manage" data-manage="PROPUESTA" data-token="{{ item.token }}" data-venue="{{ item.venue }}" data-side="{{ item.side }}" data-stage="{{ item.stage }}" data-source="{{ item.category }}" data-units="{{ item.quantity if item.quantity is not none else 0 }}" data-amount="{{ item.usdt if item.usdt is not none else 0 }}" data-currency="{{ item.quote_currency }}">Guardar propuesta</button> {% if item.quantity is not none and item.usdt is not none and item.quantity > 0 and item.usdt > 0 %}<button type="button" class="orders-manage" data-manage="CONFIRMAR_RECOMENDACION" data-token="{{ item.token }}" data-venue="{{ item.venue }}" data-side="{{ item.side }}" data-stage="{{ item.stage }}" data-source="{{ item.category }}" data-units="{{ item.quantity }}" data-amount="{{ item.usdt }}" data-currency="{{ item.quote_currency }}">Confirmar</button>{% endif %}</td></tr>{% endif %}
+  {% endfor %}
+  </tbody></table></div>
+  <p class="order-management-help" id="orders-filter-count" role="status"></p><p id="orders-empty-filter" class="footer-note" hidden>No hay órdenes para los filtros seleccionados.</p>
+  <p class="order-management-help" id="orders-management-feedback" role="status" aria-live="polite">Cambios de estado: requieren autorización administrativa y evidencia. Sin operaciones automáticas.</p>
 </section>
+{% endif %}
 <dialog class="orders-manager-dialog" id="orders-management-dialog" aria-label="Registrar estado de orden">
   <form method="dialog" id="orders-management-form">
     <h3 id="order-management-title">Registrar orden</h3>
@@ -98,102 +112,4 @@
     <menu><button type="button" class="orders-manage" id="order-cancel">Cancelar</button><button type="submit" class="btn primary" id="order-submit">Guardar estado</button></menu>
   </form>
 </dialog>
-{% if error %}
-  <section class="panel span-12"><h3>DATA ERROR</h3><p>{{ error }}</p><p>Etapa: {{ error_stage or 'N/D' }} · Código: {{ error_id or 'N/D' }}</p><p>No se generan ni se envían órdenes. Consultar los logs de Render con el código anterior.</p></section>
-{% else %}
-  {% if structural_note %}<section class="panel span-12"><h3>Estructura semanal incompleta</h3><p>{{ structural_note }}</p><p>Las propuestas de Balance no dependen de pivotes semanales. Fase 1: no ejecutables.</p></section>{% endif %}
-  <section class="panel span-12">
-    <div class="orders-kpi">
-      <div><small>USDT máximo para Compras</small><strong>{{ '${:,.2f}'.format(inbox.buy_budget) }}</strong></div>
-      <div><small>Compras Fibonacci hipotéticas</small><strong>{{ '${:,.2f}'.format(inbox.buy_planned) }}</strong></div>
-      <div><small>Liquidez hipotética sin asignar</small><strong>{{ '${:,.2f}'.format(inbox.buy_unassigned) }}</strong></div>
-      <div><small>Ventas por Balance</small><strong>{{ '${:,.2f}'.format(inbox.sell_planned) }}</strong></div>
-      <div><small>Objetivos técnicos cercanos</small><strong>{{ inbox.near_count }}</strong></div>
-    </div>
-    <p class="footer-note">Snapshot {{ snapshot }} · MCP Spot observado {{ observed }}. Balance y Estructura son escenarios INDEPENDIENTES: no sumar desembolsos, no inferir reservas ni fills.</p>
-  </section>
-  <section class="panel span-12">
-    <h3>Próximas órdenes por Token</h3>
-    <p class="orders-muted">Preferimos el objetivo Fibonacci FUTURO más cercano al Spot. Si no existe, mostramos la propuesta de Balance disponible sin precio LIMIT. N/D indica que ninguna fuente aporta una propuesta fundada; nunca se inventa una orden. BTC NEVER SELL.</p>
-    <div class="orders-table-wrap">
-      <table class="orders-table" id="orders-nearest" style="min-width:1120px"><thead><tr><th>Token</th><th>Exchange</th><th>Origen</th><th>Nivel</th><th>Spot</th><th>Dirección</th><th>Objetivo cercano</th><th>Distancia</th><th>USDT compra</th><th>Unidades venta</th><th>Estado</th></tr></thead><tbody>
-      {% for c in inbox.coverage %}
-      <tr><td><strong>{{ c.token }}</strong></td><td>{{ c.venue }}</td><td>{{ c.origin }}</td>
-          <td><strong>{{ c.stage or 'N/D' }}</strong>{% if c.stage is string and c.stage.startswith('C') and c.stage[1:] in ('1','2','3','4') %}
-            <small class="orders-origin">Fib {{ {'C1':'38.2%', 'C2':'50%', 'C3':'61.8%', 'C4':'78.6%'}[c.stage] }} · retroceso alcista</small>
-          {% elif c.stage is string and c.stage.startswith('EXT1W') and c.stage[5:] in ('1','2','3','4') %}
-            <small class="orders-origin">Fib {{ {'EXT1W1':'1.618', 'EXT1W2':'2.618', 'EXT1W3':'3.618', 'EXT1W4':'4.618'}[c.stage] }} · extensión 1W</small>
-          {% endif %}</td>
-          <td>{{ '${:,.8f}'.format(c.spot).rstrip('0').rstrip('.') if c.spot is not none else 'N/D' }}</td>
-          <td>{% if c.side %}<span class="order-side {{ 'buy' if c.side=='BUY' else 'sell' }}">{{ c.side }}</span>{% else %}—{% endif %}</td>
-          <td>{{ '${:,.8f}'.format(c.limit).rstrip('0').rstrip('.') if c.limit is not none else 'N/D' }}</td>
-          <td>{{ '%+.2f%%'|format(c.distance_pct) if c.distance_pct is not none else 'N/D' }}</td>
-          <td>{% if c.side=='BUY' %}{{ '${:,.2f}'.format(c.buy_usdt) if c.buy_usdt is not none else 'N/D' }}{% else %}—{% endif %}</td>
-          <td>{% if c.side=='SELL' %}{{ '{:,.8f}'.format(c.sell_units).rstrip('0').rstrip('.') if c.sell_units is not none else 'POR DEFINIR' }}{% else %}—{% endif %}</td>
-          <td><span class="order-state order-state-{{ 'green' if c.status=='CERCANO' else 'amber' if c.status=='EN_ESPERA' else 'muted' }}"><i class="orders-light light-{{ 'green' if c.status=='CERCANO' else 'amber' if c.status=='EN_ESPERA' else 'muted' }}" aria-hidden="true"></i>{{ c.status.replace('_',' ') }}</span></td></tr>
-      {% endfor %}
-      </tbody></table>
-    </div>
-  </section>
-  <section class="panel span-12">
-    <h3>Backlog de Ordenes Compra / Venta</h3>
-    <p class="orders-muted">Listado <strong>solo de propuestas hipotéticas, NO colocadas ni autorizadas para ejecución</strong>. Filtra por Exchange, Tier, Operación, Token y Nivel; un precio LIMIT es una referencia, no una orden real.</p>
-    <div class="orders-tools" aria-label="Filtros de órdenes propuestas">
-      <label for="orders-venue">Exchange</label>
-      <select id="orders-venue" aria-label="Filtrar órdenes por Exchange"><option value="Todos">Todos</option><option value="Binance">Binance</option><option value="KuCoin">KuCoin</option><option value="Hyperliquid">Hyperliquid</option></select>
-      <label for="orders-tier">Tier</label>
-      <select id="orders-tier" aria-label="Filtrar órdenes por Tier"><option value="Todos">Todos</option><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select>
-      <label for="orders-side">Operación</label>
-      <select id="orders-side" aria-label="Filtrar órdenes por Operación"><option value="Todos">BUY + SELL</option><option value="BUY">BUY</option><option value="SELL">SELL</option></select>
-      <label for="orders-token">Token</label>
-      <select id="orders-token" aria-label="Filtrar órdenes por Token">
-        <option value="Todos">Todos</option>
-        {% for coin in (tier_by_token|default({})|list|sort) %}<option value="{{ coin }}">{{ coin }}</option>{% endfor %}
-      </select>
-      <label for="orders-level">Nivel</label>
-      <select id="orders-level" aria-label="Filtrar órdenes por Nivel">
-        <option value="Todos">Todos</option>
-        {% for level in inbox.candidates|map(attribute='stage')|unique|sort %}<option value="{{ level }}">{{ level }}</option>{% endfor %}
-      </select>
-      <button type="button" id="orders-clear-filters">Limpiar filtros</button>
-    </div>
-    <p class="orders-muted"><span class="orders-light light-green" aria-hidden="true"></span> ≤2% de proximidad · <span class="orders-light light-amber" aria-hidden="true"></span> 2–5% · <span class="orders-light light-muted" aria-hidden="true"></span> Más de 5% o sin cotización homogénea · <span class="orders-light light-red" aria-hidden="true"></span> Nivel superado. Son indicadores de distancia, <strong>no señales de ejecución</strong>.</p>
-    <div class="orders-table-wrap">
-      <table class="orders-table" id="orders-list" data-orders-venue="Todos" data-orders-category="Todos">
-        <thead><tr><th>Token</th><th>Exchange</th><th>Lado</th><th>Origen</th><th>Nivel</th><th>Spot</th><th>LIMIT</th><th>Distancia</th><th>USDT ref.</th><th>Unidades ref.</th><th>Estado</th><th>Gestión</th></tr></thead>
-        <tbody>
-          {% for item in inbox.candidates %}
-          {% set order_tier=(tier_by_token|default({})).get(item.token, 'N/D') %}
-          {% set near=item.distance_pct is not none and item.distance_pct >= 0 and item.distance_pct <= 2 %}
-          {% set mid=item.distance_pct is not none and item.distance_pct > 2 and item.distance_pct <= 5 %}
-          {% set reached=item.proximity in ('NIVEL_SUPERADO','NIVEL_TOCADO') %}
-          {% set tone='red' if reached else 'green' if near else 'amber' if mid else 'muted' %}
-          <tr data-orders-venue="{{ item.venue }}" data-orders-category="{{ item.category }}" data-category="{{ item.category }}" data-tier="{{ order_tier }}" data-orders-tier="{{ order_tier }}" data-side="{{ item.side }}" data-proximity="{{ item.proximity }}" data-token="{{ item.token }}" data-stage="{{ item.stage }}" data-wave="{{ item.wave }}" data-distance="{{ item.distance_pct if item.distance_pct is not none else '' }}">
-            <td><strong>{{ item.token }}</strong><small class="orders-origin">{{ order_tier }}</small></td>
-            <td>{{ item.venue }}</td>
-            <td><span class="order-side {{ 'buy' if item.side=='BUY' else 'sell' }}">{{ item.side }}</span></td>
-            <td><span class="orders-source source-{{ item.category|lower }}">{{ 'ESTRUCTURA' if item.category=='ESTRUCTURA' else 'BALANCE' }}</span></td>
-            <td><strong>{{ item.stage }}</strong><small class="orders-origin">{{ item.wave }}{% if item.fib %} · Fib {{ item.fib }}{% endif %}</small></td>
-            <td>{{ '${:,.8f}'.format(item.spot).rstrip('0').rstrip('.') if item.spot is not none else 'N/D' }}</td>
-            <td>{{ ('${:,.8f}'.format(item.limit).rstrip('0').rstrip('.') ~ ' ' ~ item.quote_currency) if item.limit is not none else 'SIN LIMIT' }}</td>
-            <td><span class="orders-distance">{% if item.distance_pct is not none %}<i class="orders-light light-{{ tone }}" aria-hidden="true"></i>{{ '%+.2f%%'|format(item.distance_pct) }}{% else %}<i class="orders-light light-muted" aria-hidden="true"></i>N/D{% endif %}</span></td>
-            <td>{{ '${:,.2f}'.format(item.usdt) if item.usdt is not none else 'POR DEFINIR' }}</td>
-            <td>{{ '{:,.8f}'.format(item.quantity).rstrip('0').rstrip('.') if item.quantity is not none else 'POR DEFINIR' }}</td>
-            <td><span class="order-state order-state-{{ tone }}"><i class="orders-light light-{{ tone }}" aria-hidden="true"></i>{{ item.proximity.replace('_',' ') }}</span><small class="orders-origin">No colocada · {{ item.sizing_status }}</small></td>
-            <td><button type="button" class="orders-manage" data-manage="PROPUESTA" data-token="{{ item.token }}" data-venue="{{ item.venue }}" data-side="{{ item.side }}" data-stage="{{ item.stage }}" data-source="{{ item.category }}" data-units="{{ item.quantity if item.quantity is not none else 0 }}" data-amount="{{ item.usdt if item.usdt is not none else 0 }}" data-currency="{{ item.quote_currency }}">Registrar propuesta</button></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    <p class="orders-muted">Los importes BUY respetan INFRA, déficit máximo, compra secuencial y QF. Las extensiones SELL sin tamaño aprobado indican «POR DEFINIR»; no se equiparan a las ventas por Balance.</p>
-    <p class="orders-muted" id="orders-filter-count" role="status"></p>
-    <p id="orders-empty-filter" class="footer-note" hidden>No hay propuestas para estos filtros.</p>
-    <p class="orders-readonly"><strong>Regla de proximidad:</strong> precio FUTURO disponible a una distancia de 0 a +{{ '%.1f'|format(inbox.proximity_pct) }}% desde Spot. Niveles ya superados no se confunden con órdenes LIMIT futuras. El objetivo más cercano puede estar lejos; no implica recomendación inmediata.</p>
-    <p class="orders-readonly">HYPE se conserva en Hyperliquid y no se reasigna a Binance/KuCoin. Sus niveles macro están expresados en USDC: hasta obtener Spot HYPE/USDC homologado, no calculamos proximidad ni presentamos esa referencia como orden activable. Los importes del portafolio no se mezclan con compromisos hipotéticos de estructura. Cuota QF protegida.</p>
-  </section>
-  <section class="panel span-12"><h3>Separación entre gestión y ejecución real</h3><p>La gestión de estados registra evidencia en <code>26_ORDENES_GESTION</code> (append-only). No envía, cancela ni modifica órdenes de exchange ni acredita fills. La contabilidad de 05/06, unidades, caja y QF requiere conciliación adicional independiente. Nunca reutilizar importes comprometidos sin revisar órdenes confirmadas.</p></section>
-{% endif %}
-</div>
-<script defer src="{{ url_for('static', filename='orders_inbox.js') }}?v={{ master }}"></script>
-{% endblock %}
+</div><script defer src="{{ url_for('static', filename='orders_inbox.js') }}?v={{ master }}"></script>{% endblock %}

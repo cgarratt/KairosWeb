@@ -358,7 +358,7 @@ def test_v2033_homologation_diagnostics_and_units_contract_in_release():
     app=(root/'app.py').read_text()
     mcp=(root/'static/mcp_settings.js').read_text()
     html=(root/'templates/balancer.html').read_text()
-    assert "APP_VERSION = '2.0.46'" in app
+    assert "APP_VERSION = '2.0.47'" in app
     assert "/api/settings/homologation-status" in app
     assert 'HOM_WRITER_MISSING' in app
     assert 'write_may_have_committed' in app

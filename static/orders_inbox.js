@@ -2,14 +2,15 @@
    No exchange API calls and no automatic inventory/accounting changes. */
 (function(root){
 'use strict';
-function visible(row,venue='Todos',tier='Todos',side='Todos',token='Todos',level='Todos'){
+function visible(row,venue='Todos',tier='Todos',side='Todos',token='Todos',level='Todos',status='Todos'){
  const rowVenue=row.dataset.ordersVenue||row.closest('table')?.dataset.ordersVenue;
  const rowTier=row.dataset.ordersTier||row.dataset.tier;
  return (venue==='Todos'||rowVenue===venue)&&
         (tier==='Todos'||rowTier===tier)&&
         (side==='Todos'||row.dataset.side===side)&&
         (token==='Todos'||row.dataset.token===token)&&
-        (level==='Todos'||row.dataset.stage===level);
+        (level==='Todos'||row.dataset.stage===level)&&
+        (status==='Todos'||row.dataset.status===status);
 }
 function initialFields(btn){
  const d=btn.dataset,action=d.manage;
@@ -20,17 +21,17 @@ function initialFields(btn){
 }
 function init(doc){
  const page=doc.getElementById('orders-inbox');if(!page)return;
- const ids=['orders-venue','orders-tier','orders-side','orders-token','orders-level'];
+ const ids=['orders-venue','orders-tier','orders-side','orders-token','orders-level','orders-status'];
  const controls=Object.fromEntries(ids.map(id=>[id,doc.getElementById(id)]));
  const rows=[...page.querySelectorAll('#orders-list tbody tr[data-token]')];
  function filter(){
   let shown=0;
   for(const row of rows){
-   row.hidden=!visible(row,controls['orders-venue']?.value||'Todos',controls['orders-tier']?.value||'Todos',controls['orders-side']?.value||'Todos',controls['orders-token']?.value||'Todos',controls['orders-level']?.value||'Todos');
+   row.hidden=!visible(row,controls['orders-venue']?.value||'Todos',controls['orders-tier']?.value||'Todos',controls['orders-side']?.value||'Todos',controls['orders-token']?.value||'Todos',controls['orders-level']?.value||'Todos',controls['orders-status']?.value||'Todos');
    if(!row.hidden)shown++;
   }
   const empty=doc.getElementById('orders-empty-filter');if(empty)empty.hidden=shown!==0;
-  const count=doc.getElementById('orders-filter-count');if(count)count.textContent=shown+' de '+rows.length+' propuestas visibles · no colocadas por Kairos';
+  const count=doc.getElementById('orders-filter-count');if(count)count.textContent=shown+' de '+rows.length+' órdenes visibles · propuestas no colocadas automáticamente';
  }
  for(const id of ids)controls[id]?.addEventListener('change',filter);
  doc.getElementById('orders-clear-filters')?.addEventListener('click',()=>{
@@ -48,7 +49,7 @@ function init(doc){
  let current=null;
  function setVisible(action){
   const shown=action==='PROPUESTA'?['planned_units','planned_usdt','note']:
-   action==='CONFIRMADA'?['exchange_order_id','planned_units','planned_usdt','evidence','note']:
+   (action==='CONFIRMADA'||action==='CONFIRMAR_RECOMENDACION')?['exchange_order_id','planned_units','planned_usdt','evidence','note']:
    ['exchange_order_id','executed_units','executed_usdt','fee_units','fee_quote','evidence','note'];
   for(const [key,id] of Object.entries(fields)){
    const el=doc.getElementById(id); const section=el?.closest('label');
@@ -58,7 +59,7 @@ function init(doc){
   }
   // Only positive planned amounts when confirming; provisional proposals may be unsized.
   for(const key of ['planned_units','planned_usdt']){
-   const el=doc.getElementById(fields[key]);if(el)el.required=action==='CONFIRMADA';
+   const el=doc.getElementById(fields[key]);if(el)el.required=['CONFIRMADA','CONFIRMAR_RECOMENDACION'].includes(action);
   }
  }
  for(const btn of page.querySelectorAll('[data-manage]'))btn.addEventListener('click',()=>{
@@ -70,7 +71,7 @@ function init(doc){
   for(const [key,id] of Object.entries(fields)){
    const el=doc.getElementById(id);if(el&&current[key]!==undefined)el.value=current[key];
   }
-  doc.getElementById('order-management-title').textContent=({PROPUESTA:'Registrar propuesta',CONFIRMADA:'Confirmar orden colocada',
+  doc.getElementById('order-management-title').textContent=({PROPUESTA:'Registrar propuesta',CONFIRMADA:'Confirmar orden colocada',CONFIRMAR_RECOMENDACION:'Confirmar recomendación colocada',
       PARCIAL:'Registrar ejecución parcial',EJECUTADA:'Registrar orden ejecutada'})[current.action]||current.action;
   doc.getElementById('order-management-details').textContent=[current.token,current.venue,current.side,current.stage,current.moneda_cotizada||btn.dataset.currency||''].filter(Boolean).join(' · ');
   setVisible(current.action);

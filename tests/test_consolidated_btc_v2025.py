@@ -52,7 +52,7 @@ def test_replaced_history_with_bsi_and_token_classification():
 
 def test_deployed_asset_contract_prevents_stale_dashboard():
     app=(ROOT/'app.py').read_text()
-    assert "APP_VERSION = '2.0.46'" in app
+    assert "APP_VERSION = '2.0.47'" in app
     assert 'consolidated_dashboard_v2027' in app
     assert 'fixed_basket_repricing_ui' not in app
     assert "@app.route('/api/portfolio-repricing')" not in app

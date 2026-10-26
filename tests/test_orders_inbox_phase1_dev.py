@@ -56,7 +56,7 @@ def test_full_web_page_is_read_only():
     page=(root/'templates/ordenes.html').read_text()
     assert "{'slug':'ordenes'" in app
     assert "@app.route('/mode/ordenes')" in app
-    assert 'Órdenes' in page and 'GESTIÓN · SIN EJECUCIÓN REMOTA' in page
+    assert 'Órdenes' in page and 'SIN ÓRDENES REMOTAS' in page
     assert 'send_order' not in page and 'submit_order' not in page
     assert "'/api/orders/place'" not in app
     assert "'/api/orders/manage'" in app
@@ -137,11 +137,12 @@ def test_template_separates_two_sources_and_preserves_no_exchange_writes():
     from pathlib import Path
     root=Path(__file__).resolve().parents[1]
     template=(root/'templates/ordenes.html').read_text()
-    assert "item.category=='ESTRUCTURA'" in template
-    assert "item.category=='ESTRUCTURA' else 'BALANCE'" in template
-    assert 'Próximas órdenes por Token' in template
-    assert 'POR DEFINIR' in template
-    assert 'data-orders-category' in template
+    assert 'Órdenes recomendadas' in template
+    assert 'data-status="PROPUESTA"' in template
+    assert 'id="orders-status"' in template
+    assert 'data-manage="CONFIRMAR_RECOMENDACION"' in template
+    assert 'item.quote_currency' in template
+    assert 'data-orders-category' not in template
     assert '/api/orders/place' not in template
 
 

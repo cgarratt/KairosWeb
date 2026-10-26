@@ -220,7 +220,7 @@ def write_event(data, *, expected_snapshot_id):
         latest=latest_orders(events)
         key=text(data.get('kairos_order_id'),'ID Kairos',85)
         old=next((r for r in latest if r['kairos_order_id']==key),None) if key else None
-        if old is None and str(data.get('action') or '').upper()=='PROPUESTA':key='KORD-'+uuid.uuid4().hex[:16]
+        if old is None and str(data.get('action') or '').upper() in ('PROPUESTA','CONFIRMAR_RECOMENDACION'):key='KORD-'+uuid.uuid4().hex[:16]
         elif old is None:raise WorkflowError('UNKNOWN_ORDER','Primero registra la propuesta')
         expected_revision=data.get('expected_revision')
         if old and (str(expected_revision)!=str(old['revision'])):
@@ -231,10 +231,22 @@ def write_event(data, *, expected_snapshot_id):
         ledger=_api('GET','/values:batchGet',params=[('ranges',"'05_ORDENES'!A4:P250"),('valueRenderOption','UNFORMATTED_VALUE')])
         for r in ledger.get('valueRanges',[{}])[0].get('values',[])[1:]:
             if len(r)>1 and r[0] and r[1]:existing.append((str(r[0]),str(r[1])))
-        validated=validate_transition(action,data,old,latest,existing)
+        # One-click recommendation confirmation writes proposal and confirmation
+        # together in a single Sheets batch, never as two separate requests.
+        initial_event=None
+        if action=='CONFIRMAR_RECOMENDACION':
+            if old is not None:raise WorkflowError('INVALID_TRANSITION','Orden ya registrada')
+            proposed=validate_transition('PROPUESTA',data,None,latest,existing)
+            initial_event=dict(proposed,event_id='KEVT-'+uuid.uuid4().hex,
+                               kairos_order_id=key,revision=1)
+            fake_old=dict(proposed,kairos_order_id=key,revision=1)
+            validated=validate_transition('CONFIRMADA',data,fake_old,latest,existing)
+        else:
+            validated=validate_transition(action,data,old,latest,existing)
         now=datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
+        if initial_event:initial_event.update(actualizado_utc=now,snapshot_referencia=state['control']['snapshot_id'])
         validated.update(event_id='KEVT-'+uuid.uuid4().hex,kairos_order_id=key,
-            revision=(old['revision']+1 if old else 1),actualizado_utc=now,
+            revision=(2 if initial_event else old['revision']+1 if old else 1),actualizado_utc=now,
             snapshot_referencia=state['control']['snapshot_id'])
         # A manual confirmation must not create an impossible cash/unit reservation
         # that would invalidate the reader on the next request. Venue-specific
@@ -264,7 +276,7 @@ def write_event(data, *, expected_snapshot_id):
                 tier_cap=state['snapshot']['holdings_total'][bookkey]*TIER_SELL_FRACTIONS[tier]
                 if reserved_qty+this_qty>min(available,tier_cap)+1e-8:
                     raise WorkflowError('VENUE_CAPACITY','La venta supera Exchange libre o el máximo del Tier')
-        req.append({'appendCells':{'sheetId':sid,'rows':[{'values':[_sval(x) for x in to_sheet_row(validated)]}],
+        req.append({'appendCells':{'sheetId':sid,'rows':[{'values':[_sval(x) for x in to_sheet_row(x)]} for x in ([initial_event] if initial_event else [])+[validated]],
                                    'fields':'userEnteredValue'}})
         _api('POST',':batchUpdate',write=True,payload={'requests':req})
         from google_sheets_master import invalidate_cache
