@@ -358,7 +358,7 @@ def test_v2033_homologation_diagnostics_and_units_contract_in_release():
     app=(root/'app.py').read_text()
     mcp=(root/'static/mcp_settings.js').read_text()
     html=(root/'templates/balancer.html').read_text()
-    assert "APP_VERSION = '2.0.47'" in app
+    assert "APP_VERSION = '2.0.48'" in app
     assert "/api/settings/homologation-status" in app
     assert 'HOM_WRITER_MISSING' in app
     assert 'write_may_have_committed' in app
@@ -531,3 +531,20 @@ def test_hype_zero_commitment_is_blocked():
     raw=_raw();raw[gs.SHEETS['orders']][-1][9]=0
     with pytest.raises(gs.SheetDataError,match='pending budget mismatch'):
         gs.parse_master(raw)
+
+
+def test_spot_snapshot_manual_refresh_contract_v2048():
+    from pathlib import Path
+    root=Path(__file__).resolve().parents[1]
+    source=(root/'app.py').read_text()
+    base=(root/'templates/base.html').read_text()
+    assert "CACHE_TTL_SECONDS = None" in source
+    assert "if _MARKET_CACHE['prices'] is not None and not force:" in source
+    assert 'def load_live_dashboard(*, force=False):' in source
+    assert "load_live_dashboard(force=True)" in source
+    assert "@app.route('/api/spot/refresh', methods=['POST'])" in source
+    assert 'if not _portfolio_authorized():' in source
+    assert "if not _same_origin() or not _csrf_ok():" in source
+    assert "'refresh_policy':'MANUAL'" in source
+    assert 'spot-refresh' in base and 'spot_refresh.js' in base
+    assert 'data-csrf=' in base

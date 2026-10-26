@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.47'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.48'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -85,7 +85,7 @@ MODES_BY_SLUG = {m['slug']: m for m in MODE_DEFS}
 _MARKET_CACHE = {'stored': 0.0, 'observed': None, 'prices': None}
 _MARKET_LOCK = threading.Lock()
 _FETCH_LOCK = threading.Lock()
-CACHE_TTL_SECONDS = 30
+CACHE_TTL_SECONDS = None  # Spot snapshot remains until explicit refresh or worker restart
 RETRY_HTTP_CODES = frozenset((429, 500, 502, 503, 504))
 MCP_RETRY_DELAYS = (2, 5, 10)
 MCP_TIMEOUT_SECONDS = 35
@@ -352,7 +352,7 @@ def market_cache_status():
         stored = _MARKET_CACHE['stored']
     age = round(max(0.0, time.monotonic() - stored), 1) if observed else None
     return {'last_valid_observed_at':observed, 'cache_age_seconds':age,
-            'cache_state':'FRESH' if observed and age < CACHE_TTL_SECONDS else ('STALE' if observed else 'EMPTY')}
+            'cache_state':'SNAPSHOT' if observed else 'EMPTY', 'refresh_policy':'MANUAL', 'spot_is_live':False}
 
 
 def _http_status(exc):
@@ -539,9 +539,9 @@ def core_dashboard(prices):
         'forecast_sensitivity':forecast_sensitivity(rows,liquidity)
     }
 
-def _load_live_dashboard_uncached():
+def _load_live_dashboard_uncached(*, force=False):
     with _MARKET_LOCK:
-        if _MARKET_CACHE['prices'] is not None and (time.monotonic() - _MARKET_CACHE['stored']) < CACHE_TTL_SECONDS:
+        if _MARKET_CACHE['prices'] is not None and not force:
             return _MARKET_CACHE['observed'], core_dashboard(dict(_MARKET_CACHE['prices']))
     # Shared resilient fetch with fresh session for each transient gateway failure.
     data = call_mcp_resilient('BINANCE_MCP_URL', 'get_kairos_spot_prices')
@@ -572,11 +572,11 @@ def _load_live_dashboard_uncached():
         _MARKET_CACHE.update(stored=time.monotonic(), observed=observed, prices=dict(prices))
     return observed, dashboard
 
-def load_live_dashboard():
+def load_live_dashboard(*, force=False):
     # One in-flight market fetch per application process, shared by all pages.
     # The cache contains a real timestamp and is never used beyond TTL.
     with _FETCH_LOCK:
-        return _load_live_dashboard_uncached()
+        return _load_live_dashboard_uncached(force=force)
 
 def top_n(rows, key, n=5, reverse=True, predicate=None):
     items = rows
@@ -2066,9 +2066,26 @@ def admin_session_state():
                     'csrf_token':session.get('csrf_token') if _admin_authorized() else None})
 
 
+@app.route('/api/spot/refresh', methods=['POST'])
+def spot_refresh():
+    # User-level refresh only: never writes MASTER or touches orders.
+    if not _portfolio_authorized():
+        return jsonify({'status':'PORTFOLIO_AUTH_REQUIRED'}), 401
+    if not _same_origin() or not _csrf_ok():
+        return jsonify({'status':'FORBIDDEN'}), 403
+    try:
+        observed, _ = load_live_dashboard(force=True)
+        return jsonify({'status':'OK','observed_at':observed, **market_cache_status()})
+    except Exception as exc:
+        diag=diagnostic_error(exc,'spot:manual-refresh')
+        # Previous snapshot stays labeled with its original observation time;
+        # it is never silently promoted to the time of this failed refresh.
+        return jsonify({'status':'DATA_ERROR','diagnostic':diag,**market_cache_status()}),503
+
+
 @app.route('/api/mcp-refresh',methods=['POST'])
 def mcp_refresh():
-    # A refresh never restarts Render services, changes credentials or writes Sheets.
+    # Administrative diagnostics: no financial mutation.
     if not _same_origin() or not _admin_authorized() or not _csrf_ok():
         return jsonify({'status':'ADMIN_AUTH_REQUIRED'}),403
     payload=request.get_json(silent=True) or {}
@@ -2076,11 +2093,14 @@ def mcp_refresh():
     if provider not in ('binance','hyperliquid'):
         return jsonify({'status':'INVALID_PROVIDER'}),400
     if provider=='binance':
-        with _MARKET_LOCK:
-            _MARKET_CACHE.update(stored=0.0,observed=None,prices=None)
+        try:
+            observed, _ = load_live_dashboard(force=True)
+            return jsonify({'status':'OK','provider':'binance','observed_at':observed})
+        except Exception as exc:
+            return jsonify({'status':'DATA_ERROR','provider':'binance','diagnostic':diagnostic_error(exc,'admin:spot-refresh')}),503
     check=_check_provider(provider)
     return jsonify({'status':check['status'],'provider':provider,'result':check,
-                    'note':'Caché local invalidada cuando aplica; se abrió nueva consulta MCP. Sin reinicio de Render.'}), (200 if check['status']=='OK' else 503)
+                    'note':'Consulta de diagnóstico sin cambios en el MASTER.'}), (200 if check['status']=='OK' else 503)
 
 
 @app.route('/api/hype-macro')

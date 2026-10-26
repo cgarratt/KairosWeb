@@ -71,6 +71,7 @@
   </style>
   <link rel="stylesheet" href="{{ url_for('static',filename='alerts_settings.css') }}?v={{ master }}">
   <link rel="stylesheet" href="{{ url_for('static',filename='theme.css') }}?v={{ master }}">
+  <style>.spot-refresh-wrap{display:flex;flex-direction:column;align-items:center;gap:3px}.spot-refresh-btn{white-space:nowrap;cursor:pointer}.spot-refresh-btn:disabled{opacity:.65;cursor:wait}.spot-observed{font-size:10px;color:var(--muted);max-width:165px;text-align:center}.right-tools{flex-wrap:wrap}@media(max-width:680px){.spot-refresh-wrap{align-items:flex-start}.spot-observed{text-align:left}}</style>
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -92,7 +93,8 @@
         <div><h1>KairosWeb</h1><p>v{{ master }}</p></div>
       </div>
       <div class="right-tools">
-        {% if portfolio_authenticated %}<button type="button" class="tool-icon privacy-toggle" id="privacy-toggle" aria-label="Mostrar saldos" aria-pressed="false" title="Mostrar saldos">
+        {% if portfolio_authenticated %}<div class="spot-refresh-wrap"><button type="button" class="btn spot-refresh-btn" id="spot-refresh" data-csrf="{{ session.get('csrf_token','') }}" title="Consultar nuevamente precios Spot MCP">↻ Actualizar Spot</button><span id="spot-observed" class="spot-observed" aria-live="polite">Spot: consultando estado…</span></div>
+        <button type="button" class="tool-icon privacy-toggle" id="privacy-toggle" aria-label="Mostrar saldos" aria-pressed="false" title="Mostrar saldos">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path d="M3 3 21 21"/></svg><span class="privacy-label">Mostrar</span>
         </button>
         <div class="alerts-wrap">
@@ -127,6 +129,7 @@
     </nav>
     {% block content %}{% endblock %}
   </div>
+  {% if portfolio_authenticated %}<script defer src="{{ url_for('static', filename='spot_refresh.js') }}?v={{ master }}"></script>{% endif %}
   <script defer src="{{ url_for('static', filename='table_sort.js') }}"></script>
   {% if portfolio_authenticated %}<script defer src="{{ url_for('static', filename='alert_bell.js') }}?v={{ master }}"></script>{% endif %}
   <script defer src="{{ url_for('static', filename='theme.js') }}"></script>
