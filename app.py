@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.54'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.55'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -73,7 +73,7 @@ MODE_DEFS = [
     {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Retrocesos desde P1 semanal PROPUESTO/VALIDADO/CONFIRMADO y P2 máximo posterior; solo simulaciones INFRA.'},
     {'slug':'ventas','name':'Ventas','subtitle':'Objetivo USDT','description':'Propuestas solo SELL para acercarse a la meta de liquidez y reducir sobrepeso.'},
     {'slug':'forecast','name':'Forecast','subtitle':'Cycle Low → O5','description':'Tabla de niveles O2C1–O2C4 y ondas/pivotes proyectados; todo es simulación.'},
-    {'slug':'ordenes','name':'Órdenes','subtitle':'Seguimiento de órdenes','description':'Propuestas, confirmaciones de órdenes colocadas y registro manual de ejecuciones con evidencia.'},
+    {'slug':'ordenes','name':'Órdenes','subtitle':'Seguimiento de órdenes','description':'Propuestas por onda y ejecuciones acreditadas mediante KairosGPT.'},
 ]
 # Future mode enablement is centralized: disabled modes do not appear in any global nav.
 ENABLED_MODE_SLUGS = tuple(x['slug'] for x in MODE_DEFS)
@@ -1325,6 +1325,7 @@ def extract_order_image():
     """Admin-only image interpretation, never a trade or an automatic journal write."""
     if not _same_origin():return jsonify({'status':'FORBIDDEN_ORIGIN'}),403
     if not _admin_authorized() or not _csrf_ok():return jsonify({'status':'ADMIN_AUTH_REQUIRED'}),403
+    return jsonify({'status':'DISABLED','reason':'Las capturas se procesan únicamente desde KairosGPT.'}),410
     from order_image_extract import extract_image, ImageExtractError
     try:
         uploaded=request.files.get('image')
@@ -1352,6 +1353,7 @@ def manage_order_lifecycle():
     if not _cycle_order_allowed(body.get('lado') or body.get('side'),body.get('tramo') or body.get('stage')):
         return jsonify({'status':'INVALID','error_code':'OUT_OF_SCOPE',
                         'reason':'Órdenes solo admite BUY O2/O4 y SELL O3/O5.'}),400
+    return jsonify({'status':'WRITE_DISABLED','reason':'Las ejecuciones se registran únicamente desde KairosGPT con evidencia y conciliación.'}),403
     from orders_workflow import write_event,WorkflowError
     try:
         saved=write_event(body,expected_snapshot_id=body.get('expected_snapshot_id'))
