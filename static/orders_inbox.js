@@ -45,6 +45,29 @@ function init(doc){
  const feedback=doc.getElementById('orders-management-feedback');
  const extractFeedback=doc.getElementById('order-extract-feedback');
  const upload=doc.getElementById('order-image');
+ const dropzone=doc.getElementById('order-dropzone');
+ const preview=doc.getElementById('order-image-preview');
+ const thumb=doc.getElementById('order-image-thumb');
+ const fileName=doc.getElementById('order-image-name');
+ let selectedImage=null;let previewUrl=null;
+ function clearImage(){selectedImage=null;if(upload)upload.value='';if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null;}if(thumb)thumb.removeAttribute('src');if(preview)preview.hidden=true;if(dropzone)dropzone.classList.remove('is-dragging');}
+ function selectImage(file){
+  if(!file)return;
+  if(!['image/png','image/jpeg','image/webp'].includes(file.type)){extractFeedback.textContent='Formato inválido: selecciona PNG, JPG o WEBP.';return;}
+  if(file.size>5*1024*1024){extractFeedback.textContent='La captura supera 5 MB.';return;}
+  clearImage();selectedImage=file;previewUrl=URL.createObjectURL(file);
+  if(thumb)thumb.src=previewUrl;if(fileName)fileName.textContent=file.name;
+  if(preview)preview.hidden=false;
+  extractFeedback.textContent='Imagen seleccionada. Pulsa «Extraer datos» y revisa el resultado antes de guardar.';
+ }
+ upload?.addEventListener('change',()=>selectImage(upload.files?.[0]));
+ dropzone?.addEventListener('click',ev=>{if(ev.target!==upload)upload?.click();});
+ dropzone?.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();upload?.click();}});
+ for(const type of ['dragenter','dragover'])dropzone?.addEventListener(type,ev=>{ev.preventDefault();ev.stopPropagation();dropzone.classList.add('is-dragging');});
+ for(const type of ['dragleave','dragend'])dropzone?.addEventListener(type,ev=>{ev.preventDefault();ev.stopPropagation();dropzone.classList.remove('is-dragging');});
+ dropzone?.addEventListener('drop',ev=>{ev.preventDefault();ev.stopPropagation();dropzone.classList.remove('is-dragging');selectImage(ev.dataTransfer?.files?.[0]);});
+ doc.getElementById('order-image-remove')?.addEventListener('click',clearImage);
+
  const fields={exchange_order_id:'order-exchange-id',planned_units:'order-planned-units',planned_usdt:'order-planned-usdt',
    executed_units:'order-executed-units',executed_usdt:'order-executed-usdt',fee_units:'order-fee-units',fee_quote:'order-fee-quote',
    evidence:'order-evidence',note:'order-note'};
@@ -69,7 +92,7 @@ function init(doc){
    feedback.textContent='No disponible: el historial no pudo leerse. Reintenta más tarde.';return;
   }
   current=initialFields(btn);
-  form.reset();if(extractFeedback)extractFeedback.textContent='La extracción es opcional; revisa los campos antes de guardar.';
+  form.reset();clearImage();if(extractFeedback)extractFeedback.textContent='La extracción es opcional; revisa los campos antes de guardar.';
   for(const [key,id] of Object.entries(fields)){
    const el=doc.getElementById(id);if(el&&current[key]!==undefined)el.value=current[key];
   }
@@ -81,7 +104,7 @@ function init(doc){
   dialog.showModal();
  });
  doc.getElementById('order-extract')?.addEventListener('click',async()=>{
-  const file=upload?.files?.[0];if(!file){extractFeedback.textContent='Selecciona una imagen.';return;}
+  const file=selectedImage||upload?.files?.[0];if(!file){extractFeedback.textContent='Selecciona una imagen.';return;}
   if(file.size>5*1024*1024){extractFeedback.textContent='La captura supera 5 MB.';return;}
   const btn=doc.getElementById('order-extract');btn.disabled=true;
   try{
@@ -98,7 +121,8 @@ function init(doc){
    extractFeedback.textContent='Datos extraídos para revisión. Comprueba ID, unidades, importe, comisiones y estado antes de guardar. La imagen no se conserva en Sheets; referencia SHA256 registrada.';
   }catch(e){extractFeedback.textContent=String(e.message||e);}finally{btn.disabled=false;}
  });
- doc.getElementById('order-cancel')?.addEventListener('click',()=>dialog.close());
+ doc.getElementById('order-cancel')?.addEventListener('click',()=>{clearImage();dialog.close();});
+ dialog.addEventListener('close',clearImage);
  form.addEventListener('submit',async ev=>{
   ev.preventDefault();if(!current)return;
   const payload={...current,expected_snapshot_id:page.dataset.snapshotId};

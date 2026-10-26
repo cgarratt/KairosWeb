@@ -99,7 +99,19 @@
   <form method="dialog" id="orders-management-form">
     <h3 id="order-management-title">Registrar orden</h3>
     <p id="order-management-details" class="order-manager-summary"></p>
-    <div class="orders-image-extract"><label for="order-image">Captura del exchange (PNG, JPG, WEBP; máximo 5 MB)</label><input id="order-image" type="file" accept="image/png,image/jpeg,image/webp"><button type="button" class="orders-manage" id="order-extract">Extraer datos de captura</button><p class="order-management-help" id="order-extract-feedback" aria-live="polite">La extracción es opcional. Revisa los campos antes de guardar; no se envían órdenes.</p></div>
+    <div class="orders-image-extract">
+      <label for="order-image">Captura del exchange</label>
+      <div id="order-dropzone" class="order-dropzone" role="button" tabindex="0" aria-label="Arrastrar captura o seleccionar imagen">
+        <span class="order-dropzone-icon" aria-hidden="true">⇧</span>
+        <strong>Arrastra y suelta aquí la captura de tu orden</strong>
+        <span>o haz clic para seleccionar un archivo</span>
+        <small>PNG, JPG o WEBP · Máximo 5 MB</small>
+        <input id="order-image" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Seleccionar captura del exchange">
+      </div>
+      <div id="order-image-preview" class="order-image-preview" hidden><img id="order-image-thumb" alt="Vista previa de captura seleccionada"><span id="order-image-name"></span><button type="button" class="orders-manage" id="order-image-remove">Quitar imagen</button></div>
+      <button type="button" class="orders-manage" id="order-extract">Extraer datos de captura</button>
+      <p class="order-management-help" id="order-extract-feedback" aria-live="polite">La extracción es opcional. Revisa los campos antes de guardar; no se envían órdenes.</p>
+    </div>
     <label data-field="exchange_order_id">ID de orden del exchange <input id="order-exchange-id" name="exchange_order_id" maxlength="120" autocomplete="off"></label>
     <label data-field="planned_units">Unidades previstas <input id="order-planned-units" name="planned_units" type="number" min="0" step="any"></label>
     <label data-field="planned_usdt">Importe previsto en USDT/USDC <input id="order-planned-usdt" name="planned_usdt" type="number" min="0" step="any"></label>
