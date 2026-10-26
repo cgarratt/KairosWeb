@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.51'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.52'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1251,6 +1251,15 @@ def integral_portfolio_page():
                            bsi_archive=bsi_archive, portfolio_diagnostic=portfolio_diagnostic,
                            homologation=g.kairos_state.get('homologation'))
 
+def _cycle_order_allowed(side, stage):
+    """Orders UI owns only weekly-cycle O2/O4 buys and O3/O5 sells."""
+    import re
+    side=str(side or '').upper().strip()
+    stage=str(stage or '').upper().strip()
+    return bool(re.fullmatch(r'O(?:2|4)C[1-4]',stage) if side=='BUY' else
+                re.fullmatch(r'O(?:3|5)V[1-4]',stage) if side=='SELL' else False)
+
+
 @app.route('/mode/ordenes')
 def orders_inbox_page():
     """Separate market/snapshot gate from independent balance and weekly sources.
@@ -1267,6 +1276,9 @@ def orders_inbox_page():
     except Exception as exc:
         app.logger.error('Orders lifecycle read error class=%s',type(exc).__name__)
         managed_orders={'records':[],'historical':[],'ledger_present':False,'error':'No se pudo leer el registro de órdenes; no se admitirán cambios.'}
+    # Preserve all ledger records in Sheets; only expose cycle orders in this view.
+    managed_orders['records']=[r for r in managed_orders.get('records',[])
+                               if _cycle_order_allowed(r.get('lado'),r.get('tramo'))]
     stage='MASTER y Spot MCP'
     try:
         observed,d=load_live_dashboard()  # MUST remain fail-closed.
@@ -1293,6 +1305,7 @@ def orders_inbox_page():
         from wave_macro_context import published_wave_levels
         wave_levels=published_wave_levels(g.kairos_state['wave_pivots'])
         inbox=build_order_inbox(d,buy,bal,wave_levels=wave_levels)
+        inbox['candidates']=[x for x in inbox['candidates'] if _cycle_order_allowed(x.get('side'),x.get('stage'))]
         return render_template('ordenes.html',mode=mode,inbox=inbox,observed=observed,
                                snapshot=g.kairos_state['control']['snapshot_id'],master=APP_VERSION,error=None,
                                structural_note=structural_note,
@@ -1317,6 +1330,9 @@ def manage_order_lifecycle():
         return jsonify({'status':'WRITE_DISABLED','reason':'Falta KAIROS_GOOGLE_WRITER_JSON.'}),503
     body=request.get_json(silent=True)
     if not isinstance(body,dict):return jsonify({'status':'INVALID'}),400
+    if not _cycle_order_allowed(body.get('lado') or body.get('side'),body.get('tramo') or body.get('stage')):
+        return jsonify({'status':'INVALID','error_code':'OUT_OF_SCOPE',
+                        'reason':'Órdenes solo admite BUY O2/O4 y SELL O3/O5.'}),400
     from orders_workflow import write_event,WorkflowError
     try:
         saved=write_event(body,expected_snapshot_id=body.get('expected_snapshot_id'))

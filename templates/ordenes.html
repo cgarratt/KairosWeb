@@ -57,7 +57,7 @@
 {% endblock %}
 {% block content %}
 <div class="grid" id="orders-inbox" data-snapshot-id="{{ snapshot or '' }}" data-management-ready="{{ 'false' if managed_orders and managed_orders.error else 'true' }}">
-<section class="panel span-12 hero"><div><h2>Órdenes recomendadas</h2><p>Recomendaciones por token y seguimiento de estados · Propuesta → Confirmada → Ejecutada</p></div><div class="badge info">SIN ÓRDENES REMOTAS</div></section>
+<section class="panel span-12 hero"><div><h2>Órdenes recomendadas</h2><p>Solo BUY O2/O4 y SELL O3/O5 · Propuesta → Confirmada → Ejecutada</p></div><div class="badge info">SIN ÓRDENES REMOTAS</div></section>
 {% if managed_orders and managed_orders.error %}<section class="panel span-12"><p class="order-workflow-warning">{{ managed_orders.error }}</p></section>{% endif %}
 {% if error %}<section class="panel span-12"><h3>DATA ERROR</h3><p>{{ error }}</p><p>Etapa: {{ error_stage or 'N/D' }} · Referencia: {{ error_id or 'N/D' }}</p></section>{% else %}
 <section class="panel span-12">
@@ -67,7 +67,7 @@
     <div><small>Parciales</small><strong>{{ (managed_orders.records|selectattr('estado','equalto','PARCIAL')|list|length) if managed_orders else 0 }}</strong></div>
     <div><small>Ejecutadas registradas</small><strong>{{ (managed_orders.records|selectattr('estado','equalto','EJECUTADA')|list|length) if managed_orders else 0 }}</strong></div>
   </div>
-  <p class="order-management-help">Propuesta no reserva fondos. Confirmada reserva caja o unidades del exchange correspondiente. Ejecutada requiere evidencia y conciliación contable; nunca altera saldos por sí sola. El seguimiento se guarda en 26_ORDENES_GESTION. Las órdenes existentes en 05_ORDENES conservan sus compromisos; no deben registrarse de nuevo.</p>
+  <p class="order-management-help">Propuesta no reserva fondos. Confirmada reserva caja o unidades del exchange correspondiente. Ejecutada requiere evidencia y conciliación contable; nunca altera saldos por sí sola. El seguimiento se guarda en 26_ORDENES_GESTION. Las órdenes existentes en 05_ORDENES conservan sus compromisos; no deben registrarse de nuevo. MANUAL y REBALANCEO permanecen en el MASTER pero no se muestran aquí.</p>
   <div class="orders-tools" aria-label="Filtros de órdenes">
     <label for="orders-venue">Exchange</label><select id="orders-venue"><option value="Todos">Todos</option>{% for v in ['Binance','KuCoin','Hyperliquid'] %}<option value="{{ v }}">{{ v }}</option>{% endfor %}</select>
     <label for="orders-tier">Tier</label><select id="orders-tier"><option value="Todos">Todos</option>{% for v in ['T1','T2','T3'] %}<option value="{{ v }}">{{ v }}</option>{% endfor %}</select>

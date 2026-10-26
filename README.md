@@ -1,4 +1,4 @@
-# KairosWeb v2.0.51 — Spot snapshot on first use; manual refresh in header.
+# KairosWeb v2.0.52 — Spot snapshot on first use; manual refresh in header.
 # KairosWeb v2.0.37 — Logout seguro corregido
 
 **Cambio focalizado:** el cierre de sesión HTML valida el CSRF del formulario y redirige a invitado con HTTP 303. Se mantiene CSRF administrativo y la lectura privada protegida. Consultar `RELEASE_NOTES_v2.0.37.md`.
