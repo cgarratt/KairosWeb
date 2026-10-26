@@ -238,3 +238,7 @@ El botón de publicación requiere administración vigente, CSRF, preview, confi
 
 ## v2.0.44 · Hotfix órdenes abiertas
 Permite órdenes pendientes documentadas en 05_ORDENES con reserva de USDT/unidades, conteo conciliado y referencias locales cuando no se dispone de Exchange Order ID. No acredita fills ni altera saldos.
+
+
+## v2.0.45 · Hotfix HYPE pending quote-only
+See RELEASE_NOTES_v2.0.45.md.

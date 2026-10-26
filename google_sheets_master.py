@@ -302,16 +302,28 @@ def parse_master(raw):
                 if is_pending:
                     # A local reference is NOT an exchange order ID. Require a
                     # deterministic source reference and the missing-ID flag.
-                    if not order_id and not ('PENDIENTE_ID_EXCHANGE' in reconciled and 'Referencia local' in evidence):
+                    provisional=('PENDIENTE_ID_EXCHANGE' in reconciled and 'Referencia local' in evidence)
+                    hype_quote=(venue=='Hyperliquid' and token=='HYPE' and side=='BUY'
+                                and 'PENDIENTE_ID_QTY_QUOTE_INSTRUMENTO' in reconciled
+                                and 'HYPE' in evidence)
+                    if not order_id and not (provisional or hype_quote):
                         raise SheetDataError(f'orders: missing provisional reference at row {rownum}')
                     if not _almost(_number(_cell(r,8,0), 'executed qty'),0):
                         raise SheetDataError(f'orders: reconcile partial execution needs fill at row {rownum}')
                     price=_number(_cell(r,6), 'pending LIMIT price')
-                    quantity=_number(_cell(r,7), 'pending qty')
+                    raw_qty=_cell(r,7)
+                    quantity=0.0 if raw_qty in (None,'') and hype_quote else _number(raw_qty, 'pending qty')
                     budget=_number(_cell(r,9), 'pending commitment')
-                    if price<=0 or quantity<=0 or not _almost(price*quantity,budget,eps=.05):
+                    if price<=0 or budget<=0 or (not hype_quote and
+                        (quantity<=0 or not _almost(price*quantity,budget,eps=.05))):
                         raise SheetDataError(f'orders: pending budget mismatch at row {rownum}')
-                    key=(venue,order_id or evidence.split('Referencia local (NOOrderID):',1)[-1].split('"',1)[0].strip())
+                    if hype_quote and quantity and not _almost(price*quantity,budget,eps=.05):
+                        raise SheetDataError(f'orders: HYPE quantity/budget mismatch at row {rownum}')
+                    if hype_quote and not order_id:
+                        # Local identity, never a fabricated exchange order ID.
+                        key=(venue,'HYPE_QUOTE|'+str(price)+'|'+str(budget)+'|'+evidence)
+                    else:
+                        key=(venue,order_id or evidence.split('Referencia local (NOOrderID):',1)[-1].split('"',1)[0].strip())
                 else:
                     if not (order_id and (reconciled in ('CONCILIADO','VERIFICADO') or linked_reconciled)):
                         raise SheetDataError(f'orders: closed entry not reconciled at row {rownum}')

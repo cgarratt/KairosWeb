@@ -358,7 +358,7 @@ def test_v2033_homologation_diagnostics_and_units_contract_in_release():
     app=(root/'app.py').read_text()
     mcp=(root/'static/mcp_settings.js').read_text()
     html=(root/'templates/balancer.html').read_text()
-    assert "APP_VERSION = '2.0.44'" in app
+    assert "APP_VERSION = '2.0.45'" in app
     assert "/api/settings/homologation-status" in app
     assert 'HOM_WRITER_MISSING' in app
     assert 'write_may_have_committed' in app
@@ -473,4 +473,61 @@ def test_pending_orders_duplicate_provisional_reference_rejected():
          'PENDIENTE_ID_EXCHANGE;0ejecutada;NOFILL']
     raw[gs.SHEETS['orders']].extend([row,list(row)])
     with pytest.raises(gs.SheetDataError,match='duplicate'):
+        gs.parse_master(raw)
+
+
+# v2.0.45 HYPE quote-only order regression
+"""Regression for published 05_ORDENES shape: 11 USDT + 3 HYPE USDC pending.
+Synthetic identity/evidence strings; amounts mirror published order rows.
+"""
+import google_sheets_master as gs
+
+import pytest
+
+def _pending(venue, token, price, qty, budget, idx):
+    row=[None]*16
+    row[0]=venue;row[2]=token;row[3]='BUY';row[4]='LIMIT';row[5]='O2C4';row[6]=price
+    row[7]=qty;row[8]=0;row[9]=budget;row[11]='PENDIENTE'
+    if venue=='Hyperliquid':
+        row[14]=f'Usuario confirma orden HYPE {price} por {budget} USDC; evidencia orden {idx} HYPE'
+        row[15]='PENDIENTE_ID_QTY_QUOTE_INSTRUMENTO; no fill; moneda pendiente de conciliación'
+    else:
+        row[14]=f'Captura verificada; Referencia local (NOOrderID):{venue}|{token}|{idx}'
+        row[15]='PENDIENTE_ID_EXCHANGE; 0 ejecutada'
+    return row
+
+def _raw():
+    raw=fake_master(); raw[gs.SHEETS['control']].append(['ordenes_activas_declaradas','14'])
+    orders=[['header']]
+    for i,(venue,token,price,qty) in enumerate([
+        ('Binance','HBAR',.064,12500),('Binance','ONDO',.3612,553.7),
+        ('Binance','LINK',10.36,72.39),('Binance','SOL',92.54,27.015),
+        ('Binance','ETH',2156,.6307),('Binance','BTC',72600,.03443),
+        ('KuCoin','VIRTUAL',.515,388.34),('KuCoin','PEPE',.00000343,58309037),
+        ('KuCoin','PLUME',.01475,33898),('KuCoin','PUMPFUN',.003978,150829),
+        ('KuCoin','SUI',.8872,321.2)]):
+        orders.append(_pending(venue,token,price,qty,price*qty,i))
+    for i,price in enumerate([72,61,52]):orders.append(_pending('Hyperliquid','HYPE',price,None,1000,11+i))
+    raw[gs.SHEETS['orders']]=orders
+    return raw
+
+def test_fourteen_pending_including_hype_without_units():
+    raw=_raw(); raw[gs.SHEETS['liquidity']][1][1]=15000
+    raw[gs.SHEETS['liquidity']][3][1]=15010
+    raw[gs.SHEETS['liquidity']][5][1]=15000
+    raw[gs.SHEETS['liquidity']][6][1]=15010
+    for r in raw[gs.SHEETS['control']]:
+        if r[0]=='Liquidez física':r[1]=15010
+    # This validates the HYPE contract; existing cash-cap checks remain active.
+    state=gs.parse_master(raw)
+    assert state['control']['snapshot_id']=='TEST-001'
+
+def test_hype_without_evidence_is_blocked():
+    raw=_raw();raw[gs.SHEETS['orders']][-1][14]=''
+    with pytest.raises(gs.SheetDataError,match='unverified entry'):
+        gs.parse_master(raw)
+
+def test_hype_zero_commitment_is_blocked():
+    raw=_raw();raw[gs.SHEETS['orders']][-1][9]=0
+    with pytest.raises(gs.SheetDataError,match='pending budget mismatch'):
         gs.parse_master(raw)
