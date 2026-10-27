@@ -12,6 +12,23 @@ import math
 class LiquidityPolicyError(ValueError): pass
 
 
+def liquidity_allocation(physical_usdt, qf_usdt, balancer_assigned):
+    """Three disjoint REAL cash envelopes; assignment is not extra liquidity."""
+    total=_amount(physical_usdt,'USDT físico')
+    trading=_amount(qf_usdt,'Trading real')
+    balancer=_amount(balancer_assigned,'Balancer asignado')
+    weekly=total-trading-balancer
+    if weekly < -1e-8:
+        raise LiquidityPolicyError('Reservas Trading + Balancer exceden la liquidez física')
+    weekly=max(0.,weekly)
+    result={'total':total,'weekly':weekly,'balancer':balancer,'trading':trading}
+    if not math.isclose(sum(result[k] for k in ('weekly','balancer','trading')),total,abs_tol=1e-8):
+        raise LiquidityPolicyError('Las tres categorías no concilian con liquidez total')
+    for k in ('weekly','balancer','trading'):
+        result[k+'_pct']=100*result[k]/total if total else 0.
+    return result
+
+
 def _amount(x, name):
     if type(x) not in (int,float) or not math.isfinite(x) or x < 0:
         raise LiquidityPolicyError(name+': valor negativo, no numérico o no finito')

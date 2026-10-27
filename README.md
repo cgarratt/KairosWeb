@@ -1,4 +1,6 @@
-Entrega para carga por navegador GitHub: 63 archivos. Descomprimir y subir el contenido completo, incluyendo static y templates. Las pruebas permanecen en el paquete completo de desarrollo. Mismos archivos de ejecución de v2.0.57; sin cambios funcionales.
+# KairosWeb v2.0.58
+
+Entrega para GitHub por navegador: menos de100archivos. Ver RELEASE_NOTES_v2.0.58.md.
 
 # KairosWeb v2.0.57 · Topes de reservas
 

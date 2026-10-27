@@ -1,6 +1,19 @@
 {% extends 'base.html' %}
 {% block title %}Kairos Web · Balancer{% endblock %}
 {% block head %}<style>
+#liquidity-summary .cash-total{display:flex;flex-direction:column;gap:6px;margin:20px 0 25px;color:var(--muted)}
+#liquidity-summary .cash-total strong{font-size:34px;color:var(--text);font-variant-numeric:tabular-nums}
+#liquidity-summary small{font-size:12px;font-weight:400;color:var(--muted)}
+#liquidity-summary .cash-track{display:flex;height:22px;border-radius:8px;overflow:hidden;margin-bottom:20px}
+#liquidity-summary .cash-categories{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+#liquidity-summary .cash-category{display:flex;flex-direction:column;gap:10px;background:var(--soft);padding:16px;border-radius:12px}
+#liquidity-summary .cash-category strong{font-size:22px;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+#liquidity-summary .cash-category>span:last-child{font-size:12px;color:var(--muted)}
+#liquidity-summary .cash-label{display:flex;align-items:center;gap:8px;color:var(--text)}
+#liquidity-summary .cash-label i{width:9px;height:9px;border-radius:3px;flex-shrink:0}
+#liquidity-summary .cash-weekly{background:#7bbce8}#liquidity-summary .cash-balancer{background:#16ab89}#liquidity-summary .cash-trading{background:#efa53f}
+@media(max-width:600px){ #liquidity-summary .cash-categories{grid-template-columns:1fr}#liquidity-summary .cash-category{display:grid;grid-template-columns:1fr auto}#liquidity-summary .cash-label{grid-column:1/-1}}
+
 .liq-flow{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.liq-step{background:#f5f9ff;border:1px solid #dce7f6;border-radius:15px;padding:15px}.liq-step strong{display:block;font-size:22px;color:#174b9a;margin:7px 0}.liq-step small{color:#586982}.liq-step.red strong{color:#c4465a}.liq-step.green strong{color:#13996c}.mix{display:flex;height:25px;overflow:hidden;border-radius:100px;background:#eef2f7}.mix>div{height:100%}.chart-pair{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}.comparison{display:grid;grid-template-columns:75px 1fr 65px;align-items:center;gap:8px;margin:13px 0}.mini-track{position:relative;height:26px;border-radius:7px;background:#f1f5fa;overflow:hidden}.mini-track .before{position:absolute;top:2px;height:9px;background:#b1c4de;border-radius:6px}.mini-track .after{position:absolute;bottom:2px;height:9px;background:#2778cf;border-radius:6px}.mini-track .target{position:absolute;top:0;bottom:0;border-left:2px dashed #d18a13}.action-pill{font-size:12px;font-weight:800;padding:6px 11px;border-radius:16px;display:inline-block}.action-pill.buy{color:#13805c;background:#e3f7ee}.action-pill.sell{color:#b62d49;background:#ffecf1}.action-pill.watch{color:#835600;background:#fff4da}.liquidity-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}@media(max-width:800px){.liq-flow,.chart-pair{grid-template-columns:1fr 1fr}}@media(max-width:540px){.liq-flow,.chart-pair{grid-template-columns:1fr}}
 @media(max-width:750px){ #custody-balancer .liq-flow{grid-template-columns:1fr!important}}.liq-labels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}.liq-labels>div{display:flex;flex-direction:column;gap:6px;background:#f6f9fe;border:1px solid #dce7f6;border-radius:13px;padding:12px}.liq-labels i{width:13px;height:13px;border-radius:3px}.liq-labels strong{font-size:20px;color:#154a94}.liq-labels small{color:#60758a}.allocation-track{height:26px}@media(max-width:750px){.liq-labels{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:450px){.liq-labels{grid-template-columns:1fr}}
 
@@ -36,32 +49,18 @@
 {% block content %}
 <div class="grid"><section class="panel span-12 hero"><div><h2>Balancer</h2><p>Gestión de liquidez · Composición · Escenarios post-balance</p></div><span class="badge ok">● LIVE MCP · PRELIMINAR</span></section>
 {% include '_wave_confirmed.html' %}
-<section class="panel span-12"><div class="liquidity-head"><div><h2>1. Gestión de liquidez y reserva Balancer</h2><p class="sub">Tres bolsas sin duplicar USDT: semanal O2/O4, Balancer y ReservaTrading QF. El 40% es referencia estructural, no presupuesto operativo.</p></div><span class="badge info">No ejecuta órdenes</span></div>
-<div class="liq-flow">
-<div class="liq-step"><small>◈ Patrimonio P</small><strong>{{ '${:,.0f}'.format(payload.current.P) }}</strong><small>Cripto + USDT consolidado</small></div>
-<div class="liq-step"><small>◉ Liquidez USDT física</small><strong>{{ '${:,.0f}'.format(payload.current.cash) }}</strong><small>Incluye reserva Trading una sola vez</small></div>
-<div class="liq-step red"><small>◧ Referencia USDT · 40% P</small><strong>{{ '${:,.0f}'.format(payload.current.floor) }}</strong><small>Déficit: {{ '${:,.0f}'.format(payload.current.gap) }}</small></div>
-<div class="liq-step green"><small>◇ Reserva Balancer asignada</small><strong>{{ '${:,.0f}'.format(payload.current.reserve) }}</strong><small>Asignación publicada del MASTER o USDT 0 hasta autorizarla</small></div>
+<section class="panel span-12" id="liquidity-summary">
+{% set allocation=payload.current.liquidity_allocation %}
+<div class="liquidity-head"><h2>1. Gestión de liquidez</h2></div>
+<div class="cash-total"><span>Liquidez total</span><strong>{{ '{:,.2f}'.format(allocation.total) }} <small>USDT</small></strong></div>
+<div class="cash-track" role="img" aria-label="Distribución de liquidez: Compras O2/O4 {{ '{:,.2f}'.format(allocation.weekly) }} USDT, Balancer {{ '{:,.2f}'.format(allocation.balancer) }} USDT, Trading {{ '{:,.2f}'.format(allocation.trading) }} USDT">
+<div class="cash-weekly" style="width:{{ allocation.weekly_pct }}%"></div><div class="cash-balancer" style="width:{{ allocation.balancer_pct }}%"></div><div class="cash-trading" style="width:{{ allocation.trading_pct }}%"></div>
 </div>
-<h3 style="margin-top:22px">Distribución de Liquidez USDT</h3>
-{% if payload.current.reserve_caps %}
-{% set caps=payload.current.reserve_caps %}
-<div class="liq-flow" aria-label="Topes de reservas sobre el portafolio Spot">
-<div class="liq-step"><small>Tope Balancer · {{ '%.2f'|format(caps.balancer_fraction*100) }}% P</small><strong>{{ '${:,.2f}'.format(caps.balancer_cap_usdt) }}</strong><small>Reserva efectiva: {{ '${:,.2f}'.format(payload.current.reserve) }}</small></div>
-<div class="liq-step"><small>Tope Trading · {{ '%.2f'|format(caps.trading_fraction*100) }}% P</small><strong>{{ '${:,.2f}'.format(caps.trading_cap_usdt) }}</strong><small>Objetivo: {{ '${:,.2f}'.format(caps.trading_target_usdt) }}</small></div>
-<div class="liq-step {{ 'red' if caps.trading_excess_over_cap>0 else 'green' }}"><small>QF real sobre el tope</small><strong>{{ '${:,.2f}'.format(caps.trading_excess_over_cap) }}</strong><small>QF real {{ '${:,.2f}'.format(caps.trading_actual_usdt) }} permanece protegido. Sin transferencia automática.</small></div>
+<div class="cash-categories">
+{% for key,label in [('weekly','Compras O2/O4'),('balancer','Reserva Balancer'),('trading','Reserva Trading')] %}
+<div class="cash-category"><span class="cash-label"><i class="cash-{{ key }}"></i>{{ label }}</span><strong>{{ '{:,.2f}'.format(allocation[key]) }} <small>USDT</small></strong><span>{{ '%.2f'|format(allocation[key+'_pct']) }}%</span></div>
+{% endfor %}
 </div>
-{% endif %}
-{% set cash=payload.current.cash %}{% set trading=payload.current.trading %}{% set buy_budget=[cash-trading,0]|max %}{% set bal=[payload.current.reserve,buy_budget]|min %}{% set buy_exclusive=[buy_budget-bal,0]|max %}{% set denominator=[cash,1]|max %}
-<div class="mix allocation-track" role="img" aria-label="Distribución del USDT físico: compras disponibles, componente Balancer incluido en compras y reserva Trading protegida">
-<div title="USDT disponible para Compras sin el componente Balancer" style="width:{{ 100*buy_exclusive/denominator }}%;background:#7dbce9"></div><div title="Reserva Balancer utilizable por Compras O2/O4; sin contarse dos veces" style="width:{{ 100*bal/denominator }}%;background:#18a982"></div><div title="Reserva Trading QF protegida" style="width:{{ 100*trading/denominator }}%;background:#eda244"></div>
-</div>
-<div class="liq-labels">
-<div><i style="background:#7dbce9"></i><span>Compras O2/O4 (incl. Balancer)</span><strong>{{ '${:,.0f}'.format(buy_budget) }}</strong><small>{{ '%.1f'|format(100*buy_budget/cash if cash else 0) }}% USDT físico · incluye Balancer</small></div>
-<div><i style="background:#18a982"></i><span>Reserva Balancer asignada</span><strong>{{ '${:,.0f}'.format(bal) }}</strong><small>Solo para Balancer; Compras puede extenderse a ella</small></div>
-<div><i style="background:#eda244"></i><span>Reserva Trading</span><strong>{{ '${:,.0f}'.format(trading) }}</strong><small>{{ '%.1f'|format(100*trading/cash if cash else 0) }}% USDT físico · QF protegida</small></div>
-</div>
-<p class="footer-note">Presupuesto Compras O2/O4 máximo = USDT físico − Reserva Trading QF (sin techo 25% P). La Reserva Balancer asignada, cuando existe, es parte de ese presupuesto y no liquidez adicional. Meta estructural USDT: {{ '${:,.0f}'.format(payload.current.floor) }} (solo referencia). Importes sujetos a conciliación de órdenes y caja.</p>
 </section>
 <section class="panel span-12"><h2>2. USDT disponible para candidatos de compra</h2><p class="sub">Dos escenarios: reserva asignada efectiva y ventas propias hipotéticas, no acreditadas.</p><div class="liq-flow"><div class="liq-step"><small>Reserva Balancer asignada · disponible</small><strong>{{ '${:,.0f}'.format(payload.current.current_cash_capacity) }}</strong><small>Sin asignación publicada, USDT 0 · no usar caja semanal</small></div><div class="liq-step"><small>Ventas sugeridas · bruto</small><strong>{{ '${:,.0f}'.format(payload.sell_total) }}</strong><small>Exchange libre declarado + tope Tier · sin libro privado verificado</small></div><div class="liq-step green"><small>Reserva + ventas simuladas (condicional)</small><strong>{{ '${:,.0f}'.format(payload.current.projected_cash_capacity) }}</strong><small>Escenario condicional tras ventas confirmadas</small></div><div class="liq-step"><small>Meta USDT referencial</small><strong>{{ '${:,.0f}'.format(payload.current.floor) }}</strong><small>No constituye caja libre certificada</small></div></div></section>
 <section class="panel span-6"><h2>3. Candidatos de compra</h2><p class="sub">Déficits vs objetivos · montos estimados con reserva actual y en escenario posterior a ventas sugeridas.</p><div style="overflow:auto"><table><thead><tr><th>Token</th><th>Peso / Meta</th><th>Reserva actual</th><th>Con ventas</th><th>Acción</th></tr></thead><tbody>{% for r in payload.buys %}<tr><td><span class="coin-tag"><span class="coin-icon"><img loading="lazy" src="https://cryptologos.cc/logos/{{ {'BTC':'bitcoin-btc','ETH':'ethereum-eth','SOL':'solana-sol','LINK':'chainlink-link','HYPE':'hyperliquid-hype','HBAR':'hedera-hbar','SUI':'sui-sui','ONDO':'ondo-finance-ondo','PUMP':'pump-fun-pump','PLUME':'plume-plume','PEPE':'pepe-pepe','VIRTUAL':'virtual-protocol-virtual'}[r.token] }}-logo.png" alt="" onerror="this.style.display='none'"><span class="coin-fallback">{{ r.token[:2] }}</span></span><strong>{{ r.token }}</strong></span></td><td>{{ '%.1f'|format(r.weight*100) }}% / {{ '%.1f'|format(r.target*100) }}%</td><td>{{ '${:,.0f}'.format(r.value) }}</td><td>{{ '${:,.0f}'.format(payload.buy_with_sales[loop.index0].value) }}</td><td><span class="action-pill {{ 'buy' if r.value>0 else 'watch' }}">{{ 'BUY · REVISAR' if r.value>0 else 'WATCH' }}</span></td></tr>{% else %}<tr><td colspan="5">Sin infraponderados fuera de banda.</td></tr>{% endfor %}</tbody><tfoot style="font-weight:800;background:#eaf3ff;border-top:2px solid #91b7e9"><tr><td colspan="2">TOTAL USDT</td><td>{{ '${:,.0f}'.format(payload.buys|sum(attribute='value')) }}</td><td>{{ '${:,.0f}'.format(payload.buy_with_sales|sum(attribute='value')) }}</td><td>SIMULACIÓN</td></tr></tfoot></table></div></section>

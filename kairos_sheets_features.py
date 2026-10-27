@@ -490,8 +490,9 @@ def portfolio_goals_data(raw):
     else:liq=GOAL_LIQ_DRAFT.copy()
     physical=sum(float(r[1]) for r in raw[SHEETS['liquidity']][1:] if len(r)>2 and r[2] in ('OPERATIVO','TRADING_QF'))
     operating=sum(float(r[1]) for r in raw[SHEETS['liquidity']][1:] if len(r)>2 and r[2]=='OPERATIVO')
-    from liquidity_reserves import derive_balancer_allocation, LiquidityPolicyError
+    from liquidity_reserves import derive_balancer_allocation, LiquidityPolicyError, reserve_caps_from_master
     try:
+        reserve_caps_from_master({k:{'value':r[2],'status':r[5]} for k,r in params.items()})
         assignment=derive_balancer_allocation(physical,physical-operating,liq['balancer']) if complete else 0.
     except LiquidityPolicyError as exc:
         raise SettingsError(str(exc)) from exc
@@ -539,6 +540,11 @@ def _goal_entries(entries):
     for t,vals in custody.items():_goal_sum('Custodia '+t,list(vals.values()))
     if 'balancer_allocated_usdt' in groups['liquidity']:
         raise SettingsError('La reserva Balancer se deriva automáticamente del porcentaje; no se admite monto manual')
+    cap_keys=('balancer_cap','trading_cap')
+    if any(k in groups['liquidity'] for k in cap_keys):
+        if not all(k in groups['liquidity'] for k in cap_keys):
+            raise SettingsError('Se requieren ambos topes de reservas')
+        for k in cap_keys:_goal_fraction(groups['liquidity'][k],k)
     return portfolio,tiers,liquid,custody
 
 
@@ -567,6 +573,16 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
     positions={r[0]:i for i,r in enumerate(b[SHEETS['positions']]) if r and r[0] in ('BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMPFUN','PLUME','VIRTUAL','PEPE')}
     if category=='portfolio_goals':
         portfolio, tier_shares,liq_mix,custody_shares=_goal_entries(entries)
+        liquid_entry=next(e for e in entries if e['group']=='liquidity')
+        for field,key in [('balancer_cap','BALANCER_MAX_PORTFOLIO_FRACTION'),
+                          ('trading_cap','TRADING_MAX_PORTFOLIO_FRACTION')]:
+            if field in liquid_entry:
+                row=_find_row(b,'parameters',key,column=1)
+                if _get(b,'parameters',row,5)!='APROBADO':raise SettingsError(key+': no aprobado')
+                value=_goal_fraction(liquid_entry[field],key)
+                if value!=_get(b,'parameters',row,2):
+                    change('parameters',row,2,value)
+                    change('parameters',row,7,'Aprobación administrativa KairosWeb · '+evidence.strip()[:95])
         # Rebalance all twelve target percentages preserving relative weights
         # within each tier, as published before this revision. Do not reassign
         # tokens to different tiers or change physical custody units.
@@ -839,6 +855,15 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
     # Update parameter parse_master O5 policy contract handled by validator.
     try:state=parse_master(b)
     except SheetDataError as exc:raise SettingsError('Validación del Master falló: '+str(exc)) from exc
+    from liquidity_reserves import reserve_caps_from_master, liquidity_allocation, LiquidityPolicyError
+    try:
+        reserve_caps_from_master(state['parameters'])
+        # All real funds must reconcile. No proposed reduction of QF creates cash.
+        physical=state['snapshot']['physical_total_USDT']
+        qf=state['snapshot']['trading_real_fixed_USDT']
+        liquidity_allocation(physical,qf,0.)
+    except LiquidityPolicyError as exc:
+        raise SettingsError(str(exc)) from exc
     return updates, state
 
 

@@ -360,6 +360,7 @@
     for(const [name,vals] of [['Cripto/Liquidez',[p.crypto,p.liquidity]],['Tiers',[t.T1,t.T2,t.T3]],['Liquidez/Reservas',[l.usdt,l.balancer,l.trading]],...c.map(x=>['Custodia '+x.tier,[x.hodl,x.core,x.exchange]])]){
       if(Math.abs(vals.reduce((a,b)=>a+b,0)-1)>1e-8)throw Error(name+' debe sumar exactamente 100%.');
     }
+    if(body.querySelector('[data-goal="reserve_caps.balancer"]')){l.balancer_cap=goalRead('reserve_caps.balancer');l.trading_cap=goalRead('reserve_caps.trading');}
     return [p,t,l,...c];
   }
   function goalInput(key,value,label){const holder=el('label','goal-field');holder.append(el('span','',label));
@@ -371,6 +372,10 @@
       ...['T1','T2','T3'].map(t=>['Custodia '+t,['custody.'+t+'.hodl','custody.'+t+'.core','custody.'+t+'.exchange']])]){
       try{const total=keys.reduce((acc,k)=>acc+goalRead(k),0)*100;const ok=Math.abs(total-100)<1e-6;valid=valid&&ok;summaries.push({label,total,ok});}
       catch(_){valid=false;summaries.push({label,total:NaN,ok:false});}
+    }
+    if(body.querySelector('[data-goal="reserve_caps.balancer"]')){
+      try{goalRead('reserve_caps.balancer');goalRead('reserve_caps.trading');}
+      catch(_){valid=false;}
     }
     const panel=el('div','settings-total-panel goal-sums');summaries.forEach(x=>panel.append(el('span',x.ok?'valid-value':'invalid-value',x.label+': '+(Number.isFinite(x.total)?x.total.toFixed(2)+'%':'N/D')+' / 100%')));totals.append(panel);
     const m=body.querySelector('#goal-preview');
@@ -406,10 +411,14 @@
       card.append(row);body.append(card);
     }
     const assignment=el('section','goal-card');assignment.append(el('h4','','Reservas y topes del portafolio'),
-      el('p','settings-hint','Balancer = menor entre su porcentaje de liquidez y su tope del portafolio. Trading = menor entre su porcentaje de liquidez y su tope del portafolio. Los topes se editan en Parámetros y se calculan con Spot vigente en Balancer. QF real permanece protegido.'));
+      el('p','settings-hint','Balancer = menor entre su porcentaje de liquidez y su tope del portafolio. Trading = menor entre su porcentaje de liquidez y su tope del portafolio. Los topes se calculan con Spot vigente en Balancer. QF real permanece protegido.'));
     const value=el('strong','goal-derived-amount');value.id='balancer-derived-amount';
     assignment.append(value,el('p','settings-hint',`USDT físico: ${money(g.usdt_physical_actual)} · USDT fuera de QF: ${money(g.usdt_operating_actual)} · ${g.liquidity_mix_published?'Porcentaje publicado en MASTER':'Porcentaje en borrador; pendiente de publicación'}`));body.append(assignment);
-    if(g.reserve_caps){assignment.append(el('p','settings-hint',`Topes publicados: Balancer ${Number(g.reserve_caps.balancer*100).toFixed(2)}% · Trading ${Number(g.reserve_caps.trading*100).toFixed(2)}% del portafolio Spot. Editables en Parámetros.`));}
+    if(g.reserve_caps && Number.isFinite(g.reserve_caps.balancer) && Number.isFinite(g.reserve_caps.trading)){
+      const row=el('div','goal-grid');
+      row.append(goalInput('reserve_caps.balancer',g.reserve_caps.balancer,'Tope Balancer (% del portafolio)'),goalInput('reserve_caps.trading',g.reserve_caps.trading,'Tope Trading (% del portafolio)'));
+      assignment.append(row,el('p','settings-hint','Límites independientes entre 0% y 100%; no tienen que sumar 100%. Se publican junto con los demás objetivos.'));
+    }
     const cust=el('section','goal-card');cust.append(el('h4','','4. Custodia por Tier'),el('p','settings-hint','Cada Tier suma 100% entre HODL, Core y Exchange. Son metas, no transferencias.'));
     ['T1','T2','T3'].forEach(t=>{
       const row=el('div','goal-grid');row.append(el('strong','goal-tier',t));
