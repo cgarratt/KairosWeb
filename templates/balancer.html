@@ -1,18 +1,22 @@
 {% extends 'base.html' %}
 {% block title %}Kairos Web · Balancer{% endblock %}
 {% block head %}<style>
-#liquidity-summary .cash-total{display:flex;flex-direction:column;gap:6px;margin:20px 0 25px;color:var(--muted)}
-#liquidity-summary .cash-total strong{font-size:34px;color:var(--text);font-variant-numeric:tabular-nums}
+#liquidity-summary .cash-layout{display:grid;grid-template-columns:260px minmax(0,1fr);align-items:center;gap:36px;margin-top:22px}
+#liquidity-summary .cash-donut{width:244px;height:244px;border-radius:50%;display:grid;place-items:center}
+#liquidity-summary .cash-center{width:182px;height:182px;border-radius:50%;background:var(--panel);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center}
+#liquidity-summary .cash-center span{color:var(--muted);font-size:12px}
+#liquidity-summary .cash-center strong{font-size:28px;color:var(--text);font-variant-numeric:tabular-nums}
 #liquidity-summary small{font-size:12px;font-weight:400;color:var(--muted)}
-#liquidity-summary .cash-track{display:flex;height:22px;border-radius:8px;overflow:hidden;margin-bottom:20px}
-#liquidity-summary .cash-categories{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-#liquidity-summary .cash-category{display:flex;flex-direction:column;gap:10px;background:var(--soft);padding:16px;border-radius:12px}
-#liquidity-summary .cash-category strong{font-size:22px;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
-#liquidity-summary .cash-category>span:last-child{font-size:12px;color:var(--muted)}
+#liquidity-summary .cash-categories{display:flex;flex-direction:column;gap:0}
+#liquidity-summary .cash-category{display:flex;flex-direction:column;gap:10px;padding:17px 0;border-bottom:1px solid var(--line)}
+#liquidity-summary .cash-category:last-child{border-bottom:0}
+#liquidity-summary .cash-category strong{font-size:23px;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+#liquidity-summary .cash-value-row{display:flex;align-items:baseline;justify-content:space-between;gap:14px}
+#liquidity-summary .cash-value-row>span{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
 #liquidity-summary .cash-label{display:flex;align-items:center;gap:8px;color:var(--text)}
-#liquidity-summary .cash-label i{width:9px;height:9px;border-radius:3px;flex-shrink:0}
+#liquidity-summary .cash-label i{width:10px;height:10px;border-radius:3px;flex-shrink:0}
 #liquidity-summary .cash-weekly{background:#7bbce8}#liquidity-summary .cash-balancer{background:#16ab89}#liquidity-summary .cash-trading{background:#efa53f}
-@media(max-width:600px){ #liquidity-summary .cash-categories{grid-template-columns:1fr}#liquidity-summary .cash-category{display:grid;grid-template-columns:1fr auto}#liquidity-summary .cash-label{grid-column:1/-1}}
+@media(max-width:650px){ #liquidity-summary .cash-layout{grid-template-columns:1fr;gap:12px}#liquidity-summary .cash-donut{justify-self:center;width:222px;height:222px}#liquidity-summary .cash-center{width:164px;height:164px}#liquidity-summary .cash-center strong{font-size:26px}}
 
 .liq-flow{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.liq-step{background:#f5f9ff;border:1px solid #dce7f6;border-radius:15px;padding:15px}.liq-step strong{display:block;font-size:22px;color:#174b9a;margin:7px 0}.liq-step small{color:#586982}.liq-step.red strong{color:#c4465a}.liq-step.green strong{color:#13996c}.mix{display:flex;height:25px;overflow:hidden;border-radius:100px;background:#eef2f7}.mix>div{height:100%}.chart-pair{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}.comparison{display:grid;grid-template-columns:75px 1fr 65px;align-items:center;gap:8px;margin:13px 0}.mini-track{position:relative;height:26px;border-radius:7px;background:#f1f5fa;overflow:hidden}.mini-track .before{position:absolute;top:2px;height:9px;background:#b1c4de;border-radius:6px}.mini-track .after{position:absolute;bottom:2px;height:9px;background:#2778cf;border-radius:6px}.mini-track .target{position:absolute;top:0;bottom:0;border-left:2px dashed #d18a13}.action-pill{font-size:12px;font-weight:800;padding:6px 11px;border-radius:16px;display:inline-block}.action-pill.buy{color:#13805c;background:#e3f7ee}.action-pill.sell{color:#b62d49;background:#ffecf1}.action-pill.watch{color:#835600;background:#fff4da}.liquidity-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}@media(max-width:800px){.liq-flow,.chart-pair{grid-template-columns:1fr 1fr}}@media(max-width:540px){.liq-flow,.chart-pair{grid-template-columns:1fr}}
 @media(max-width:750px){ #custody-balancer .liq-flow{grid-template-columns:1fr!important}}.liq-labels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}.liq-labels>div{display:flex;flex-direction:column;gap:6px;background:#f6f9fe;border:1px solid #dce7f6;border-radius:13px;padding:12px}.liq-labels i{width:13px;height:13px;border-radius:3px}.liq-labels strong{font-size:20px;color:#154a94}.liq-labels small{color:#60758a}.allocation-track{height:26px}@media(max-width:750px){.liq-labels{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:450px){.liq-labels{grid-template-columns:1fr}}
@@ -52,14 +56,15 @@
 <section class="panel span-12" id="liquidity-summary">
 {% set allocation=payload.current.liquidity_allocation %}
 <div class="liquidity-head"><h2>1. Gestión de liquidez</h2></div>
-<div class="cash-total"><span>Liquidez total</span><strong>{{ '{:,.2f}'.format(allocation.total) }} <small>USDT</small></strong></div>
-<div class="cash-track" role="img" aria-label="Distribución de liquidez: Compras O2/O4 {{ '{:,.2f}'.format(allocation.weekly) }} USDT, Balancer {{ '{:,.2f}'.format(allocation.balancer) }} USDT, Trading {{ '{:,.2f}'.format(allocation.trading) }} USDT">
-<div class="cash-weekly" style="width:{{ allocation.weekly_pct }}%"></div><div class="cash-balancer" style="width:{{ allocation.balancer_pct }}%"></div><div class="cash-trading" style="width:{{ allocation.trading_pct }}%"></div>
+<div class="cash-layout">
+<div class="cash-donut" data-liquidity-chart="donut" role="img" aria-label="Liquidez total {{ '{:,.2f}'.format(allocation.total) }} USDT. Compras O2/O4 {{ '%.2f'|format(allocation.weekly_pct) }}%, Balancer {{ '%.2f'|format(allocation.balancer_pct) }}%, Trading {{ '%.2f'|format(allocation.trading_pct) }}%." style="background:{% if allocation.total>0 %}conic-gradient(#7bbce8 0% {{ allocation.weekly_pct }}%,#16ab89 {{ allocation.weekly_pct }}% {{ allocation.weekly_pct+allocation.balancer_pct }}%,#efa53f {{ allocation.weekly_pct+allocation.balancer_pct }}% 100%){% else %}var(--line){% endif %}">
+<div class="cash-center"><span>Liquidez total</span><strong>{{ '{:,.2f}'.format(allocation.total) }}</strong><span>USDT</span></div>
 </div>
 <div class="cash-categories">
 {% for key,label in [('weekly','Compras O2/O4'),('balancer','Reserva Balancer'),('trading','Reserva Trading')] %}
-<div class="cash-category"><span class="cash-label"><i class="cash-{{ key }}"></i>{{ label }}</span><strong>{{ '{:,.2f}'.format(allocation[key]) }} <small>USDT</small></strong><span>{{ '%.2f'|format(allocation[key+'_pct']) }}%</span></div>
+<div class="cash-category"><span class="cash-label"><i class="cash-{{ key }}"></i>{{ label }}</span><div class="cash-value-row"><strong>{{ '{:,.2f}'.format(allocation[key]) }} <small>USDT</small></strong><span>{{ '%.2f'|format(allocation[key+'_pct']) }}%</span></div></div>
 {% endfor %}
+</div>
 </div>
 </section>
 <section class="panel span-12"><h2>2. USDT disponible para candidatos de compra</h2><p class="sub">Dos escenarios: reserva asignada efectiva y ventas propias hipotéticas, no acreditadas.</p><div class="liq-flow"><div class="liq-step"><small>Reserva Balancer asignada · disponible</small><strong>{{ '${:,.0f}'.format(payload.current.current_cash_capacity) }}</strong><small>Sin asignación publicada, USDT 0 · no usar caja semanal</small></div><div class="liq-step"><small>Ventas sugeridas · bruto</small><strong>{{ '${:,.0f}'.format(payload.sell_total) }}</strong><small>Exchange libre declarado + tope Tier · sin libro privado verificado</small></div><div class="liq-step green"><small>Reserva + ventas simuladas (condicional)</small><strong>{{ '${:,.0f}'.format(payload.current.projected_cash_capacity) }}</strong><small>Escenario condicional tras ventas confirmadas</small></div><div class="liq-step"><small>Meta USDT referencial</small><strong>{{ '${:,.0f}'.format(payload.current.floor) }}</strong><small>No constituye caja libre certificada</small></div></div></section>
@@ -71,7 +76,7 @@
 <section class="panel span-12" id="custody-balancer">
   {% set cust = payload.custody_comparison %}
   <div class="liquidity-head"><div><h2>7. Custodia · rebalanceo sugerido</h2>
-    <p class="sub">Comparación independiente de BUY/SELL · 02_POSICIONES y 04_CUSTODIA del MASTER PUBLICADO.</p></div>
+    <p class="sub">Solo movimientos superiores al 5% de las unidades totales del token. Ajustes de hasta 5% se consideran aceptables.</p></div>
     <span class="badge info">PROPUESTA · SIN TRANSFERENCIAS</span></div>
   <div class="custody-kpis">
     <div class="liq-step"><small>Transferencias sugeridas</small><strong>{{ cust.transfer_count }}</strong><small>Exchange → HODL/Core · solo propuesta manual</small></div>
@@ -99,11 +104,11 @@
         <span><i class="custody-dot custody-core"></i>C {{ '%.2f'|format(r.feasible_pct.core) }}%</span>
         <span><i class="custody-dot custody-exchange"></i>E {{ '%.2f'|format(r.feasible_pct.exchange) }}%</span>
       </div>
-      <p class="custody-note">{{ 'Ideal alcanzable' if r.nominal_reachable else 'Ajuste parcial · existen custodias protegidas fuera del objetivo' }}</p>
+      <p class="custody-note">{{ 'Ideal alcanzable' if r.nominal_reachable else 'Variación restante aceptable (≤5%)' if r.within_tolerance else 'Ajuste parcial · custodias protegidas fuera del objetivo' }}</p>
     </div>
   </div>
   {% else %}
-  <div class="custody-row"><p>No hay transferencias seguras desde Exchange que mejoren el objetivo de custodia.</p></div>
+  <div class="custody-row"><p>No hay transferencias seguras superiores al 5% desde Exchange.</p></div>
   {% endfor %}
   </div>
   {% set unmoved = cust.rows|rejectattr('transfer_count')|list %}
@@ -112,12 +117,12 @@
     {% for r in unmoved %}
     <div class="custody-mini-row"><strong>{{ 'PUMP' if r.token=='PUMPFUN' else r.token }} <small>· {{ r.tier }}</small></strong>
       <span>H {{ '%.2f'|format(r.feasible_pct.hodl) }}% · C {{ '%.2f'|format(r.feasible_pct.core) }}% · E {{ '%.2f'|format(r.feasible_pct.exchange) }}%</span>
-      <small>{{ 'En objetivo' if r.nominal_reachable else 'Sin movimiento permitido' }}</small>
+      <small>{{ 'En objetivo' if r.nominal_reachable else 'Variaciones menores aceptadas' if r.minor_adjustments_accepted or r.within_tolerance else 'Sin movimiento permitido' }}</small>
     </div>
     {% endfor %}
   </details>
   {% endif %}
-  <p class="footer-note">{{ cust.nominal_unreachable }} ideales nominales no alcanzables exactamente sin retirar custodia protegida. Los porcentajes son el resultado hipotético de las transferencias propuestas, NO posiciones confirmadas. HODL/Core nunca se retiran ni se intercambian entre sí; reservas SELL de Exchange protegidas. Tras una transferencia real, confirmar y publicar un snapshot nuevo.</p>
+  <p class="footer-note">{{ cust.material_residual_count }} tokens con brechas residuales superiores al 5%. Las variaciones menores se consideran aceptables. Los porcentajes son el resultado hipotético de las transferencias propuestas, NO posiciones confirmadas. HODL/Core nunca se retiran ni se intercambian entre sí; reservas SELL de Exchange protegidas. Tras una transferencia real, confirmar y publicar un snapshot nuevo.</p>
 </section>
 {% endif %}
 <section class="panel span-12"><div class="callout warn"><strong>Interpretación · Solo simulación</strong>{{ payload.limitations }} No se presume que una orden LIMIT esté ejecutada. BTC nunca se vende; Core/HODL protegido. Los escenarios de compras y ventas son independientes, no son un rebalanceo secuencial ni un plan ejecutable. Snapshot: {{ payload.snapshot_note }}</div></section>

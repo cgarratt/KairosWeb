@@ -88,7 +88,13 @@
     if(tab==='units'&&field==='investment_total')return Number(value).toFixed(2);
     return value===null||value===undefined?'':String(value);
   }
-  function makeField(item,entry,index,field,label){const holder=el('div','settings-field');const name=el('label','',tab==='parameters'&&entry.key?.endsWith('_PCT')?'Asignación (%)':label);
+  function makeField(item,entry,index,field,label){
+    if(tab==='parameters'&&entry.read_only){
+      const cell=el('div','settings-field computed');
+      cell.append(el('span','settings-hint','Valor publicado'),el('strong','computed-value',fmt.toDisplay(entry.value,entry)+'%'));
+      const link=el('a','settings-hint','Editar en Objetivos de gestión');link.href='/settings?tab=portfolio_goals';cell.append(link);item.append(cell);return;
+    }
+    const holder=el('div','settings-field');const name=el('label','',tab==='parameters'&&entry.key?.endsWith('_PCT')?'Asignación (%)':label);
     let input;if(field==='tier'){
       input=el('select');for(const v of ['T1','T2','T3']){const option=el('option','',v);option.value=v;input.append(option);}input.value=entry[field];
     }else{
@@ -445,7 +451,7 @@
     return n;
   }
   function collect(){if(tab==='portfolio_goals')return collectGoals();if(tab==='pivots')return collectPivotMatrix();const originals=state.sections[tab]||[];const out=[];
-    originals.forEach((entry,index)=>{const data={[rowKey()]:entry[rowKey()]};let dirty=false;
+    originals.forEach((entry,index)=>{if(tab==='parameters'&&entry.read_only)return;const data={[rowKey()]:entry[rowKey()]};let dirty=false;
       for(const [field] of sectionFields[tab]){
         const input=body.querySelector(`[data-index="${index}"][data-field="${field}"]`);
         if(!input)throw Error('Falta un campo');

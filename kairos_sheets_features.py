@@ -31,7 +31,6 @@ INBOX_SHEETS = {
 WRITE_LOCK = threading.Lock()
 EDITABLE_PARAM_KEYS = frozenset({
     'DRIFT_BAND_PP','STRUCTURAL_USDT_TARGET',
-    'BALANCER_MAX_PORTFOLIO_FRACTION','TRADING_MAX_PORTFOLIO_FRACTION',
     'O3_BTC_PROCEEDS_FRACTION','O3_USDT_PROCEEDS_FRACTION',
     'O5_BTC_PROCEEDS_FRACTION','O5_USDT_PROCEEDS_FRACTION',
     'RISK_REWARD_MIN','QF_MARGIN_CAP_PER_POSITION',
@@ -39,6 +38,7 @@ EDITABLE_PARAM_KEYS = frozenset({
     'MAX_LEVERAGE','MAX_OPEN_POSITIONS',
     'TRIGGER_STRICT_GT','PROXIMITY_BAND',
 }) | ALL_TRANCHE_KEYS
+RESERVE_CAP_KEYS = frozenset(('BALANCER_MAX_PORTFOLIO_FRACTION','TRADING_MAX_PORTFOLIO_FRACTION'))
 CAPITAL_TARGET_SEGMENTS = ('HODL + Core','Exchange','Liquidez','Trading')
 # Percentages refer to the LIQUIDITY SLEEVE, not physical USDT/QF balances.
 # These keys are absent from legacy MASTER revisions; their default is only an
@@ -867,6 +867,26 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
     return updates, state
 
 
+def parameter_settings_rows(rows):
+    """One editable authority: cap values are read-only mirrors of MASTER here."""
+    result=[]
+    for r in rows[1:]:
+        if len(r)<6 or r[1] not in EDITABLE_PARAM_KEYS | RESERVE_CAP_KEYS:
+            continue
+        key=r[1];read_only=key in RESERVE_CAP_KEYS
+        description=r[8] if len(r)>8 else ''
+        source=r[7] if len(r)>7 else ''
+        if read_only:
+            percent=_goal_fraction(r[2],key)*100
+            label='Balancer' if key=='BALANCER_MAX_PORTFOLIO_FRACTION' else 'Trading'
+            description=f'Tope {label} publicado: {percent:g}% del portafolio Spot. Editar en Objetivos de gestión → Reservas y topes del portafolio.'
+            source='MASTER · valor publicado en Objetivos de gestión'
+        result.append({'key':key,'module':r[0],'value':r[2],'unit':r[4],
+                       'type':r[3],'status':r[5],'module_name':r[0],
+                       'description':description,'source':source,'read_only':read_only})
+    return result
+
+
 def settings_data():
     raw=_remote_data();state=parse_master(raw)
     def rows(name):return raw[SHEETS[name]]
@@ -878,7 +898,7 @@ def settings_data():
     capital_targets=[{'segment':segment,'target':float(next(r[1] for r in rows('integral') if r and r[0]==segment))/capital_amount,
                       'target_usdt':float(next(r[1] for r in rows('integral') if r and r[0]==segment))}
                      for segment in ('Liquidez','Trading','HODL + Core','Exchange')] if capital_amount>0 else []
-    params=[{'key':r[1],'module':r[0],'value':r[2],'unit':r[4], 'type':r[3], 'status':r[5], 'module_name':r[0], 'description':r[8] if len(r)>8 else '', 'source':r[7] if len(r)>7 else ''} for r in rows('parameters')[1:] if len(r)>5 and r[1] in EDITABLE_PARAM_KEYS]
+    params=parameter_settings_rows(rows('parameters'))
     # 16 separately editable numeric values; draft defaults never edit Sheets.
     existing={r['key'] for r in params}
     defaults=defaults_from_master(state['parameters'])

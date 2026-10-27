@@ -1,3 +1,11 @@
+# KairosWeb v2.0.60
+
+Umbral de custodia: únicamente transferencias mayores al5%del total de unidades por token. Ver RELEASE_NOTES_v2.0.60.md.
+
+# KairosWeb v2.0.59
+
+Release de donut de liquidez y edición única de reservas. Ver RELEASE_NOTES_v2.0.59.md.
+
 # KairosWeb v2.0.58
 
 Entrega para GitHub por navegador: menos de100archivos. Ver RELEASE_NOTES_v2.0.58.md.

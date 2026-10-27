@@ -39,7 +39,8 @@ def _qty(value: Decimal) -> Decimal:
 
 def compare_custody(positions: Mapping[str, Mapping[str, Any]],
                     custody_policy: Mapping[str, Mapping[str, Any]],
-                    *, reserved_exchange: Mapping[str, Any] | None = None) -> dict:
+                    *, reserved_exchange: Mapping[str, Any] | None = None,
+                    min_transfer_fraction=0) -> dict:
     """Compute nominal targets, feasible post-transfer holdings and exact transfer units.
 
     Current holdings remain intact. The feasible result is monotone: only *unreserved*
@@ -51,6 +52,8 @@ def compare_custody(positions: Mapping[str, Mapping[str, Any]],
     if not positions or not custody_policy:
         raise CustodyError("02_POSICIONES / 04_CUSTODIA no disponibles")
     reservations = reserved_exchange or {}
+    minimum=_decimal(min_transfer_fraction,'Umbral de transferencia')
+    if minimum>1:raise CustodyError('Umbral de transferencia debe ser 0..100%')
     rows=[]
     motions=[]
     for token, row in positions.items():
@@ -73,6 +76,7 @@ def compare_custody(positions: Mapping[str, Mapping[str, Any]],
             raise CustodyError(f'{tier}: distribución publicada debe sumar 100%')
         actual={key:_decimal(row.get(key),f'{token}.{key}') for key in LABELS}
         total=sum(actual.values())
+        threshold=total*minimum
         if 'units' in row and abs(total-_decimal(row['units'],f'{token}.units'))>DUST:
             raise CustodyError(f'{token}: descalce inventario HODL+Core+Exchange')
         reserved=_decimal(reservations.get(token,0),f'{token}.reserved_sell')
@@ -85,18 +89,23 @@ def compare_custody(positions: Mapping[str, Mapping[str, Any]],
         excess=_qty(excess)
         suggested=dict(actual)
         token_moves=[]
+        accepted_minor=[]
         # Stable deterministic order: fill permanent HODL first, then strategic Core;
         # no intermediate movements between protected categories.
         for target in ('hodl','core'):
             deficit=max(Decimal(0),nominal[target]-suggested[target])
             move=_qty(min(deficit,excess))
+            if move>0 and move<=threshold:
+                accepted_minor.append({'destination':target,'units':_fmt(move)})
+                continue
             if move>0:
                 suggested['exchange']-=move
                 suggested[target]+=move
                 excess-=move
                 token_moves.append({'token':token,'tier':tier,'source':'Exchange',
                     'destination':'HODL' if target=='hodl' else 'Core',
-                    'units':_fmt(move), 'status':'PROPUESTA_SIN_TRANSFERENCIA'})
+                    'units':_fmt(move), 'percent_total':float(move/total*100),
+                    'status':'PROPUESTA_SIN_TRANSFERENCIA'})
         if sum(suggested.values())!=total:
             raise CustodyError(f'{token}: se perdió conservación de unidades')
         if suggested['exchange'] < reserved:
@@ -113,18 +122,25 @@ def compare_custody(positions: Mapping[str, Mapping[str, Any]],
             'feasible_pct':{k:float(suggested[k]/total*100) if total else 0 for k in LABELS},
             'gap_units_to_nominal':{k:_fmt(diff_nominal[k]) for k in LABELS},
             'nominal_reachable':reachable,
+            'within_tolerance':all(abs(diff_nominal[k])<=max(DUST,threshold) for k in LABELS),
             'reserved_sell_exchange':_fmt(reserved),
             'transfer_count':len(token_moves),
+            'minor_adjustments_accepted':accepted_minor,
+            'minimum_transfer_units':_fmt(threshold),
+            'minimum_transfer_pct':float(minimum*100),
             'status':('OBJETIVO_ALCANZABLE' if reachable else
-                      'PARCIAL_SIN_RETIRAR_PROTEGIDAS' if token_moves else 'SIN_TRANSFERENCIA_SEGURA'),
+                      'PARCIAL_SIN_RETIRAR_PROTEGIDAS' if token_moves else
+                      'AJUSTES_MENORES_ACEPTADOS' if accepted_minor else 'SIN_TRANSFERENCIA_SEGURA'),
         })
         motions.extend(token_moves)
     if set(reservations) - set(positions):
         raise CustodyError('Reserva SELL refiere a token inexistente')
     return {'status':'SIMULACION_NO_EJECUTADA','basis':'UNIDADES_PUBLICADAS',
+            'minimum_transfer_pct':float(minimum*100),
             'rows':rows,'transfers':motions,'transfer_count':len(motions),
             'tokens_with_moves':sum(bool(r['transfer_count']) for r in rows),
             'nominal_unreachable':sum(not r['nominal_reachable'] for r in rows),
+            'material_residual_count':sum(not r['within_tolerance'] for r in rows),
             'notes':('No transferencias automáticas. HODL/Core nunca salen de custodia protegida.',
                      'Ideal nominal por Tier y resultado alcanzable sin transferencias inversas se muestran por separado.',
                      'Transferir requiere confirmación real del usuario y nuevo snapshot publicado.')}
@@ -134,7 +150,8 @@ def compare_master_custody(master: Mapping[str, Any], *, reserved_exchange=None)
     """KairosGPT adapter: only validated master payload, no stale fallback."""
     if master.get('status','').startswith('PASS_SNAPSHOT') is False:
         raise CustodyError('MASTER no validado/publicado')
-    result=compare_custody(master['positions'],master['custody_policy'],reserved_exchange=reserved_exchange)
+    result=compare_custody(master['positions'],master['custody_policy'],reserved_exchange=reserved_exchange,
+                           min_transfer_fraction=.05)
     result['snapshot_id']=master['snapshot_id']
     result['snapshot_cutoff']=master['snapshot_cutoff']
     return result

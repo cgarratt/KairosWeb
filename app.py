@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.58'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '2.0.60'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1124,7 +1124,7 @@ def balancer_report(d, observed):
             'core':r['core_units'], 'exchange':r['exchange_units']
         } for r in d['rows']
     }
-    custody_comparison = compare_custody(custody_positions, g.kairos_state['custody_policy'])
+    custody_comparison = compare_custody(custody_positions, g.kairos_state['custody_policy'], min_transfer_fraction=.05)
     buy_candidates=[r for r in rows if r['drift_pp'] < -band]
     sell_candidates=[r for r in rows if r['drift_pp'] > band and r['token']!='BTC']
     from orders_inbox import allocate_infra_buys, overweight_sell_plan
