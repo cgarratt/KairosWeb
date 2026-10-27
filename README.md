@@ -1,3 +1,7 @@
+# Kairos v3 · 3.0.1
+
+Corrección de alineación de los donuts de liquidez. Ver RELEASE_NOTES_v3.0.1.md.
+
 # Kairos v3 · 3.0.0
 
 Release de KairosWeb con los cambios acumulados desde 2.0.60.
