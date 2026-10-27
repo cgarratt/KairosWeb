@@ -44,6 +44,14 @@
 <div class="liq-step green"><small>◇ Reserva Balancer asignada</small><strong>{{ '${:,.0f}'.format(payload.current.reserve) }}</strong><small>Asignación publicada del MASTER o USDT 0 hasta autorizarla</small></div>
 </div>
 <h3 style="margin-top:22px">Distribución de Liquidez USDT</h3>
+{% if payload.current.reserve_caps %}
+{% set caps=payload.current.reserve_caps %}
+<div class="liq-flow" aria-label="Topes de reservas sobre el portafolio Spot">
+<div class="liq-step"><small>Tope Balancer · {{ '%.2f'|format(caps.balancer_fraction*100) }}% P</small><strong>{{ '${:,.2f}'.format(caps.balancer_cap_usdt) }}</strong><small>Reserva efectiva: {{ '${:,.2f}'.format(payload.current.reserve) }}</small></div>
+<div class="liq-step"><small>Tope Trading · {{ '%.2f'|format(caps.trading_fraction*100) }}% P</small><strong>{{ '${:,.2f}'.format(caps.trading_cap_usdt) }}</strong><small>Objetivo: {{ '${:,.2f}'.format(caps.trading_target_usdt) }}</small></div>
+<div class="liq-step {{ 'red' if caps.trading_excess_over_cap>0 else 'green' }}"><small>QF real sobre el tope</small><strong>{{ '${:,.2f}'.format(caps.trading_excess_over_cap) }}</strong><small>QF real {{ '${:,.2f}'.format(caps.trading_actual_usdt) }} permanece protegido. Sin transferencia automática.</small></div>
+</div>
+{% endif %}
 {% set cash=payload.current.cash %}{% set trading=payload.current.trading %}{% set buy_budget=[cash-trading,0]|max %}{% set bal=[payload.current.reserve,buy_budget]|min %}{% set buy_exclusive=[buy_budget-bal,0]|max %}{% set denominator=[cash,1]|max %}
 <div class="mix allocation-track" role="img" aria-label="Distribución del USDT físico: compras disponibles, componente Balancer incluido en compras y reserva Trading protegida">
 <div title="USDT disponible para Compras sin el componente Balancer" style="width:{{ 100*buy_exclusive/denominator }}%;background:#7dbce9"></div><div title="Reserva Balancer utilizable por Compras O2/O4; sin contarse dos veces" style="width:{{ 100*bal/denominator }}%;background:#18a982"></div><div title="Reserva Trading QF protegida" style="width:{{ 100*trading/denominator }}%;background:#eda244"></div>

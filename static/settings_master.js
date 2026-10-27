@@ -11,7 +11,7 @@
     parameters:'12_PARAMETROS_KAIROS · Valores aprobados, porcentajes y planes de ventas. Cada parámetro describe su impacto.',
     pivots:'07_PIVOTES · CL y O1–O5: PROPUESTO → VALIDADO (5L/5R+BOS 1W) → CONFIRMADO. «Actualizar candidatos desde MCP» actualiza solo PROPUESTO; VALIDADO y CONFIRMADO conservan precio, fecha y estado. «Validar → Publicar» registra cambios administrativos sin ejecutar órdenes.',mcp:'Diagnóstico MCP independiente del Master. Consultas de solo lectura y reconexión sin reiniciar Render.'};
   const PARAM_GROUPS=[
-    {id:'portfolio',name:'Portafolio',description:'Únicas dos reglas: meta general de liquidez USDT y tolerancia de desvío Balancer.',keys:['STRUCTURAL_USDT_TARGET','DRIFT_BAND_PP']},
+    {id:'portfolio',name:'Portafolio',description:'Meta de liquidez, tolerancia de desvío y topes de reservas sobre el portafolio Spot.',keys:['STRUCTURAL_USDT_TARGET','DRIFT_BAND_PP','BALANCER_MAX_PORTFOLIO_FRACTION','TRADING_MAX_PORTFOLIO_FRACTION']},
     {id:'o2',name:'Compras O2 · Forecast',description:'Cuatro retrocesos independientes: 100% del presupuesto máximo de 25% P de O2.',prefix:'FORECAST_O2_FIB_'},
     {id:'o3',name:'Ventas O3 · Forecast',description:'Cuatro extensiones independientes: 100% de las unidades elegibles para O3. Objetivo 40% USDT.',prefix:'FORECAST_O3_FIB_',keys:['O3_BTC_PROCEEDS_FRACTION','O3_USDT_PROCEEDS_FRACTION']},
     {id:'o4',name:'Compras O4 · Forecast',description:'Cuatro retrocesos independientes: 100% del presupuesto máximo de 25% P de O4.',prefix:'FORECAST_O4_FIB_'},
@@ -381,7 +381,7 @@
         const fraction=goalRead('liquidity_mix.balancer');
         const amount=Math.round((total*fraction+Number.EPSILON)*100)/100;
         const value=body.querySelector('#balancer-derived-amount');
-        if(value)value.textContent=money(amount)+' = '+(fraction*100).toFixed(2)+'% × '+money(total);
+        if(value)value.textContent=money(amount)+' de base, antes del tope Spot · '+(fraction*100).toFixed(2)+'% × '+money(total);
         if(amount>free+1e-6){valid=false;totals.append(el('p','invalid-value','Reserva Balancer objetivo supera USDT fuera de QF; revisar porcentajes publicados.'));}
       }catch(_){valid=false;}
     }
@@ -405,10 +405,11 @@
       group.fields.forEach(([key,label])=>row.append(goalInput(group.id+'.'+key,values[key],label+' (%)')));
       card.append(row);body.append(card);
     }
-    const assignment=el('section','goal-card');assignment.append(el('h4','','Reserva Balancer calculada automáticamente'),
-      el('p','settings-hint','La reserva es el porcentaje objetivo de Balancer sobre el USDT físico TOTAL (incluye QF una sola vez). Es una asignación contable, no una transferencia. No puede consumir los fondos físicos de QF.'));
+    const assignment=el('section','goal-card');assignment.append(el('h4','','Reservas y topes del portafolio'),
+      el('p','settings-hint','Balancer = menor entre su porcentaje de liquidez y su tope del portafolio. Trading = menor entre su porcentaje de liquidez y su tope del portafolio. Los topes se editan en Parámetros y se calculan con Spot vigente en Balancer. QF real permanece protegido.'));
     const value=el('strong','goal-derived-amount');value.id='balancer-derived-amount';
     assignment.append(value,el('p','settings-hint',`USDT físico: ${money(g.usdt_physical_actual)} · USDT fuera de QF: ${money(g.usdt_operating_actual)} · ${g.liquidity_mix_published?'Porcentaje publicado en MASTER':'Porcentaje en borrador; pendiente de publicación'}`));body.append(assignment);
+    if(g.reserve_caps){assignment.append(el('p','settings-hint',`Topes publicados: Balancer ${Number(g.reserve_caps.balancer*100).toFixed(2)}% · Trading ${Number(g.reserve_caps.trading*100).toFixed(2)}% del portafolio Spot. Editables en Parámetros.`));}
     const cust=el('section','goal-card');cust.append(el('h4','','4. Custodia por Tier'),el('p','settings-hint','Cada Tier suma 100% entre HODL, Core y Exchange. Son metas, no transferencias.'));
     ['T1','T2','T3'].forEach(t=>{
       const row=el('div','goal-grid');row.append(el('strong','goal-tier',t));

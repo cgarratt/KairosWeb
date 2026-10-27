@@ -1,3 +1,9 @@
+Entrega para carga por navegador GitHub: 63 archivos. Descomprimir y subir el contenido completo, incluyendo static y templates. Las pruebas permanecen en el paquete completo de desarrollo. Mismos archivos de ejecución de v2.0.57; sin cambios funcionales.
+
+# KairosWeb v2.0.57 · Topes de reservas
+
+Ver RELEASE_NOTES_v2.0.57.md. Los topes de Balancer y Trading se editan en Configuración → Parámetros. Se recalculan con cada valoración Spot; cambiar porcentajes no necesita otro deploy una vez instalado este release.
+
 # KairosWeb v2.0.56 — Spot snapshot on first use; manual refresh in header.
 # KairosWeb v2.0.37 — Logout seguro corregido
 

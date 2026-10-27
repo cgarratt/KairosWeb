@@ -77,7 +77,7 @@ def derive_balancer_allocation(physical_usdt, qf_usdt, fraction):
     return value
 
 
-def allocation_from_master(parameters, physical_usdt=None, qf_usdt=None):
+def allocation_from_master(parameters, physical_usdt=None, qf_usdt=None, *, portfolio_total=None):
     """Prefer the authoritative approved 70/20/10 percentage over legacy USD.
 
     If liquidity mix exists but is incomplete or not approved, fail closed.
@@ -99,8 +99,73 @@ def allocation_from_master(parameters, physical_usdt=None, qf_usdt=None):
         if physical_usdt is None or qf_usdt is None:
             # Missing cash readings must never produce an operational allocation.
             return None
+        caps=reserve_caps_from_master(parameters)
+        if caps is not None:
+            if portfolio_total is None:
+                raise LiquidityPolicyError('Topes de reservas requieren valoración Spot vigente')
+            p=_amount(portfolio_total,'Valor del portafolio Spot')
+            if p < physical_usdt or p <= 0:
+                raise LiquidityPolicyError('Valor del portafolio menor que liquidez física')
+            # Round DOWN: cent rounding must never breach a hard maximum.
+            from decimal import Decimal, ROUND_DOWN
+            cap=Decimal(str(p))*Decimal(str(caps['balancer']))
+            base=Decimal(str(physical_usdt))*Decimal(str(values[1]))
+            available=Decimal(str(physical_usdt))-Decimal(str(qf_usdt))
+            return float(min(base,cap,available).quantize(Decimal('0.01'),rounding=ROUND_DOWN))
         return derive_balancer_allocation(physical_usdt,qf_usdt,values[1])
     record=parameters.get('BALANCER_RESERVE_ASSIGNED_USDT')
     if not isinstance(record,dict) or record.get('status')!='APROBADO':
         return None
     return _amount(record.get('value'),'BALANCER_RESERVE_ASSIGNED_USDT')
+
+
+def reserve_caps_from_master(parameters):
+    """Caps are configuration, not physical transfers; require both approvals."""
+    keys={'balancer':'BALANCER_MAX_PORTFOLIO_FRACTION',
+          'trading':'TRADING_MAX_PORTFOLIO_FRACTION'}
+    if not any(key in parameters for key in keys.values()):
+        return None  # Compatibility with older published Masters.
+    caps={}
+    for name,key in keys.items():
+        record=parameters.get(key)
+        if not isinstance(record,dict) or record.get('status')!='APROBADO':
+            raise LiquidityPolicyError(key+': tope incompleto o no aprobado')
+        v=_amount(record.get('value'),key)
+        if v>1:raise LiquidityPolicyError(key+': máximo 100%')
+        caps[name]=v
+    return caps
+
+
+def budgets_from_master(parameters, physical_usdt, qf_usdt, portfolio_total, **kwargs):
+    """Single runtime entry point: live Spot P, immutable actual QF, capped targets."""
+    caps=reserve_caps_from_master(parameters)
+    allocation=allocation_from_master(parameters,physical_usdt,qf_usdt,
+                                      portfolio_total=portfolio_total)
+    result=calculate_budgets(physical_usdt,qf_usdt,balancer_allocated=allocation,**kwargs)
+    if caps is None:
+        result['reserve_caps']=None
+        return result
+    p=_amount(portfolio_total,'Valor del portafolio Spot')
+    fraction=parameters.get('PORTFOLIO_LIQ_TRADING_FRACTION',{})
+    if fraction.get('status')!='APROBADO':
+        raise LiquidityPolicyError('Porcentaje Trading no aprobado')
+    trading_fraction=_amount(fraction.get('value'),'Porcentaje Trading')
+    if trading_fraction>1:raise LiquidityPolicyError('Porcentaje Trading inválido')
+    from decimal import Decimal, ROUND_DOWN
+    money=lambda x:float(Decimal(str(x)).quantize(Decimal('0.01'),rounding=ROUND_DOWN))
+    bal_cap=money(Decimal(str(p))*Decimal(str(caps['balancer'])))
+    trading_cap=money(Decimal(str(p))*Decimal(str(caps['trading'])))
+    trading_base=money(Decimal(str(physical_usdt))*Decimal(str(trading_fraction)))
+    target=min(trading_base,trading_cap)
+    result['reserve_caps']={
+        'portfolio_total':p,'balancer_fraction':caps['balancer'],
+        'trading_fraction':caps['trading'],'balancer_cap_usdt':bal_cap,
+        'trading_cap_usdt':trading_cap,'trading_base_usdt':trading_base,
+        'trading_target_usdt':target,'trading_actual_usdt':qf_usdt,
+        'trading_excess_over_cap':max(0.,qf_usdt-trading_cap),
+        'trading_excess_over_target':max(0.,qf_usdt-target),
+    }
+    result['balancer_with_sales_conditional']=min(
+        result['balancer_with_sales_conditional'],
+        max(0.,bal_cap-_amount(kwargs.get('balancer_commitments',0.),'Compromisos Balancer')))
+    return result

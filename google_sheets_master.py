@@ -27,7 +27,7 @@ SHEETS = {
     'integral': "'08_INTEGRAL'!A4:F15",
     'bsi': "'09_BSI'!A4:S16",
     'validation': "'11_VALIDACIONES'!A4:D25",
-    'parameters': "'12_PARAMETROS_KAIROS'!A4:J180",
+    'parameters': "'12_PARAMETROS_KAIROS'!A4:J230",
 }
 SYMBOLS = frozenset(('BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMPFUN','PLUME','VIRTUAL','PEPE'))
 REQUIRED_PARAMS = ('SNAPSHOT_PROVIDER','BTC_NEVER_SELL','FRESH_DATA_FAIL_CLOSED',

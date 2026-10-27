@@ -31,6 +31,7 @@ INBOX_SHEETS = {
 WRITE_LOCK = threading.Lock()
 EDITABLE_PARAM_KEYS = frozenset({
     'DRIFT_BAND_PP','STRUCTURAL_USDT_TARGET',
+    'BALANCER_MAX_PORTFOLIO_FRACTION','TRADING_MAX_PORTFOLIO_FRACTION',
     'O3_BTC_PROCEEDS_FRACTION','O3_USDT_PROCEEDS_FRACTION',
     'O5_BTC_PROCEEDS_FRACTION','O5_USDT_PROCEEDS_FRACTION',
     'RISK_REWARD_MIN','QF_MARGIN_CAP_PER_POSITION',
@@ -338,7 +339,7 @@ def _bsi_selling_approved():
     """
     try:
         blocks=read_ranges({
-          'parameters':"'12_PARAMETROS_KAIROS'!A4:J180",
+          'parameters':"'12_PARAMETROS_KAIROS'!A4:J230",
           'bsi':"'09_BSI'!A4:K16",
         })
         rows=blocks['parameters']
@@ -501,7 +502,8 @@ def portfolio_goals_data(raw):
             'usdt_operating_actual':operating, 'usdt_physical_actual':physical,
             'balancer_assigned_usdt':assignment,
             'balancer_assignment_published':complete,
-            'balancer_assignment_source':'PERCENT_OF_PHYSICAL_USDT' if complete else 'PENDING_APPROVAL'}
+            'reserve_caps': {name:float(params[key][2]) for name,key in {'balancer':'BALANCER_MAX_PORTFOLIO_FRACTION','trading':'TRADING_MAX_PORTFOLIO_FRACTION'}.items() if key in params and params[key][5]=='APROBADO'},
+            'balancer_assignment_source':'BASE_BEFORE_SPOT_CAP' if complete else 'PENDING_APPROVAL'}
 
 
 def _goal_fraction(value,label):
