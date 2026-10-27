@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}KairosWeb{% endblock %}</title>
+  <title>{% block title %}Kairos v3{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='kairos-horizon.svg') }}">
   <meta name="theme-color" content="#103d88">
   <script>document.documentElement.dataset.balances="hidden";document.documentElement.dataset.privacyBoot="pending";try{document.documentElement.dataset.theme=localStorage.getItem("kairosweb-theme")==="dark"?"dark":"light";}catch(e){document.documentElement.dataset.theme="light";}</script>
@@ -71,7 +71,7 @@
   </style>
   <link rel="stylesheet" href="{{ url_for('static',filename='alerts_settings.css') }}?v={{ master }}">
   <link rel="stylesheet" href="{{ url_for('static',filename='theme.css') }}?v={{ master }}">
-  <style>.spot-refresh-wrap{display:flex;flex-direction:column;align-items:center;gap:3px}.spot-refresh-btn{white-space:nowrap;cursor:pointer}.spot-refresh-btn:disabled{opacity:.65;cursor:wait}.spot-observed{font-size:10px;color:var(--muted);max-width:165px;text-align:center}.right-tools{flex-wrap:wrap}@media(max-width:680px){.spot-refresh-wrap{align-items:flex-start}.spot-observed{text-align:left}}</style>
+  <style>.navigation-row{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}.navigation-row .global-nav{min-width:0;max-width:100%;margin-bottom:0}.spot-refresh-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-left:auto;padding-bottom:10px}.spot-refresh-btn{white-space:nowrap;cursor:pointer}.spot-refresh-btn:disabled{opacity:.65;cursor:wait}.spot-observed{font-size:12px;color:var(--muted);text-align:right;white-space:nowrap}.right-tools{flex-wrap:wrap}@media(max-width:680px){.navigation-row{gap:4px}.navigation-row .global-nav{width:100%}.spot-refresh-wrap{align-items:flex-end}}</style>
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -90,10 +90,10 @@
     <div class="topbar">
       <div class="brand">
         <div class="logo"><img src="{{ url_for('static', filename='kairos-horizon.svg') }}" width="45" height="45" alt="Kairos"></div>
-        <div><h1>KairosWeb</h1><p>v{{ master }}</p></div>
+        <div><h1>Kairos v3</h1><p>v{{ master }}</p></div>
       </div>
       <div class="right-tools">
-        {% if portfolio_authenticated %}<div class="spot-refresh-wrap"><button type="button" class="btn spot-refresh-btn" id="spot-refresh" data-csrf="{{ session.get('csrf_token','') }}" title="Consultar nuevamente precios Spot MCP">↻ Actualizar Spot</button><span id="spot-observed" class="spot-observed" aria-live="polite">Spot: consultando estado…</span></div>
+        {% if portfolio_authenticated %}
         <button type="button" class="tool-icon privacy-toggle" id="privacy-toggle" aria-label="Mostrar saldos" aria-pressed="false" title="Mostrar saldos">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path d="M3 3 21 21"/></svg><span class="privacy-label">Mostrar</span>
         </button>
@@ -112,7 +112,7 @@
         <button type="button" class="tool-icon" data-theme-toggle title="Cambiar tema" aria-label="Activar tema oscuro" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.4A8.3 8.3 0 0 1 8.6 3.5a8.5 8.5 0 1 0 11.9 11.9Z"/></svg>
         </button>
-        {% if portfolio_authenticated %}<a class="tool-icon {{ 'active' if request.path == '/settings' else '' }}" href="{{ url_for('settings_page') }}" aria-label="Configuración de KairosWeb" title="Configuración y mantenimiento del Master">
+        {% if portfolio_authenticated %}<a class="tool-icon {{ 'active' if request.path == '/settings' else '' }}" href="{{ url_for('settings_page') }}" aria-label="Configuración de Kairos" title="Configuración y mantenimiento del Master">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 3 .6 2.1c.6.2 1.1.5 1.6.9L14 5l2 2-1 2.3c.4.5.7 1 .9 1.6L18 11v3l-2.1.6c-.2.6-.5 1.1-.9 1.6l1 2.3-2 2-2.3-1c-.5.4-1 .7-1.6.9L9.5 22h-3l-.6-2.1c-.6-.2-1.1-.5-1.6-.9l-2.3 1-2-2 1-2.3c-.4-.5-.7-1-.9-1.6L-2 14v-3l2.1-.6c.2-.6.5-1.1.9-1.6L0 6.5l2-2 2.3 1c.5-.4 1-.7 1.6-.9L6.5 3Z" transform="translate(3,0)"/><circle cx="11" cy="12.5" r="3"/></svg>
         </a>
         <form method="post" action="{{ url_for('portfolio_logout') }}" class="session-exit">
@@ -122,11 +122,14 @@
         {% else %}<a class="btn primary" href="{{ url_for('portfolio_login') }}">Iniciar sesión</a>{% endif %}
       </div>
     </div>
+    <div class="navigation-row">
     <nav class="global-nav" aria-label="Navegación Kairos">
       {% for mode in nav_modes %}
       <a class="global-nav-link {{ 'active' if request.path == '/mode/' ~ mode.slug else '' }}" href="/mode/{{ mode.slug }}" title="{{ mode.description }}">{{ mode.name }}</a>
       {% endfor %}
     </nav>
+      {% if portfolio_authenticated %}<div class="spot-refresh-wrap"><button type="button" class="btn spot-refresh-btn" id="spot-refresh" data-csrf="{{ session.get('csrf_token','') }}" title="Consultar nuevamente precios Spot MCP">↻ Actualizar Spot</button><span id="spot-observed" class="spot-observed" aria-live="polite">Spot: consultando estado…</span></div>{% endif %}
+    </div>
     {% block content %}{% endblock %}
   </div>
   {% if portfolio_authenticated %}<script defer src="{{ url_for('static', filename='spot_refresh.js') }}?v={{ master }}"></script>{% endif %}

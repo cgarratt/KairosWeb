@@ -1,22 +1,33 @@
 {% extends 'base.html' %}
 {% block title %}Kairos Web · Balancer{% endblock %}
 {% block head %}<style>
-#liquidity-summary .cash-layout{display:grid;grid-template-columns:260px minmax(0,1fr);align-items:center;gap:36px;margin-top:22px}
-#liquidity-summary .cash-donut{width:244px;height:244px;border-radius:50%;display:grid;place-items:center}
-#liquidity-summary .cash-center{width:182px;height:182px;border-radius:50%;background:var(--panel);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center}
-#liquidity-summary .cash-center span{color:var(--muted);font-size:12px}
-#liquidity-summary .cash-center strong{font-size:28px;color:var(--text);font-variant-numeric:tabular-nums}
-#liquidity-summary small{font-size:12px;font-weight:400;color:var(--muted)}
-#liquidity-summary .cash-categories{display:flex;flex-direction:column;gap:0}
-#liquidity-summary .cash-category{display:flex;flex-direction:column;gap:10px;padding:17px 0;border-bottom:1px solid var(--line)}
-#liquidity-summary .cash-category:last-child{border-bottom:0}
-#liquidity-summary .cash-category strong{font-size:23px;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
-#liquidity-summary .cash-value-row{display:flex;align-items:baseline;justify-content:space-between;gap:14px}
-#liquidity-summary .cash-value-row>span{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
-#liquidity-summary .cash-label{display:flex;align-items:center;gap:8px;color:var(--text)}
-#liquidity-summary .cash-label i{width:10px;height:10px;border-radius:3px;flex-shrink:0}
-#liquidity-summary .cash-weekly{background:#7bbce8}#liquidity-summary .cash-balancer{background:#16ab89}#liquidity-summary .cash-trading{background:#efa53f}
-@media(max-width:650px){ #liquidity-summary .cash-layout{grid-template-columns:1fr;gap:12px}#liquidity-summary .cash-donut{justify-self:center;width:222px;height:222px}#liquidity-summary .cash-center{width:164px;height:164px}#liquidity-summary .cash-center strong{font-size:26px}}
+#liquidity-management .liquidity-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:30px;margin-top:24px}
+#liquidity-management .liquidity-panel{min-width:0}
+#liquidity-management .liquidity-panel h3{font-size:17px;margin:0;color:var(--text)}
+#liquidity-management .cash-layout{grid-template-columns:210px minmax(0,1fr);gap:22px}
+#liquidity-management .cash-donut{width:200px;height:200px}
+#liquidity-management .cash-center{width:150px;height:150px}
+#liquidity-management .cash-center strong{font-size:25px}
+#liquidity-management .cash-category strong{font-size:20px}
+@media(max-width:1250px){ #liquidity-management .liquidity-pair{grid-template-columns:1fr}#liquidity-management .cash-layout{grid-template-columns:244px minmax(0,1fr)} }
+@media(max-width:650px){ #liquidity-management .cash-layout{grid-template-columns:1fr}#liquidity-management .cash-donut{justify-self:center} }
+
+.liquidity-panel .cash-layout{display:grid;grid-template-columns:260px minmax(0,1fr);align-items:center;gap:36px;margin-top:22px}
+.liquidity-panel .cash-donut{width:244px;height:244px;border-radius:50%;display:grid;place-items:center}
+.liquidity-panel .cash-center{width:182px;height:182px;border-radius:50%;background:var(--panel);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center}
+.liquidity-panel .cash-center span{color:var(--muted);font-size:12px}
+.liquidity-panel .cash-center strong{font-size:28px;color:var(--text);font-variant-numeric:tabular-nums}
+.liquidity-panel small{font-size:12px;font-weight:400;color:var(--muted)}
+.liquidity-panel .cash-categories{display:flex;flex-direction:column;gap:0}
+.liquidity-panel .cash-category{display:flex;flex-direction:column;gap:10px;padding:17px 0;border-bottom:1px solid var(--line)}
+.liquidity-panel .cash-category:last-child{border-bottom:0}
+.liquidity-panel .cash-category strong{font-size:23px;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.liquidity-panel .cash-value-row{display:flex;align-items:baseline;justify-content:space-between;gap:14px}
+.liquidity-panel .cash-value-row>span{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.liquidity-panel .cash-label{display:flex;align-items:center;gap:8px;color:var(--text)}
+.liquidity-panel .cash-label i{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.liquidity-panel .cash-weekly{background:#7bbce8}.liquidity-panel .cash-balancer{background:#16ab89}.liquidity-panel .cash-trading{background:#efa53f}
+@media(max-width:650px){ .liquidity-panel .cash-layout{grid-template-columns:1fr;gap:12px}.liquidity-panel .cash-donut{justify-self:center;width:222px;height:222px}.liquidity-panel .cash-center{width:164px;height:164px}.liquidity-panel .cash-center strong{font-size:26px}}
 
 .liq-flow{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.liq-step{background:#f5f9ff;border:1px solid #dce7f6;border-radius:15px;padding:15px}.liq-step strong{display:block;font-size:22px;color:#174b9a;margin:7px 0}.liq-step small{color:#586982}.liq-step.red strong{color:#c4465a}.liq-step.green strong{color:#13996c}.mix{display:flex;height:25px;overflow:hidden;border-radius:100px;background:#eef2f7}.mix>div{height:100%}.chart-pair{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}.comparison{display:grid;grid-template-columns:75px 1fr 65px;align-items:center;gap:8px;margin:13px 0}.mini-track{position:relative;height:26px;border-radius:7px;background:#f1f5fa;overflow:hidden}.mini-track .before{position:absolute;top:2px;height:9px;background:#b1c4de;border-radius:6px}.mini-track .after{position:absolute;bottom:2px;height:9px;background:#2778cf;border-radius:6px}.mini-track .target{position:absolute;top:0;bottom:0;border-left:2px dashed #d18a13}.action-pill{font-size:12px;font-weight:800;padding:6px 11px;border-radius:16px;display:inline-block}.action-pill.buy{color:#13805c;background:#e3f7ee}.action-pill.sell{color:#b62d49;background:#ffecf1}.action-pill.watch{color:#835600;background:#fff4da}.liquidity-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}@media(max-width:800px){.liq-flow,.chart-pair{grid-template-columns:1fr 1fr}}@media(max-width:540px){.liq-flow,.chart-pair{grid-template-columns:1fr}}
 @media(max-width:750px){ #custody-balancer .liq-flow{grid-template-columns:1fr!important}}.liq-labels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}.liq-labels>div{display:flex;flex-direction:column;gap:6px;background:#f6f9fe;border:1px solid #dce7f6;border-radius:13px;padding:12px}.liq-labels i{width:13px;height:13px;border-radius:3px}.liq-labels strong{font-size:20px;color:#154a94}.liq-labels small{color:#60758a}.allocation-track{height:26px}@media(max-width:750px){.liq-labels{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:450px){.liq-labels{grid-template-columns:1fr}}
@@ -53,9 +64,9 @@
 {% block content %}
 <div class="grid"><section class="panel span-12 hero"><div><h2>Balancer</h2><p>Gestión de liquidez · Composición · Escenarios post-balance</p></div><span class="badge ok">● LIVE MCP · PRELIMINAR</span></section>
 {% include '_wave_confirmed.html' %}
-<section class="panel span-12" id="liquidity-summary">
+<section class="panel span-12" id="liquidity-management"><h2>1. Gestión de liquidez</h2><div class="liquidity-pair"><section class="liquidity-panel" id="liquidity-summary">
 {% set allocation=payload.current.liquidity_allocation %}
-<div class="liquidity-head"><h2>1. Gestión de liquidez</h2></div>
+<h3>Por categoría</h3>
 <div class="cash-layout">
 <div class="cash-donut" data-liquidity-chart="donut" role="img" aria-label="Liquidez total {{ '{:,.2f}'.format(allocation.total) }} USDT. Compras O2/O4 {{ '%.2f'|format(allocation.weekly_pct) }}%, Balancer {{ '%.2f'|format(allocation.balancer_pct) }}%, Trading {{ '%.2f'|format(allocation.trading_pct) }}%." style="background:{% if allocation.total>0 %}conic-gradient(#7bbce8 0% {{ allocation.weekly_pct }}%,#16ab89 {{ allocation.weekly_pct }}% {{ allocation.weekly_pct+allocation.balancer_pct }}%,#efa53f {{ allocation.weekly_pct+allocation.balancer_pct }}% 100%){% else %}var(--line){% endif %}">
 <div class="cash-center"><span>Liquidez total</span><strong>{{ '{:,.2f}'.format(allocation.total) }}</strong><span>USDT</span></div>
@@ -67,6 +78,20 @@
 </div>
 </div>
 </section>
+<section class="liquidity-panel" id="liquidity-venues">
+{% set venues=payload.current.liquidity_venues %}
+<h3>Por venue</h3>
+<div class="cash-layout">
+<div class="cash-donut" data-liquidity-chart="venues" role="img" aria-label="Distribución de {{ '{:,.2f}'.format(venues.total) }} USDT por venue" style="background:{% if venues.total>0 %}conic-gradient({% for r in venues.records %}{{ r.color }} {{ r.start }}% {{ r.end }}%{{ ',' if not loop.last else '' }}{% endfor %}){% else %}var(--line){% endif %}">
+<div class="cash-center"><span>Liquidez total</span><strong>{{ '{:,.2f}'.format(venues.total) }}</strong><span>USDT</span></div>
+</div>
+<div class="cash-categories">
+{% for r in venues.records %}
+<div class="cash-category"><span class="cash-label"><i style="background:{{ r.color }}"></i>{{ r.venue }}</span><div class="cash-value-row"><strong>{{ '{:,.2f}'.format(r.amount) }} <small>USDT</small></strong><span>{{ '%.2f'|format(r.pct) }}%</span></div></div>
+{% else %}<p>Sin liquidez registrada.</p>{% endfor %}
+</div>
+</div>
+</section></div></section>
 <section class="panel span-12"><h2>2. USDT disponible para candidatos de compra</h2><p class="sub">Dos escenarios: reserva asignada efectiva y ventas propias hipotéticas, no acreditadas.</p><div class="liq-flow"><div class="liq-step"><small>Reserva Balancer asignada · disponible</small><strong>{{ '${:,.0f}'.format(payload.current.current_cash_capacity) }}</strong><small>Sin asignación publicada, USDT 0 · no usar caja semanal</small></div><div class="liq-step"><small>Ventas sugeridas · bruto</small><strong>{{ '${:,.0f}'.format(payload.sell_total) }}</strong><small>Exchange libre declarado + tope Tier · sin libro privado verificado</small></div><div class="liq-step green"><small>Reserva + ventas simuladas (condicional)</small><strong>{{ '${:,.0f}'.format(payload.current.projected_cash_capacity) }}</strong><small>Escenario condicional tras ventas confirmadas</small></div><div class="liq-step"><small>Meta USDT referencial</small><strong>{{ '${:,.0f}'.format(payload.current.floor) }}</strong><small>No constituye caja libre certificada</small></div></div></section>
 <section class="panel span-6"><h2>3. Candidatos de compra</h2><p class="sub">Déficits vs objetivos · montos estimados con reserva actual y en escenario posterior a ventas sugeridas.</p><div style="overflow:auto"><table><thead><tr><th>Token</th><th>Peso / Meta</th><th>Reserva actual</th><th>Con ventas</th><th>Acción</th></tr></thead><tbody>{% for r in payload.buys %}<tr><td><span class="coin-tag"><span class="coin-icon"><img loading="lazy" src="https://cryptologos.cc/logos/{{ {'BTC':'bitcoin-btc','ETH':'ethereum-eth','SOL':'solana-sol','LINK':'chainlink-link','HYPE':'hyperliquid-hype','HBAR':'hedera-hbar','SUI':'sui-sui','ONDO':'ondo-finance-ondo','PUMP':'pump-fun-pump','PLUME':'plume-plume','PEPE':'pepe-pepe','VIRTUAL':'virtual-protocol-virtual'}[r.token] }}-logo.png" alt="" onerror="this.style.display='none'"><span class="coin-fallback">{{ r.token[:2] }}</span></span><strong>{{ r.token }}</strong></span></td><td>{{ '%.1f'|format(r.weight*100) }}% / {{ '%.1f'|format(r.target*100) }}%</td><td>{{ '${:,.0f}'.format(r.value) }}</td><td>{{ '${:,.0f}'.format(payload.buy_with_sales[loop.index0].value) }}</td><td><span class="action-pill {{ 'buy' if r.value>0 else 'watch' }}">{{ 'BUY · REVISAR' if r.value>0 else 'WATCH' }}</span></td></tr>{% else %}<tr><td colspan="5">Sin infraponderados fuera de banda.</td></tr>{% endfor %}</tbody><tfoot style="font-weight:800;background:#eaf3ff;border-top:2px solid #91b7e9"><tr><td colspan="2">TOTAL USDT</td><td>{{ '${:,.0f}'.format(payload.buys|sum(attribute='value')) }}</td><td>{{ '${:,.0f}'.format(payload.buy_with_sales|sum(attribute='value')) }}</td><td>SIMULACIÓN</td></tr></tfoot></table></div></section>
 <section class="panel span-6"><h2>4. Candidatos de venta</h2><p class="sub">Importes y unidades estimadas al Spot MCP · topes Exchange/Tier, reservas SELL y BTC NEVER SELL. Solo simulación.</p><div style="overflow:auto"><table><thead><tr><th>Token</th><th>Peso / Meta</th><th>USDT ref.</th><th>Unidades</th><th>Acción</th></tr></thead><tbody>{% for r in payload.sells %}<tr><td><span class="coin-tag"><span class="coin-icon"><img loading="lazy" src="https://cryptologos.cc/logos/{{ {'BTC':'bitcoin-btc','ETH':'ethereum-eth','SOL':'solana-sol','LINK':'chainlink-link','HYPE':'hyperliquid-hype','HBAR':'hedera-hbar','SUI':'sui-sui','ONDO':'ondo-finance-ondo','PUMP':'pump-fun-pump','PLUME':'plume-plume','PEPE':'pepe-pepe','VIRTUAL':'virtual-protocol-virtual'}[r.token] }}-logo.png" alt="" onerror="this.style.display='none'"><span class="coin-fallback">{{ r.token[:2] }}</span></span><strong>{{ r.token }}</strong></span></td><td>{{ '%.1f'|format(r.weight*100) }}% / {{ '%.1f'|format(r.target*100) }}%</td><td>{{ '${:,.0f}'.format(r.value) }}</td><td data-private="units" class="num" title="Unidades estimadas de venta = USDT referencia / Spot MCP; límite Exchange libre y Tier">{{ '{:,.2f}'.format(r.units) if r.value > 0 and r.units is not none else '—' }}</td><td><span class="action-pill {{ 'sell' if r.value>0 else 'watch' }}">{{ 'SELL · REVISAR' if r.value>0 else 'HOLD' }}</span></td></tr>{% else %}<tr><td colspan="5">Sin sobreponderados vendibles por composición.</td></tr>{% endfor %}</tbody><tfoot style="font-weight:800;background:#eaf3ff;border-top:2px solid #91b7e9"><tr><td colspan="2">TOTAL VENTAS USDT</td><td>{{ '${:,.0f}'.format(payload.sells|sum(attribute='value')) }}</td><td>—</td><td>SIMULACIÓN</td></tr></tfoot></table><p class="footer-note">Las unidades se calculan con el Spot MCP del análisis y el importe de la simulación; no se ajustan a LOT_SIZE, comisiones ni reglas de cada exchange. No son órdenes ejecutables.</p></div></section>

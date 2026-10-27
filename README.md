@@ -1,3 +1,8 @@
+# Kairos v3 · 3.0.0
+
+Release de KairosWeb con los cambios acumulados desde 2.0.60.
+Consultar RELEASE_NOTES_v3.0.0.md para instalación, validación y alcance.
+
 # KairosWeb v2.0.60
 
 Umbral de custodia: únicamente transferencias mayores al5%del total de unidades por token. Ver RELEASE_NOTES_v2.0.60.md.

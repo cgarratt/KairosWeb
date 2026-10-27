@@ -28,7 +28,7 @@ from hype_weekly import aggregate_weeks, HypeHistoryError
 from portfolio_unrealized import summarize_unrealized, portfolio_allocation, category_allocation, pri_valuation_history, btc_equivalent, current_capital_distribution
 from custody_balancer import compare_custody
 from custody_balancer import CustodyError
-from liquidity_reserves import calculate_budgets, allocation_from_master, budgets_from_master, liquidity_allocation
+from liquidity_reserves import calculate_budgets, allocation_from_master, budgets_from_master, liquidity_allocation, liquidity_by_venue
 from orders_inbox import drift_tone, tradingbot_tokens
 from kairos_sheets_features import (
     unread_alerts, mark_alert_read, mark_all_alerts_read, settings_data, prepare_changes,
@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '2.0.60'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.0'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1164,7 +1164,7 @@ def balancer_report(d, observed):
     sell_weights={r['token']:(r['value']-sold_by_token.get(r['token'],0.))/after_sell_crypto if after_sell_crypto else 0 for r in rows}
     return {'generated_at':observed,'snapshot_note':d['note'],'status_badge':'MCP Spot + Sheets PUBLICADO',
       'current':{'P':p,'cash':cash,'crypto':crypto,'floor':floor,'gap':gap,'excess':excess,
-                 'liquidity_allocation':liquidity_allocation(cash,trading,reserves['balancer_allocated'] or 0.),'reserve':reserve,'reserve_caps':reserves.get('reserve_caps'),'liquidity_reserves':reserves,'current_cash_capacity':current_cash_capacity,'projected_cash_capacity':projected_cash_capacity,'reserve_nominal':reserve_nominal,'residual_after_bags':residual_after_bags,'operational_25':operational_25,'c1':c1,'c2':c2,'trading':trading,
+                 'liquidity_venues':liquidity_by_venue(g.kairos_state['snapshot']['liquidity_venues_USDT'],cash),'liquidity_allocation':liquidity_allocation(cash,trading,reserves['balancer_allocated'] or 0.),'reserve':reserve,'reserve_caps':reserves.get('reserve_caps'),'liquidity_reserves':reserves,'current_cash_capacity':current_cash_capacity,'projected_cash_capacity':projected_cash_capacity,'reserve_nominal':reserve_nominal,'residual_after_bags':residual_after_bags,'operational_25':operational_25,'c1':c1,'c2':c2,'trading':trading,
                  'operating':d['usdt_operating'],'buy_ceiling':theoretical_ceiling},
       'metrics':[
         {'label':'USDT físico','value':fmt_money(cash),'help':f"{cash/p*100:.1f}% del patrimonio" if p else '', 'tone':'primary'},

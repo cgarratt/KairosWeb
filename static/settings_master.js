@@ -11,7 +11,7 @@
     parameters:'12_PARAMETROS_KAIROS · Valores aprobados, porcentajes y planes de ventas. Cada parámetro describe su impacto.',
     pivots:'07_PIVOTES · CL y O1–O5: PROPUESTO → VALIDADO (5L/5R+BOS 1W) → CONFIRMADO. «Actualizar candidatos desde MCP» actualiza solo PROPUESTO; VALIDADO y CONFIRMADO conservan precio, fecha y estado. «Validar → Publicar» registra cambios administrativos sin ejecutar órdenes.',mcp:'Diagnóstico MCP independiente del Master. Consultas de solo lectura y reconexión sin reiniciar Render.'};
   const PARAM_GROUPS=[
-    {id:'portfolio',name:'Portafolio',description:'Meta de liquidez, tolerancia de desvío y topes de reservas sobre el portafolio Spot.',keys:['STRUCTURAL_USDT_TARGET','DRIFT_BAND_PP','BALANCER_MAX_PORTFOLIO_FRACTION','TRADING_MAX_PORTFOLIO_FRACTION']},
+    {id:'portfolio',name:'Portafolio',description:'Meta de liquidez y tolerancia de desvío.',keys:['STRUCTURAL_USDT_TARGET','DRIFT_BAND_PP']},
     {id:'o2',name:'Compras O2 · Forecast',description:'Cuatro retrocesos independientes: 100% del presupuesto máximo de 25% P de O2.',prefix:'FORECAST_O2_FIB_'},
     {id:'o3',name:'Ventas O3 · Forecast',description:'Cuatro extensiones independientes: 100% de las unidades elegibles para O3. Objetivo 40% USDT.',prefix:'FORECAST_O3_FIB_',keys:['O3_BTC_PROCEEDS_FRACTION','O3_USDT_PROCEEDS_FRACTION']},
     {id:'o4',name:'Compras O4 · Forecast',description:'Cuatro retrocesos independientes: 100% del presupuesto máximo de 25% P de O4.',prefix:'FORECAST_O4_FIB_'},
@@ -472,13 +472,14 @@
     const data=await response.json();if(!response.ok||data.status!=='OK')throw Error(data.reason||data.message||data.status||'Error de servidor');
     return data;
   }
-  async function load(){body.textContent='Leyendo Google Sheets…';
+  async function load(expectedSnapshot){body.textContent='Leyendo Google Sheets…';
     try{const res=await fetch('/api/settings/data',{cache:'no-store',credentials:'same-origin'}),data=await res.json();
       if(res.status===403&&data.status==='ADMIN_AUTH_REQUIRED'){
         window.location.replace('/admin/login?tab='+encodeURIComponent(tab));
         return;
       }
       if(!res.ok||data.status!=='OK')throw Error(data.message||'Master no disponible');
+      if(expectedSnapshot&&data.snapshot_id!==expectedSnapshot)throw Error('La revisión recargada no coincide con la publicación. Verifica MASTER.');
       state=data;draw();
       hint.replaceChildren();
       if(!data.is_admin){
@@ -493,7 +494,8 @@
       }
       save.disabled=!data.is_admin||!data.write_configured;
       message(!data.write_configured?'Sin permisos de escritura configurados. Solo consulta.':data.is_admin?'Listo. Modifica los valores y pulsa Guardar cambios.':'Consulta activa; inicia sesión administrativa para guardar.');
-    }catch(e){state=null;draw();message('DATA ERROR: '+e.message);}
+    return data;
+    }catch(e){state=null;draw();message('DATA ERROR: '+e.message);if(expectedSnapshot)throw e;}
   }
   const initialTab=new URLSearchParams(location.search).get('tab');
   if(initialTab&&Array.from(nav.querySelectorAll('[data-tab]')).some(b=>b.dataset.tab===initialTab)){tab=initialTab;nav.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('selected',x.dataset.tab===tab));}
@@ -531,7 +533,7 @@
         res=await api('/api/settings/publish',{...req,preview_token:preview.preview_token,confirm:'PUBLICAR'},state.csrf_token);
       }else res=await api('/api/settings/save',req,state.csrf_token);
       message(`PUBLICADO: ${res.snapshot_id}. ${res.written_fields} campos auditados. Recargando…`);
-      await load();message(`Guardado confirmado en Google Sheets: ${res.snapshot_id}. KairosGPT leerá esta revisión en la siguiente ejecución.`);
+      await load(res.snapshot_id);message(`Guardado confirmado en Google Sheets: ${res.snapshot_id}. KairosGPT leerá esta revisión en la siguiente ejecución.`);
     }catch(e){message('NO PUBLICADO / VERIFICAR: '+e.message);}finally{save.disabled=!state?.is_admin||!state?.write_configured;}
   });
   function applyPivotCandidate(rec){

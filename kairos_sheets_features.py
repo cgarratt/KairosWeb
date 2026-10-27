@@ -621,7 +621,8 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
             try:row=_find_row(b,'parameters',key,column=1)
             except SettingsError:
                 row=len(b[SHEETS['parameters']])
-                if row>=175:raise SettingsError('Sin espacio para objetivos nuevos en 12_PARAMETROS_KAIROS')
+                last_row=int(re.search(r'[A-Z]+(\d+)$',SHEETS['parameters']).group(1))
+                if row+4>last_row:raise SettingsError('Sin espacio en el rango de lectura de 12_PARAMETROS_KAIROS')
                 metadata=['GESTION_PORTAFOLIO',key,liq_mix[part],'number','fraction_liquidity',
                           'APROBADO','PLANIFICACION','KairosWeb Settings · '+evidence.strip()[:100],
                           'Porcentaje objetivo de liquidez; NO acredita reservas ni altera reglas de ejecución.', 'ALTA']
@@ -868,23 +869,12 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
 
 
 def parameter_settings_rows(rows):
-    """One editable authority: cap values are read-only mirrors of MASTER here."""
-    result=[]
-    for r in rows[1:]:
-        if len(r)<6 or r[1] not in EDITABLE_PARAM_KEYS | RESERVE_CAP_KEYS:
-            continue
-        key=r[1];read_only=key in RESERVE_CAP_KEYS
-        description=r[8] if len(r)>8 else ''
-        source=r[7] if len(r)>7 else ''
-        if read_only:
-            percent=_goal_fraction(r[2],key)*100
-            label='Balancer' if key=='BALANCER_MAX_PORTFOLIO_FRACTION' else 'Trading'
-            description=f'Tope {label} publicado: {percent:g}% del portafolio Spot. Editar en Objetivos de gestión → Reservas y topes del portafolio.'
-            source='MASTER · valor publicado en Objetivos de gestión'
-        result.append({'key':key,'module':r[0],'value':r[2],'unit':r[4],
-                       'type':r[3],'status':r[5],'module_name':r[0],
-                       'description':description,'source':source,'read_only':read_only})
-    return result
+    """Reserve caps are displayed and edited only in portfolio management."""
+    return [{'key':r[1],'module':r[0],'value':r[2],'unit':r[4],
+             'type':r[3],'status':r[5],'module_name':r[0],
+             'description':r[8] if len(r)>8 else '',
+             'source':r[7] if len(r)>7 else '', 'read_only':False}
+            for r in rows[1:] if len(r)>=6 and r[1] in EDITABLE_PARAM_KEYS]
 
 
 def settings_data():
@@ -1117,6 +1107,21 @@ def save_changes(data):
             raise HomologationWorkflowError('HOM_PUBLICATION_UNVERIFIED','POST_PUBLISH_CHECK',
                 'Publicación posiblemente aplicada pero homologación no visible como CURRENT. Verifica 01_CONTROL y hoja 25 antes de reintentar.',
                 write_may_have_committed=True)
+        if category=='portfolio_goals':
+            # Re-read persisted cells, not only publication metadata. A current
+            # certificate cannot prove that every requested percentage persisted.
+            persisted=_remote_data()
+            persisted_id=_get(persisted,'control',_find_row(persisted,'control','snapshot_id'),1)
+            mismatch=persisted_id!=new_snapshot or any(
+                not (math.isclose(float(actual),float(value),rel_tol=1e-10,abs_tol=1e-10)
+                     if isinstance(value,(int,float)) and not isinstance(value,bool) and isinstance(actual,(int,float))
+                     else actual==value)
+                for name,row,col,value in writes
+                for actual in [_get(persisted,name,row,col)])
+            if mismatch:
+                raise HomologationWorkflowError('HOM_GOALS_UNVERIFIED','POST_PUBLISH_GOALS',
+                    'Google aceptó la publicación, pero la relectura no coincide con los porcentajes solicitados. Verifica MASTER antes de reintentar.',
+                    write_may_have_committed=True)
         return {'status':'OK','snapshot_id':new_snapshot,'previous_snapshot_id':oldid,'section':category,
                 'written_fields':len(writes),'published_utc':snapshot_row[2],
                 'warning':'Nueva publicación y homologación contable base verificadas; pivotes, BSI y operaciones remotas continúan sujetos a sus propios controles.'}

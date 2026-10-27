@@ -12,6 +12,27 @@ import math
 class LiquidityPolicyError(ValueError): pass
 
 
+def liquidity_by_venue(venues, physical_total):
+    """Venue view of the SAME physical cash; never add this to category totals."""
+    if not isinstance(venues,dict):raise LiquidityPolicyError('Liquidez por venue no disponible')
+    total=_amount(physical_total,'USDT físico')
+    amounts={name:_amount(value,'USDT '+str(name)) for name,value in venues.items()}
+    if not math.isclose(sum(amounts.values()),total,rel_tol=1e-10,abs_tol=1e-7):
+        raise LiquidityPolicyError('Liquidez por venue no concilia con el total físico')
+    colors={'Binance':'#7bbce8','KuCoin':'#16ab89','Hyperliquid':'#a58be6',
+            'Quantfury':'#efa53f','MEXC':'#ec8493','Metamask':'#a7bd71','Phantom':'#7794bb'}
+    fallback=('#7bbce8','#16ab89','#a58be6','#efa53f','#ec8493','#a7bd71','#7794bb')
+    records=[];start=0.
+    positive=sorted(((name,value) for name,value in amounts.items() if value>0),key=lambda x:(-x[1],x[0]))
+    for i,(name,value) in enumerate(positive):
+        pct=100*value/total
+        end=100. if i==len(positive)-1 else start+pct
+        records.append({'venue':name,'amount':value,'pct':pct,'start':start,'end':end,
+                        'color':colors.get(name,fallback[i%len(fallback)])})
+        start=end
+    return {'total':total,'records':records}
+
+
 def liquidity_allocation(physical_usdt, qf_usdt, balancer_assigned):
     """Three disjoint REAL cash envelopes; assignment is not extra liquidity."""
     total=_amount(physical_usdt,'USDT físico')
