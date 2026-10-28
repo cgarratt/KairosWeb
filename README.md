@@ -1,3 +1,7 @@
+# KairosWeb v3.0.6 — Órdenes O2 con cupo cero
+
+Ver RELEASE_NOTES_v3.0.6.md.
+
 # KairosWeb 3.0.4 · Renovación automática de Spot
 
 Ver RELEASE_NOTES_v3.0.4.md. Incluye hotfix Balancer 3.0.3.

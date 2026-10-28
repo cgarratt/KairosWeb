@@ -229,7 +229,10 @@ def staged_buy_candidates(buy, budget, proximity_pct=1.0):
     weights=[]; px_all=[]
     for t in tokens:
         token=t['token']
-        v=stage_weights.get(token,default)
+        ctx=buy.get('weekly_context',{}).get(token,{})
+        # O2 and generic retracements always use the single approved O2
+        # distribution. Only O4 may use its separate published allocation.
+        v=stage_weights.get(token,default) if ctx.get('mode')=='O4' else default
         if not isinstance(v,(list,tuple)) or len(v)!=4 or abs(sum(float(x) for x in v)-100)>1e-6:
             raise ValueError('Invalid published tranche weights')
         weights.append([float(x)/100 for x in v])
@@ -259,6 +262,11 @@ def staged_buy_candidates(buy, budget, proximity_pct=1.0):
     stage_budgets=[budget*stage_mix[j] for j in range(4)]
     stage_budgets[3]=max(0.,budget-sum(stage_budgets[:3]))
 
+    # The MASTER-approved O2 weight is a hard eligibility gate for NEW O2
+    # proposals. An O4 allocation is independent and must remain untouched.
+    approved_o2=[float(x) for x in default]
+    if len(approved_o2)!=4 or abs(sum(approved_o2)-100)>1e-6:
+        raise ValueError('Invalid MASTER O2 allocation')
     remaining=budget;candidates=[]
     for j in range(4):
         sim_prices=[px_all[i][j] or _finite_pos(t.get('price')) or 0.
@@ -276,6 +284,11 @@ def staged_buy_candidates(buy, budget, proximity_pct=1.0):
             token=t['token'];spot=_finite_pos(t.get('price'))
             ctx=buy.get('weekly_context',{}).get(token,{})
             phase=ctx.get('mode') or 'RETROCESO_ALCISTA'
+            # The generic bullish retracement uses O2 weights too. A zero
+            # tranche cannot create a new BUY proposal, even if a stale
+            # per-token budget or sequential simulator supplies a positive sum.
+            if phase!='O4' and approved_o2[j]<=0:
+                continue
             stage=f"O4C{j+1}" if phase=='O4' else f"O2C{j+1}" if phase=='O2' else f"C{j+1}"
             delta,proximity=_proximity('BUY',spot,price,proximity_pct)
             if token=='HYPE':
