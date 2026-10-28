@@ -411,7 +411,12 @@
       if(Math.abs(vals.reduce((a,b)=>a+b,0)-1)>1e-8)throw Error(name+' debe sumar exactamente 100%.');
     }
     if(body.querySelector('[data-goal="reserve_caps.balancer"]')){l.balancer_cap=goalRead('reserve_caps.balancer');l.trading_cap=goalRead('reserve_caps.trading');}
-    return [p,t,l,...c];
+    const base=state.sections.portfolio_goals.token_targets;
+    const tokenTargets=base.map(r=>({token:r.token,tier:r.tier,target:goalRead('token.'+r.token)}));
+    const tierTotals=Object.fromEntries(['T1','T2','T3'].map(tier=>[tier,tokenTargets.filter(r=>r.tier===tier).reduce((a,r)=>a+r.target,0)]));
+    for(const tier of ['T1','T2','T3'])if(Math.abs(tierTotals[tier]-t[tier])>1e-8)throw Error('Objetivos '+tier+' deben sumar '+(t[tier]*100).toFixed(2)+'%.');
+    if(Math.abs(tokenTargets.reduce((a,r)=>a+r.target,0)-1)>1e-8)throw Error('Los 12 objetivos deben sumar 100%.');
+    return [p,t,l,...c,{group:'token_targets',targets:tokenTargets}];
   }
   function goalInput(key,value,label){const holder=el('label','goal-field');holder.append(el('span','',label));
     const inp=el('input');inp.type='number';inp.step='0.01';inp.min='0';inp.max='100';inp.inputMode='decimal';inp.value=cleanFloat(Number(value)*100);inp.dataset.goal=key;
@@ -422,6 +427,16 @@
       ...['T1','T2','T3'].map(t=>['Custodia '+t,['custody.'+t+'.hodl','custody.'+t+'.core','custody.'+t+'.exchange']])]){
       try{const total=keys.reduce((acc,k)=>acc+goalRead(k),0)*100;const ok=Math.abs(total-100)<1e-6;valid=valid&&ok;summaries.push({label,total,ok});}
       catch(_){valid=false;summaries.push({label,total:NaN,ok:false});}
+    }
+    if(state?.sections?.portfolio_goals?.token_targets){
+      const base=state.sections.portfolio_goals.token_targets;
+      for(const tier of ['T1','T2','T3']){
+        try{const subtotal=base.filter(r=>r.tier===tier).reduce((a,r)=>a+goalRead('token.'+r.token),0)*100;
+          const expected=goalRead('tiers.'+tier)*100;
+          const ok=Math.abs(subtotal-expected)<1e-6;valid=valid&&ok;
+          summaries.push({label:'Tokens '+tier+' (objetivo '+expected.toFixed(2)+'%)',total:subtotal,ok});
+        }catch(_){valid=false;summaries.push({label:'Tokens '+tier,total:NaN,ok:false});}
+      }
     }
     if(body.querySelector('[data-goal="reserve_caps.balancer"]')){
       try{goalRead('reserve_caps.balancer');goalRead('reserve_caps.trading');}
@@ -442,14 +457,12 @@
     }
     if(m&&valid&&state){
       const entries=collectGoals(),g=entries[0],t=entries[1],liq=entries[2],cus=entries.slice(3);
-      const base=state.sections.portfolio_goals.token_targets;
-      const old=Object.fromEntries(['T1','T2','T3'].map(tier=>[tier,base.filter(r=>r.tier===tier).reduce((a,r)=>a+Number(r.target),0)]));
-      const targets=base.map(r=>({token:r.token,percent:old[r.tier]?100*t[r.tier]*r.target/old[r.tier]:0}));
+      const targets=entries[6].targets.map(r=>({token:r.token,percent:100*r.target}));
       const h=Object.fromEntries(cus.map(r=>[r.tier,r]));const protectedShare=['T1','T2','T3'].reduce((sum,tier)=>sum+t[tier]*(h[tier].hodl+h[tier].core),0);
       const totals=[g.crypto*protectedShare,g.crypto*(1-protectedShare),g.liquidity*(liq.usdt+liq.balancer),g.liquidity*liq.trading];
       m.replaceChildren(el('strong','',`Vista previa: HODL/Core ${(totals[0]*100).toFixed(2)}%, Exchange ${(totals[1]*100).toFixed(2)}%, Liquidez/Reserva Balancer ${(totals[2]*100).toFixed(2)}%, ReservaTrading ${(totals[3]*100).toFixed(2)}% del patrimonio objetivo.`),
       el('p','settings-hint','Objetivos por token derivados (manga cripto): '+targets.map(x=>x.token+' '+x.percent.toFixed(2)+'%').join(' · ')));
-    }else if(m)m.textContent='Completa las seis validaciones al 100% para generar la vista previa.';
+    }else if(m)m.textContent='Completa las validaciones de Tier, custodia y los 12 tokens para generar la vista previa.';
     save.disabled=!state?.is_admin||!state?.write_configured||!valid;
   }
   function drawGoals(){
@@ -475,6 +488,14 @@
       ['hodl','core','exchange'].forEach(k=>row.append(goalInput('custody.'+t+'.'+k,g.custody[t][k],k==='hodl'?'HODL (%)':k==='core'?'Core (%)':'Exchange (%)')));
       cust.append(row);
     });body.append(cust);
+    const tokens=el('section','goal-card');tokens.append(el('h4','','5. Pesos objetivo por Token'),
+      el('p','settings-hint','Los 12 tokens suman 100% de la manga cripto. Cada grupo debe coincidir exactamente con el objetivo de su Tier; no se cambia la clasificación T1/T2/T3.'));
+    for(const tier of ['T1','T2','T3']){
+      const group=el('div','goal-grid');group.append(el('strong','goal-tier',tier));
+      g.token_targets.filter(r=>r.tier===tier).forEach(r=>group.append(goalInput('token.'+r.token,r.target,r.token+' (%)')));
+      tokens.append(group);
+    }
+    body.append(tokens);
     const preview=el('section','goal-preview');preview.id='goal-preview';body.append(preview);
     body.append(el('p','settings-hint',g.liquidity_mix_published?
       'Reparto de liquidez publicado en 12_PARAMETROS_KAIROS. Reserva Balancer calculada automáticamente desde el porcentaje publicado y el USDT físico. ReservaTrading no altera el saldo físico de Quantfury.':

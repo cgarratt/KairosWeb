@@ -519,11 +519,13 @@ def _goal_sum(name,values):
 
 
 def _goal_entries(entries):
-    if len(entries)!=6:raise SettingsError('Objetivos: se requieren 6 grupos completos (incluidos T1/T2/T3)')
-    groups={};custody={}
+    if len(entries)!=7:raise SettingsError('Objetivos: se requieren 7 grupos completos, incluidos 12 tokens')
+    groups={};custody={};token_targets=None
     for e in entries:
         g=e.get('group')
-        if g=='custody':
+        if g=='token_targets' and token_targets is None:
+            token_targets=e.get('targets')
+        elif g=='custody':
             t=e.get('tier')
             if t not in ('T1','T2','T3') or t in custody:raise SettingsError('Custodia: Tier ausente o duplicado')
             custody[t]={f:_goal_fraction(e.get(f),t+' '+f) for f in ('hodl','core','exchange')}
@@ -545,7 +547,23 @@ def _goal_entries(entries):
         if not all(k in groups['liquidity'] for k in cap_keys):
             raise SettingsError('Se requieren ambos topes de reservas')
         for k in cap_keys:_goal_fraction(groups['liquidity'][k],k)
-    return portfolio,tiers,liquid,custody
+    expected={'BTC':'T1','ETH':'T1','SOL':'T1','LINK':'T1','HYPE':'T1',
+              'HBAR':'T2','SUI':'T2','ONDO':'T2','PUMPFUN':'T2','PLUME':'T2',
+              'VIRTUAL':'T3','PEPE':'T3'}
+    if not isinstance(token_targets,list) or len(token_targets)!=12:
+        raise SettingsError('Se requieren exactamente 12 objetivos por token')
+    targets={}
+    for entry in token_targets:
+        if not isinstance(entry,dict):raise SettingsError('Objetivo token inválido')
+        token=entry.get('token')
+        if token not in expected or token in targets or entry.get('tier')!=expected[token]:
+            raise SettingsError('Token duplicado, desconocido o Tier alterado')
+        targets[token]=_goal_fraction(entry.get('target'),'Objetivo '+token)
+    for tier,share in tiers.items():
+        if abs(sum(targets[t] for t in expected if expected[t]==tier)-share)>1e-8:
+            raise SettingsError('Los objetivos de '+tier+' deben sumar exactamente '+str(share*100)+'%')
+    _goal_sum('Objetivos de 12 tokens',list(targets.values()))
+    return portfolio,tiers,liquid,custody,targets
 
 
 def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
@@ -572,7 +590,7 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
         seen.add(k);_set(b,name,row,col,value);updates.append((name,row,col,value))
     positions={r[0]:i for i,r in enumerate(b[SHEETS['positions']]) if r and r[0] in ('BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMPFUN','PLUME','VIRTUAL','PEPE')}
     if category=='portfolio_goals':
-        portfolio, tier_shares,liq_mix,custody_shares=_goal_entries(entries)
+        portfolio, tier_shares,liq_mix,custody_shares,token_targets=_goal_entries(entries)
         liquid_entry=next(e for e in entries if e['group']=='liquidity')
         for field,key in [('balancer_cap','BALANCER_MAX_PORTFOLIO_FRACTION'),
                           ('trading_cap','TRADING_MAX_PORTFOLIO_FRACTION')]:
@@ -583,20 +601,10 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
                 if value!=_get(b,'parameters',row,2):
                     change('parameters',row,2,value)
                     change('parameters',row,7,'Aprobación administrativa KairosWeb · '+evidence.strip()[:95])
-        # Rebalance all twelve target percentages preserving relative weights
-        # within each tier, as published before this revision. Do not reassign
-        # tokens to different tiers or change physical custody units.
-        for tier,portion in tier_shares.items():
-            members=[(token,row) for token,row in positions.items() if _get(b,'positions',row,2)==tier]
-            if not members:raise SettingsError('Sin tokens en '+tier)
-            old_total=sum(float(_get(b,'positions',row,3)) for _,row in members)
-            if old_total<=0 and portion>0:raise SettingsError('No se puede redistribuir '+tier+' sin objetivos base; configura los tokens primero')
-            assigned=0.0
-            for idx,(token,row) in enumerate(members):
-                target=(round(portion-assigned,10) if idx==len(members)-1 else round(portion*float(_get(b,'positions',row,3))/old_total,10)) if old_total else 0.0
-                assigned+=target
-                if abs(float(_get(b,'positions',row,3))-target)>1e-11:
-                    change('positions',row,3,target)
+        # Publish the 12 explicitly approved weights. Never redistribute them.
+        for token,row in positions.items():
+            if abs(float(_get(b,'positions',row,3))-token_targets[token])>1e-11:
+                change('positions',row,3,token_targets[token])
         for tier,parts in custody_shares.items():
             row=_find_row(b,'custody',tier)
             for col,k in [(1,'hodl'),(2,'core'),(3,'exchange')]:
