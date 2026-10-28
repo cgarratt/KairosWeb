@@ -671,9 +671,9 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
                 prior_cl=before['cycle_low']
                 prior_day=before['cl_date']
                 cl=prior_cl
-                if 'cycle_low' in x and x['cycle_low'] is not None:
-                    cl=_numeric(x['cycle_low'],'Cycle Low')
-                    if cl<=0:raise SettingsError('Cycle Low debe ser positivo')
+                if 'cycle_low' in x:
+                    cl=None if x['cycle_low'] is None else _numeric(x['cycle_low'],'Cycle Low')
+                    if cl is not None and cl<=0:raise SettingsError('Cycle Low debe ser positivo')
                 try:dateval=date_iso(x.get('cl_date',prior_day))
                 except WavePivotError as exc:raise SettingsError(str(exc)) from exc
                 cl_state=normalized_status(x.get('cl_status',before['cl_status']))
@@ -686,13 +686,17 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
                     raise SettingsError(f'{token} CL: primero valida 5L/5R + BOS y publica VALIDADO')
                 if cl_state!='PROPUESTO' and (cl is None or not dateval):
                     raise SettingsError(f'{token} CL: validación requiere precio y fecha UTC')
+                if before['cl_status']=='VALIDADO' and cl_state=='CONFIRMADO':
+                    snapshot=_get(b,'control',_find_row(b,'control','snapshot_id'),1)
+                    if not verify_review('CONFIRM|'+token+'|cl',cl,dateval,snapshot,x.get('cl_confirmation_proof')):
+                        raise SettingsError(token+' CL: confirmación requiere pivote semanal HL/LH verificado por MCP')
                 if cl_state=='VALIDADO' and (before['cl_status']!='VALIDADO' or cl!=prior_cl or dateval!=prior_day):
                     snapshot=next((str(r[1]) for r in raw[SHEETS['control']] if r and r[0]=='snapshot_id'),None)
                     if not verify_review(token,cl,dateval,snapshot,x.get('cl_review_proof')):
                         raise SettingsError(f'{token} CL: requiere revisión MCP semanal 5L/5R+BOS válida para este snapshot')
                 if before['cl_status']=='VALIDADO' and cl_state=='CONFIRMADO' and (cl!=prior_cl or dateval!=prior_day):
                     raise SettingsError(f'{token} CL: la confirmación debe conservar precio y fecha técnicamente validados')
-                if cl!=prior_cl and cl is not None:change('pivots',prow,1,cl)
+                if cl!=prior_cl:change('pivots',prow,1,cl)
                 if dateval!=prior_day:change('pivots',prow,2,dateval)
                 if cl_state!=before['cl_status']:change('pivots',prow,CL_STATUS_COL,cl_state)
                 just_confirmed=False
@@ -701,9 +705,9 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
                     new_state=normalized_status(x.get(wave+'_status',prior['status']))
                     if new_state not in PIVOT_STATES:raise SettingsError('Estado inválido de '+wave.upper())
                     price=prior['price']
-                    if wave in x and x[wave] is not None:
-                        price=_numeric(x[wave],wave)
-                        if price<=0:raise SettingsError(wave.upper()+': precio debe ser positivo')
+                    if wave in x:
+                        price=None if x[wave] is None else _numeric(x[wave],wave)
+                        if price is not None and price<=0:raise SettingsError(wave.upper()+': precio debe ser positivo')
                     try:new_date=date_iso(x.get(wave+'_date',prior['date']))
                     except WavePivotError as exc:raise SettingsError(str(exc)) from exc
                     if prior['status']=='CONFIRMADO':
@@ -719,10 +723,13 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
                         if not verify_review(token+'|'+wave,price,new_date,snapshot,x.get(wave+'_review_proof')):
                             raise SettingsError(f'{token} {wave.upper()}: necesita evidencia MCP semanal firmada para VALIDADO')
                     if new_state=='CONFIRMADO':
+                        snapshot=_get(b,'control',_find_row(b,'control','snapshot_id'),1)
+                        if not verify_review('CONFIRM|'+token+'|'+wave,price,new_date,snapshot,x.get(wave+'_confirmation_proof')):
+                            raise SettingsError(token+' '+wave.upper()+': confirmación requiere pivote semanal HL/LH verificado por MCP')
                         if prior['status']!='VALIDADO' or price!=prior['price'] or new_date!=prior['date']:
                             raise SettingsError(f'{token} {wave.upper()}: confirma solo un VALIDADO publicado sin modificar anclas')
                         just_confirmed=True
-                    if price!=prior['price'] and price is not None:change('pivots',prow,PRICE_COLS[wave],price)
+                    if price!=prior['price']:change('pivots',prow,PRICE_COLS[wave],price)
                     if new_date!=prior['date']:change('pivots',prow,DATE_COLS[wave],new_date)
                     if new_state!=prior['status']:change('pivots',prow,STATE_COLS[wave],new_state)
                 if just_confirmed or (before['cl_status']!='CONFIRMADO' and cl_state=='CONFIRMADO'):
@@ -853,6 +860,12 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
                 raise SettingsError(base+': BTC + USDT debe sumar 100%')
         try:defaults_from_master({r[1]:{'value':r[2],'status':r[5]} for r in b[SHEETS['parameters']][1:] if len(r)>5 and r[1]})
         except ForecastAllocationError as exc:raise SettingsError('Forecast: '+str(exc)) from exc
+    if category=='pivots':
+        from pivot_timeline import require_timeline
+        for entry in entries:
+            row=_find_row(b,'pivots',entry['token'])
+            try:require_timeline(wave_row(b[SHEETS['pivots']][row]),entry['token'])
+            except ValueError as exc:raise SettingsError(str(exc)) from exc
     # Update parameter parse_master O5 policy contract handled by validator.
     try:state=parse_master(b)
     except SheetDataError as exc:raise SettingsError('Validación del Master falló: '+str(exc)) from exc
@@ -907,7 +920,8 @@ def settings_data():
         if not r or r[0] not in state['tokens']:continue
         w=state['wave_pivots']['PUMP' if r[0]=='PUMPFUN' else r[0]]
         record={'token':r[0], 'cycle_low':w['cycle_low'], 'cl_date':w['cl_date'], 'cl_status':w['cl_status'],
-                'status':r[14] if len(r)>14 else None, 'waves':w['waves']}
+                'status':r[14] if len(r)>14 else None, 'waves':w['waves'],
+                'timeline_valid':w['timeline_valid'],'timeline_issues':w['timeline_issues']}
         for wave,item in w['waves'].items():
             record[wave]=item['price'];record[wave+'_date']=item['date'];record[wave+'_status']=item['status']
         pivots.append(record)

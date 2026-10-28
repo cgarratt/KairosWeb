@@ -42,7 +42,7 @@ def date_iso(value):
 
 
 def wave_row(row):
-    output={'cycle_low':cell(row,1),'cl_date':cell(row,2),'waves':{}}
+    output={'cycle_low':cell(row,1),'cl_date':date_iso(cell(row,2)),'waves':{}}
     cl_status=normalized_status(cell(row,CL_STATUS_COL))
     if cl_status not in CL_STATES:raise WavePivotError(f'{row[0]} CL: estado no permitido')
     if cl_status!='PROPUESTO' and (cell(row,1) is None or date_iso(cell(row,2)) is None):
@@ -59,6 +59,9 @@ def wave_row(row):
         if status in ('VALIDADO','CONFIRMADO') and (price is None or not when):
             raise WavePivotError(f'{row[0]} {wave.upper()}: confirmado sin precio y fecha')
         output['waves'][wave]={'price':price,'date':when,'status':status}
+    from pivot_timeline import timeline_issues
+    output['timeline_issues']=timeline_issues(output)
+    output['timeline_valid']=not output['timeline_issues']
     return output
 
 

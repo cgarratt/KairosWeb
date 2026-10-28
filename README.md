@@ -1,3 +1,7 @@
+# Kairos v3 · 3.0.2 · Homologación
+
+Compatible por contrato y pruebas con KairosGPT 1.3.12. Ver RELEASE_NOTES_v3.0.2.md. Se mantienen los cambios de versiones anteriores. Desplegar el contenido completo y verificar /health. MASTER no se modifica al instalar.
+
 # Kairos v3 · 3.0.1
 
 Corrección de alineación de los donuts de liquidez. Ver RELEASE_NOTES_v3.0.1.md.

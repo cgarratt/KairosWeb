@@ -168,6 +168,13 @@ def validate_transition(action, data, old=None, others=(), existing_exchange=())
     return item
 
 
+def execution_display_status(item):
+    """Accredited execution requires canonical reconciliation; journal alone is evidence."""
+    if item.get('estado')=='EJECUTADA' and item.get('conciliacion')=='CONCILIADA_EN_05':return 'EJECUTADA'
+    if item.get('estado')=='PARCIAL':return 'PARCIAL'
+    return 'PROPUESTA'
+
+
 def to_sheet_row(item):
     return [item.get(k) if item.get(k) is not None else '' for k in HEADERS]
 
@@ -191,6 +198,7 @@ def registered_orders():
     current=latest_orders(events)
     for rec in current:
         rec['conciliacion']=('CONCILIADA_EN_05' if rec['estado']=='EJECUTADA' and (rec['venue'],str(rec.get('exchange_order_id') or '')) in reconciled else rec['conciliacion'])
+    for rec in current:rec['display_status']=execution_display_status(rec)
     return {'records':current,'historical':historical,'ledger_present':have_tab,
             'unreconciled':sum(r['estado'] in ('CONFIRMADA','PARCIAL','EJECUTADA') and r['conciliacion']!='CONCILIADA_EN_05' for r in current)}
 
@@ -288,4 +296,6 @@ def write_event(data, *, expected_snapshot_id):
         _api('POST',':batchUpdate',write=True,payload={'requests':req})
         from google_sheets_master import invalidate_cache
         invalidate_cache()
-        return {'status':'OK','order':validated,'notice':'Registro de gestión únicamente. No modifica inventario, saldos, 05_ORDENES ni 06_FILLS; una ejecución requiere conciliación independiente.'}
+        validated['display_status']=execution_display_status(validated)
+        return {'status':'OK','order':validated,'balances_updated':False,
+                'requires_reconciliation':validated['estado'] in ('EJECUTADA','PARCIAL') and validated.get('conciliacion')!='CONCILIADA_EN_05','notice':'Registro de gestión únicamente. No modifica inventario, saldos, 05_ORDENES ni 06_FILLS; una ejecución requiere conciliación independiente.'}

@@ -3,7 +3,7 @@
   'use strict';
   const BUY_LEVELS=[.382,.5,.618,.786];
   const SELL_LEVELS=[1.618,2.618,3.618,4.618];
-  const DEFAULTS={o2:[0,60,40,0],o3:[40,30,20,10],o4:[0,60,40,0],o5:[20,20,30,30]};
+  const DEFAULTS={o2:[0,60,40,0],o3:[20,20,30,30],o4:[0,60,40,0],o5:[20,20,30,30]};
   function shares(v){
     if(!Array.isArray(v)||v.length!==4||v.some(x=>!Number.isFinite(Number(x))||Number(x)<0||Number(x)>100))throw Error('Se requieren cuatro porcentajes entre 0% y 100%.');
     const sum=v.reduce((s,x)=>s+Number(x),0);
@@ -36,6 +36,9 @@
   // are immutable under local Fibonacci selectors or MCP candidate updates.
   function wavePath(p,selectors){
     const labels=['cl','o1','o2','o3','o4','o5'];
+    const timeline=root.KairosPivotTimeline||(typeof require!=='undefined'?require('./pivot_timeline.js'):null);
+    const errors=timeline.issues({cycle_low:p.published_cl??p.cycle_low,cl_date:p.published_cl_date??p.cl_date,waves:p.waves});
+    if(errors.length)return {token:p.token,values:null,locked:[],statuses:{},dates:{},state:'CRONOLOGIA_INVALIDA',timeline_issues:errors};
     const positive=x=>x==null||x===''?null:(Number.isFinite(Number(x))&&Number(x)>0?Number(x):null);
     const approved=s=>s==='VALIDADO'||s==='CONFIRMADO';
     const fixed={},statuses={},dates={},locked=[];

@@ -129,3 +129,30 @@ def review_wave(weeks, price, day, wave, *, left=5, right=5):
         out['reason']='Falta BOS alcista semanal posterior a 5R';return out
     return {**out,'status':'VALIDADO','validated':True,'bos_week':bos['week_start'],
             'protected_level':level,'reason':'5L/5R + BOS semanal verificados, falta confirmación humana'}
+
+
+def review_followup(weeks, price, day, wave, reference_price, *, left=5, right=5):
+    """Confirm only after a later strict weekly HL (high pivot) / LH (low pivot).
+
+    Returns technical evidence, never writes Master or grants publication rights.
+    The prior opposite-wave reference must come from the same published cycle.
+    """
+    from wave_structure import iso_date, positive
+    target=iso_date(day,'Pivot date');value=positive(price,'Pivot price')
+    reference=positive(reference_price,'Previous opposite pivot')
+    if wave not in ('cl','o1','o2','o3','o4','o5'):raise ValueError('Onda inválida')
+    high=wave in ('o1','o3','o5');field='low' if high else 'high'
+    for i in range(left,len(weeks)-right):
+        week=weeks[i];when=iso_date(week[field+'_date'],'Follow-up pivot date')
+        if when<=target:continue
+        candidate=float(week[field]);adj=weeks[i-left:i]+weeks[i+1:i+right+1]
+        strict=all(candidate<float(w[field]) for w in adj) if high else all(candidate>float(w[field]) for w in adj)
+        # HL follows a swing high; LH follows a swing low. Stay inside the
+        # reference/target structure and do not accept a mere weekly close.
+        relationship=reference<candidate<value if high else value<candidate<reference
+        if strict and relationship:
+            return {'confirmed':True,'condition':'HL' if high else 'LH',
+                    'followup_date':when.isoformat(),'followup_price':candidate,
+                    'status':'CONFIRMADO_TECNICAMENTE_PENDIENTE_PUBLICACION'}
+    return {'confirmed':False,'condition':'HL' if high else 'LH',
+            'status':'VALIDADO_PENDIENTE_PIVOTE_SEMANAL_HL_LH'}

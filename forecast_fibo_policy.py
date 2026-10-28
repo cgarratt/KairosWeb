@@ -23,7 +23,7 @@ TRANCHES={
 TRANCHE_KEYS={s:tuple(f'FORECAST_{s.upper()}_FIB_{suffix}_PCT' for suffix,_ in v) for s,v in TRANCHES.items()}
 ALL_TRANCHE_KEYS=frozenset(k for group in TRANCHE_KEYS.values() for k in group)
 STAGE_FOR_KEY={k:stage for stage,keys in TRANCHE_KEYS.items() for k in keys}
-DEFAULTS={'o2':(0,60,40,0),'o3':(40,30,20,10),'o4':(0,60,40,0),'o5':(20,20,30,30)}
+DEFAULTS={'o2':(0,60,40,0),'o3':(20,20,30,30),'o4':(0,60,40,0),'o5':(20,20,30,30)}
 
 class ForecastAllocationError(ValueError):pass
 
@@ -53,10 +53,10 @@ def defaults_from_master(parameters):
         found=[k in parameters for k in numeric]
         if any(found):
             if not all(found):
-                raise ForecastAllocationError(stage.upper()+': hay tramos individuales incompletos en Google Sheets')
+                raise ForecastAllocationError(stage.upper()+': hay tramos individuales incompletos en Google Sheets; faltan '+', '.join(k for k in numeric if k not in parameters))
             items=[parameters[k] for k in numeric]
             if any(r.get('status') not in ('APROBADO_SIMULACION','APROBADO') for r in items):
-                raise ForecastAllocationError(stage.upper()+': existe un tramo no aprobado')
+                raise ForecastAllocationError(stage.upper()+': existe un tramo no aprobado: '+', '.join(k+'='+str(r.get('status')) for k,r in zip(numeric,items) if r.get('status') not in ('APROBADO_SIMULACION','APROBADO')))
             try:result[stage]=list(validate_weights([r['value'] for r in items]))
             except (KeyError,TypeError) as e:raise ForecastAllocationError(stage.upper()+': porcentaje inválido') from e
         elif (entry:=parameters.get(key)) and entry.get('status') in ('APROBADO_SIMULACION','APROBADO'):

@@ -90,6 +90,10 @@ def select_buy_impulse(weeks, published=None, *, left=5, right=5):
     `full_utc_weeks` after venue verification. Confirmed published pivots are
     never overwritten: a conflicting newer structure blocks until reviewed.
     """
+    from pivot_timeline import timeline_issues
+    if published and timeline_issues(published):
+        return {'status':'BLOQUEADO','eligible':False,'levels':None,'reason':'CRONOLOGIA_INVALIDA','timeline_issues':timeline_issues(published)}
+
     def blocked(reason, **extra):
         result=dict(status='BLOQUEADO',eligible=False,reason=reason,mode=None,levels=None,anchors=None)
         result.update(extra)
@@ -161,6 +165,10 @@ def select_p1_p2_buy_impulse(weeks, published=None, archived=None):
     archivado solo es PROPUESTO, sin certificación implícita. No escribe Master
     ni hace operativa una compra. Los pivotes CONFIRMADO son inmutables.
     """
+    from pivot_timeline import timeline_issues
+    if published and timeline_issues(published):
+        return {'status':'BLOQUEADO','eligible':False,'levels':None,'reason':'CRONOLOGIA_INVALIDA','timeline_issues':timeline_issues(published)}
+
     def deny(reason, **details):
         return {'eligible':False,'status':'BLOQUEADO','reason':reason,
                 'anchors':None,'levels':None,'mode':None,**details}
@@ -243,6 +251,10 @@ def select_p1_p2_buy_impulse(weeks, published=None, archived=None):
 
 def confirmed_p1_buy_impulse(weeks, published=None, archived=None):
     """Backward-compatible name; P1 accepts PROPUESTO for SIMULATION only."""
+    from pivot_timeline import timeline_issues
+    if published and timeline_issues(published):
+        return {'status':'BLOQUEADO','eligible':False,'levels':None,'reason':'CRONOLOGIA_INVALIDA','timeline_issues':timeline_issues(published)}
+
     return select_p1_p2_buy_impulse(weeks,published,archived)
 
 

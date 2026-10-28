@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.1'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.2'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -278,7 +278,7 @@ def bind_published_sheet():
     if request.path in independent or request.path in ('/login','/logout','/admin/login','/api/admin/session') or request.path=='/settings' or request.path.startswith('/static/'):
         return None
     try:
-        g.kairos_state=get_state()
+        g.kairos_state=get_state(force=True)
         return None
     except Exception as exc:
         incident=uuid.uuid4().hex[:10]
@@ -588,6 +588,10 @@ def core_dashboard(prices):
 def _load_live_dashboard_uncached(*, force=False):
     with _MARKET_LOCK:
         if _MARKET_CACHE['prices'] is not None and not force:
+            observed=datetime.fromisoformat(_MARKET_CACHE['observed'].replace('Z','+00:00'))
+            age=(datetime.now(timezone.utc)-observed.astimezone(timezone.utc)).total_seconds()
+            if age < -30 or age > 180:
+                raise RuntimeError('Spot vencido: pulsa Actualizar Spot antes de un nuevo análisis')
             return _MARKET_CACHE['observed'], core_dashboard(dict(_MARKET_CACHE['prices']))
     # Shared resilient fetch with fresh session for each transient gateway failure.
     data = call_mcp_resilient('BINANCE_MCP_URL', 'get_kairos_spot_prices')
@@ -611,7 +615,7 @@ def _load_live_dashboard_uncached(*, force=False):
     observed = data.get('as_observed_utc')
     timestamp=datetime.fromisoformat(observed.replace('Z','+00:00'))
     age=(datetime.now(timezone.utc)-timestamp.astimezone(timezone.utc)).total_seconds()
-    if age < -60 or age > 180:
+    if age < -30 or age > 180:
         raise RuntimeError('Stale MCP data')
     dashboard=core_dashboard(prices)
     with _MARKET_LOCK:
@@ -743,7 +747,7 @@ def build_mode_payload(slug, d, observed):
                                buy_commitments=d.get('pending_buy_usdt',0))
         reference_cap=reserves['compras_max']
         purchase_tokens=[{'token':r['token'],'tier':r['tier'],'price':r['price'],'weight':r['weight'],'target':r['target'],
-            'current_usdt':r['value'],'units':r['units'],
+            'current_usdt':r['value'],'units':r['units'],'reserved_sell_units':r.get('reserved_sell_units',0),
             'gap_usdt':max(0.0,(r['target']-r['weight'])*d['crypto_value']),
             'c1_price':None,
             'c2_price':None}
@@ -1124,7 +1128,8 @@ def balancer_report(d, observed):
             'core':r['core_units'], 'exchange':r['exchange_units']
         } for r in d['rows']
     }
-    custody_comparison = compare_custody(custody_positions, g.kairos_state['custody_policy'], min_transfer_fraction=.05)
+    custody_comparison = compare_custody(custody_positions, g.kairos_state['custody_policy'], min_transfer_fraction=.05,
+        reserved_exchange={r['token']:r.get('reserved_sell_units',0) for r in d['rows']})
     buy_candidates=[r for r in rows if r['drift_pp'] < -band]
     sell_candidates=[r for r in rows if r['drift_pp'] > band and r['token']!='BTC']
     from orders_inbox import allocate_infra_buys, overweight_sell_plan
@@ -1739,7 +1744,7 @@ def pivot_technical_review_endpoint():
     from pivot_preload import TOKENS
     from wave_pivots import date_iso
     from wave_structure import full_utc_weeks
-    from cl_validation import review_cl, review_wave, sign_review
+    from cl_validation import review_cl, review_wave, review_followup, sign_review
     token=request.args.get('token','').strip().upper()
     wave=request.args.get('wave','').lower().strip()
     if token not in TOKENS or wave not in ('cl','o1','o2','o3','o4','o5'):
@@ -1766,6 +1771,17 @@ def pivot_technical_review_endpoint():
         if result.get('validated'):
             result['status']='VALIDADO'
             result['review_proof']=sign_review(token if wave=='cl' else token+'|'+wave,price,when,g.kairos_state['control']['snapshot_id'])
+        published=g.kairos_state['wave_pivots'].get('PUMP' if token=='PUMPFUN' else token,{})
+        order=('cl','o1','o2','o3','o4','o5');index=order.index(wave)
+        previous=order[index-1] if index else 'o1'
+        reference=published.get('cycle_low') if previous=='cl' else (published.get('waves',{}).get(previous) or {}).get('price')
+        current_status=published.get('cl_status') if wave=='cl' else (published.get('waves',{}).get(wave) or {}).get('status')
+        current_price=published.get('cycle_low') if wave=='cl' else (published.get('waves',{}).get(wave) or {}).get('price')
+        current_date=published.get('cl_date') if wave=='cl' else (published.get('waves',{}).get(wave) or {}).get('date')
+        if current_status=='VALIDADO' and price==current_price and when==current_date and reference and published.get('timeline_valid',False):
+            result['confirmation_review']=review_followup(weeks,price,when,wave,reference,**opts)
+            if result['confirmation_review']['confirmed']:
+                result['confirmation_proof']=sign_review('CONFIRM|'+token+'|'+wave,price,when,g.kairos_state['control']['snapshot_id'])
         return jsonify({**result,'token':token,'wave':wave,'source':'HYPERLIQUID_SPOT_USDC' if token=='HYPE' else 'BINANCE_SPOT_USDT',
                        'scope':'TECHNICAL_REVIEW_ONLY','certified':False,'closed_weeks':len(weeks)})
     except Exception as exc:
@@ -1939,7 +1955,9 @@ def _deployed_asset_status():
         'orders_partial_structural_fallback': ('app.py', ('def orders_inbox_page(', 'Estructura semanal MCP', 'build_order_inbox(d,buy,bal')),
         'orders_engine': ('orders_inbox.py', ('def build_order_inbox(', 'def structural_sell_candidates(', 'def portfolio_candidates(', "'buy_usdt':", "'sell_units':")),
         'orders_filters': ('static/orders_inbox.js', ('function visible(', 'orders-venue', 'orders-tier', 'orders-side', 'orders-token', 'orders-level')), 
-        'pivot_mcp_status_protection': ('static/settings_master.js', ("current.cl_status!=='PROPUESTO'", "statusInput?.value!=='PROPUESTO'", "if(rec[field]!=='PROPUESTO')continue")),
+        'pivot_timeline_contract': ('pivot_timeline.py', ('def timeline_issues(', 'def require_timeline(')),
+        'forecast_cycle_engine': ('static/forecast_cycle.js', ('function simulateWave(input)', 'pools')),
+        'pivot_mcp_status_protection': ('static/settings_master.js', ("current.cl_status!=='PROPUESTO'", "statusInput?.value!=='PROPUESTO'", "if(!['PROPUESTO','VALIDADO'].includes(rec[field]))continue")),
         'virtual_flash_exclusion': ('structural_outliers.py', ('VIRTUAL_FLASH_WEEK_START', 'virtual_flash_cl')), 
         'config_admin_entry': ('app.py', ("@app.route('/settings')", "return redirect(url_for('admin_login'", "@app.route('/api/settings/data')")),
         'config_admin_login': ('templates/admin_login.html', ('login_csrf', 'settings_tab', 'Acceso administrativo')),

@@ -13,7 +13,7 @@
   const PARAM_GROUPS=[
     {id:'portfolio',name:'Portafolio',description:'Meta de liquidez y tolerancia de desvío.',keys:['STRUCTURAL_USDT_TARGET','DRIFT_BAND_PP']},
     {id:'o2',name:'Compras O2 · Forecast',description:'Cuatro retrocesos independientes: 100% del presupuesto máximo de 25% P de O2.',prefix:'FORECAST_O2_FIB_'},
-    {id:'o3',name:'Ventas O3 · Forecast',description:'Cuatro extensiones independientes: 100% de las unidades elegibles para O3. Objetivo 40% USDT.',prefix:'FORECAST_O3_FIB_',keys:['O3_BTC_PROCEEDS_FRACTION','O3_USDT_PROCEEDS_FRACTION']},
+    {id:'o3',name:'Ventas O3 · Forecast',description:'Cuatro extensiones independientes: 100% de las unidades elegibles para O3. Sin límite por % de USDT; capacidad Exchange/Tier.',prefix:'FORECAST_O3_FIB_',keys:['O3_BTC_PROCEEDS_FRACTION','O3_USDT_PROCEEDS_FRACTION']},
     {id:'o4',name:'Compras O4 · Forecast',description:'Cuatro retrocesos independientes: 100% del presupuesto máximo de 25% P de O4.',prefix:'FORECAST_O4_FIB_'},
     {id:'o5',name:'Ventas O5 · Forecast',description:'Cuatro extensiones independientes: 100% de las unidades elegibles. O5 no se detiene por el piso 40% USDT.',prefix:'FORECAST_O5_FIB_',keys:['O5_BTC_PROCEEDS_FRACTION','O5_USDT_PROCEEDS_FRACTION']},
     {id:'trading',name:'Trading QF',description:'Riesgo, margen y apalancamiento. TradingBot seguirá WATCH sin verificar Quantfury.',keys:['RISK_REWARD_MIN','QF_MARGIN_CAP_PER_POSITION','QF_ACCOUNT_RISK_PER_TRADE','QF_ACCOUNT_RISK_TOTAL','MAX_LEVERAGE','MAX_OPEN_POSITIONS']},
@@ -191,13 +191,45 @@
       'Los resultados de MCP no se guardan hasta que autorices «Validar → Publicar pivotes».');
     go.hidden=!(draftChanged&&state.is_admin);
   }
+  const confirmationProofs={};
   const WAVE_NAMES=['o1','o2','o3','o4','o5'];
   function pivotControl(type,value,token,field,locked=false){
     const node=el('input','pivot-matrix-input');node.type=type;
     node.value=value??'';node.dataset.pivotToken=token;node.dataset.pivotField=field;
     node.disabled=locked;node.setAttribute('aria-label',token+' '+field);
-    node.addEventListener('input',()=>{node.dataset.userEdited='true';});
+    node.addEventListener('input',()=>{node.dataset.userEdited='true';updatePivotTimeline();});
     return node;
+  }
+  function draftTimeline(rec){
+    const val=field=>document.querySelector(`[data-pivot-token="${rec.token}"][data-pivot-field="${field}"]`)?.value||null;
+    return {cycle_low:val('cycle_low'),cl_date:val('cl_date'),waves:Object.fromEntries(WAVE_NAMES.map(w=>[w,{price:val(w),date:val(w+'_date')}]))};
+  }
+  function updatePivotTimeline(){
+    if(tab!=='pivots'||!state)return;
+    for(const rec of state.sections.pivots){
+      const row=document.querySelector(`[data-pivot-row="${rec.token}"]`);if(!row)continue;
+      let note=row.querySelector('.pivot-timeline-error');
+      if(!note){note=el('p','pivot-timeline-error invalid-value');row.querySelector('th').append(note);}
+      const errors=globalThis.KairosPivotTimeline.issues(draftTimeline(rec));
+      row.dataset.timelineValid=errors.length?'false':'true';
+      note.textContent=errors.length?'Cronología inválida: '+errors.join('; '):'';
+      row.querySelectorAll('input[type="date"]').forEach(input=>input.setAttribute('aria-invalid',errors.length?'true':'false'));
+      let reset=row.querySelector('.pivot-reset-proposals');
+      if(!reset){
+        reset=el('button','tiny-control pivot-reset-proposals','Retirar O1–O5 propuestos');reset.type='button';
+        reset.addEventListener('click',()=>{
+          for(const wave of WAVE_NAMES)for(const field of [wave,wave+'_date']){
+            const input=row.querySelector(`[data-pivot-field="${field}"]`);
+            if(input&&!input.disabled){input.value='';input.dataset.userEdited='true';}
+          }
+          updatePivotTimeline();
+          message(rec.token+': O1–O5 retirados del borrador; CL conservado. Publica explícitamente esta retirada; después solicita nuevos candidatos MCP del ciclo.');
+        });
+        row.querySelector('th').append(reset);
+      }
+      reset.hidden=!errors.length||WAVE_NAMES.some(w=>(rec[w+'_status']||'PROPUESTO')!=='PROPUESTO');
+
+    }
   }
   function drawPivotTable(){
     const mount=document.getElementById('settings-pivot-matrix');mount.hidden=false;mount.replaceChildren();
@@ -240,6 +272,7 @@
     table.append(tbody);wrap.append(table);mount.append(wrap);
     mount.append(el('p','settings-hint','El MCP nunca reemplaza ni degrada un VALIDADO o CONFIRMADO. Puedes editar manualmente un VALIDADO con nueva evidencia 1W y publicación; CONFIRMADO permanece protegido y requiere revisión formal.'));
     updatePivotPublicationHint();
+    updatePivotTimeline();
   }
   function collectPivotMatrix(){
     const out=[];
@@ -256,9 +289,11 @@
         else if(raw){value=Number(raw);if(!Number.isFinite(value)||value<=0)throw Error(rec.token+' '+field+': precio inválido');}
         const orig=field==='cl_status'?(rec.cl_status||'PROPUESTO'):(rec[field]??null);
         if(value!==orig && (typeof value!=='number'||Math.abs(value-Number(orig))>1e-11))changed=true;
-        if(value!==null)data[field]=value;
+        data[field]=value;
       }
       if(changed){
+        const errors=globalThis.KairosPivotTimeline.issues(draftTimeline(rec));
+        if(errors.length)throw Error(rec.token+' · Cronología inválida: '+errors.join('; '));
         if(data.cl_status==='VALIDADO'&&(rec.cl_status!=='VALIDADO'||data.cycle_low!==rec.cycle_low||data.cl_date!==rec.cl_date)){
           const proof=clReviewProofs[rec.token];
           if(!proof||proof.price!==data.cycle_low||proof.date!==data.cl_date)throw Error(rec.token+' CL: pulsa «Actualizar candidatos desde MCP» para verificar 1W');
@@ -277,6 +312,15 @@
         }
         if(data.cl_status==='CONFIRMADO'&&rec.cl_status!=='VALIDADO'&&rec.cl_status!=='CONFIRMADO')
           throw Error(rec.token+' CL: publica primero VALIDADO TÉCNICAMENTE y luego confirma en otra revisión');
+        for(const wave of ['cl',...WAVE_NAMES]){
+          const field=wave==='cl'?'cl_status':wave+'_status';
+          if(data[field]==='CONFIRMADO'&&rec[field]!=='CONFIRMADO'){
+            const proof=confirmationProofs[rec.token+'|'+wave];
+            const price=wave==='cl'?data.cycle_low:data[wave],day=wave==='cl'?data.cl_date:data[wave+'_date'];
+            if(!proof||proof.price!==price||proof.date!==day)throw Error(rec.token+' '+wave.toUpperCase()+': verifica el pivote semanal HL/LH con Actualizar candidatos desde MCP');
+            data[wave+'_confirmation_proof']=proof.proof;
+          }
+        }
         out.push(data);
       }
     }
@@ -590,6 +634,7 @@
         `O1: ${rec.o1??'N/D'} (${rec.o1_date||'fecha pendiente'}; PRELIMINAR, NO CERTIFICADO) · O2: ${rec.o2??'N/D'} · O3: ${rec.o3??(rec.o3_unconfirmed_high!=null?String(rec.o3_unconfirmed_high)+' (máx. observado sin 5R)':'N/D')}`;
       info.textContent=`${rec.status} · ${rec.record_origin||rec.source||'MCP'} · ${detail} · ${rec.warning||'No certificado, sin órdenes'}`;
     }
+    updatePivotTimeline();
   }
   function applyCachedPivots(){Object.values(pivots).forEach(applyPivotCandidate);}
   async function getPivotPayload(url){
@@ -640,18 +685,28 @@
       const isCl=wave==='cl';const base=isCl?'cycle_low':wave;const field=isCl?'cl_status':wave+'_status';
       // Technical MCP reevaluation is restricted to PROPUESTO;
       // never silently revalidate or downgrade an already published VAL/CONF.
-      if(rec[field]!=='PROPUESTO')continue;
+      if(!['PROPUESTO','VALIDADO'].includes(rec[field]))continue;
       const priceEl=document.querySelector(`[data-pivot-token="${token}"][data-pivot-field="${base}"]`);
       const dateEl=document.querySelector(`[data-pivot-token="${token}"][data-pivot-field="${isCl?'cl_date':wave+'_date'}"]`);
       const select=document.querySelector(`[data-pivot-token="${token}"][data-pivot-field="${field}"]`);
       const price=Number(priceEl?.value),day=dateEl?.value;
-      if(!priceEl||!dateEl||!select||select.value!=='PROPUESTO'||!(price>0)||!day)continue;
+      if(!priceEl||!dateEl||!select||!['PROPUESTO','VALIDADO'].includes(select.value)||!(price>0)||!day)continue;
       const prevPrice=priceEl.value,prevDate=dateEl.value;
       try{
         const u='/api/settings/pivots/technical-review?'+new URLSearchParams({token,wave,price:String(price),date:day});
         const resp=await fetch(u,{cache:'no-store',credentials:'same-origin'});
         const result=await resp.json();if(!resp.ok)throw Error(result.reason||result.status||'DATA ERROR');
         if(priceEl.value!==prevPrice||dateEl.value!==prevDate)continue;
+        if(rec[field]==='VALIDADO'){
+          if(result.confirmation_proof){
+            confirmationProofs[token+'|'+wave]={price,date:day,proof:result.confirmation_proof};
+            select.title='Pivote semanal '+result.confirmation_review.condition+' verificado. Puedes seleccionar CONFIRMADO y publicar.';
+          }else{
+            delete confirmationProofs[token+'|'+wave];
+            select.title='Falta pivote semanal HL/LH para confirmar.';
+          }
+          continue;
+        }
         if(result.validated&&result.review_proof){
           const proof={price,date:day,proof:result.review_proof};
           if(isCl)clReviewProofs[token]=proof;else waveReviewProofs[token+'|'+wave]=proof;

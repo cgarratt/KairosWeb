@@ -1,0 +1,30 @@
+{
+  "status": "PASS_EN_ESCENARIOS_VERIFICADOS",
+  "versions": {
+    "KairosGPT": "1.3.12",
+    "KairosWeb": "3.0.2",
+    "MASTER_schema": "5.0.0"
+  },
+  "scope": "REGLAS_CALCULO_Y_GUARDAS_DE_CODIGO_NO_CERTIFICACION_DE_DEPLOY_O_SENALES",
+  "tests": {
+    "web_pytest_passed": 287,
+    "web_subtests": 8,
+    "gpt_pytest_passed": 103,
+    "gpt_extended_source_with_mcp_reference_tests": 162,
+    "javascript_test_files_passed": 11,
+    "forecast_whole_wave_cases": 64,
+    "reserve_cases": 100,
+    "custody_boundaries": 6,
+    "timeline_boundaries": 3,
+    "ordinary_sales_cases": 24,
+    "shared_source_modules": 8
+  },
+  "pivot_chronology": "CL < O1 < O2 < O3 < O4 < O5, strict UTC date prefix",
+  "master_mutated": false,
+  "exchange_actions": false,
+  "deployment_verified": false,
+  "o3_cash_percentage_cap": false,
+  "o5_split": "APPROVED_MASTER_DYNAMIC",
+  "custody_min_transfer_fraction_exclusive": 0.05,
+  "unreconciled_journal_credits_inventory": false
+}

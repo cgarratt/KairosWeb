@@ -64,9 +64,9 @@
 <section class="panel span-12">
   <div class="orders-kpi" aria-label="Resumen de estados">
     <div><small>Propuestas nuevas</small><strong>{{ inbox.candidates|length }}</strong></div>
-    <div><small>Ejecuciones conciliadas</small><strong>{{ (managed_orders.records|selectattr('estado','equalto','EJECUTADA')|list|length) if managed_orders else 0 }}</strong></div>
+    <div><small>Ejecuciones conciliadas</small><strong>{{ (managed_orders.records|selectattr('estado','equalto','EJECUTADA')|selectattr('conciliacion','equalto','CONCILIADA_EN_05')|list|length) if managed_orders else 0 }}</strong></div>
     <div><small>Parciales</small><strong>{{ (managed_orders.records|selectattr('estado','equalto','PARCIAL')|list|length) if managed_orders else 0 }}</strong></div>
-    <div><small>Ejecutadas registradas</small><strong>{{ (managed_orders.records|selectattr('estado','equalto','EJECUTADA')|list|length) if managed_orders else 0 }}</strong></div>
+    <div><small>Evidencias de ejecución registradas</small><strong>{{ (managed_orders.records|selectattr('estado','equalto','EJECUTADA')|list|length) if managed_orders else 0 }}</strong></div>
   </div>
   <p class="order-management-help">Propuesta no reserva fondos. PARCIAL refleja únicamente fills atribuidos expresamente y conciliados; EJECUTADO requiere cubrir el presupuesto del nivel. Las operaciones manuales no se atribuyen automáticamente. El seguimiento se guarda en 26_ORDENES_GESTION. Las órdenes existentes en 05_ORDENES conservan sus compromisos; no deben registrarse de nuevo. MANUAL y REBALANCEO permanecen en el MASTER pero no se muestran aquí.</p>
   <div class="orders-tools" aria-label="Filtros de órdenes">
@@ -80,7 +80,7 @@
   </div>
   <div class="orders-table-wrap"><table class="orders-table" id="orders-list"><thead><tr><th>Token</th><th>Exchange</th><th>BUY/SELL</th><th>Nivel</th><th>LIMIT</th><th>Importe ref.</th><th>Unidades</th><th>Estado</th><th>Acción</th></tr></thead><tbody>
   {% for x in (managed_orders.records if managed_orders else []) %}
-    <tr data-orders-venue="{{ x.venue }}" data-orders-tier="{{ tier_by_token.get(x.token, 'N/D') }}" data-side="{{ x.lado }}" data-token="{{ x.token }}" data-stage="{{ x.tramo }}" data-status="{{ x.estado }}">
+    <tr data-orders-venue="{{ x.venue }}" data-orders-tier="{{ tier_by_token.get(x.token, 'N/D') }}" data-side="{{ x.lado }}" data-token="{{ x.token }}" data-stage="{{ x.tramo }}" data-status="{{ x.display_status }}">
       <td><strong>{{ x.token }}</strong><small class="orders-origin">{{ tier_by_token.get(x.token,'N/D') }}</small></td><td>{{ x.venue }}</td><td><span class="order-side {{ 'buy' if x.lado=='BUY' else 'sell' }}">{{ x.lado }}</span></td><td>{{ x.tramo }}</td><td>—</td><td>{{ '{:,.2f}'.format(x.importe_previsto|float) }} {{ x.moneda_cotizada }}</td><td>{{ '{:,.8f}'.format(x.unidades_previstas|float).rstrip('0').rstrip('.') }}</td><td><span class="order-traffic {{ 'green' if x.estado=='EJECUTADA' and x.conciliacion=='CONCILIADA_EN_05' else 'amber' }}" title="{{ 'EJECUTADO' if x.estado=='EJECUTADA' and x.conciliacion=='CONCILIADA_EN_05' else 'PROPUESTA' }}" role="img" aria-label="{{ 'EJECUTADO' if x.estado=='EJECUTADA' and x.conciliacion=='CONCILIADA_EN_05' else 'PROPUESTA' }}"></span>{% if x.estado in ('CONFIRMADA','PARCIAL') %}<small class="orders-origin">Legado con compromiso; requiere conciliación</small>{% endif %}{% if x.estado=='EJECUTADA' %}<small class="orders-origin">{{ x.conciliacion }}</small>{% endif %}</td>
       <td>— <small class="orders-origin">Registro desde KairosGPT</small></td>
     </tr>

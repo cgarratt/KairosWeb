@@ -467,7 +467,9 @@ def parse_master(raw):
         try:wave_pivots[symbol]=wave_row(r)
         except WavePivotError as exc:raise SheetDataError(str(exc)) from exc
         anchors=fib_from_anchors(wave_pivots[symbol]['cycle_low'],wave_pivots[symbol]['waves']['o1']['price'])
-        if anchors:
+        if not wave_pivots[symbol]['timeline_valid']:
+            pivot_levels[symbol]={'c1':None,'c2':None,'state':'CRONOLOGIA_INVALIDA','issues':wave_pivots[symbol]['timeline_issues']}
+        elif anchors:
             pivot_levels[symbol]={**anchors,'state':'ANCHORS_ESTIMADOS_O_CONFIRMADOS',
                                   'certified_o1':wave_pivots[symbol]['waves']['o1']['status']=='CONFIRMADO',
                                   'source':'07_PIVOTES CL/O1; sólo simulación'}

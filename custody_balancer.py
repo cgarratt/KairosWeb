@@ -150,7 +150,7 @@ def compare_master_custody(master: Mapping[str, Any], *, reserved_exchange=None)
     """KairosGPT adapter: only validated master payload, no stale fallback."""
     if master.get('status','').startswith('PASS_SNAPSHOT') is False:
         raise CustodyError('MASTER no validado/publicado')
-    result=compare_custody(master['positions'],master['custody_policy'],reserved_exchange=reserved_exchange,
+    result=compare_custody(master['positions'],master['custody_policy'],reserved_exchange=reserved_exchange if reserved_exchange is not None else master.get('ledger',{}).get('sell_reserved',{}),
                            min_transfer_fraction=.05)
     result['snapshot_id']=master['snapshot_id']
     result['snapshot_cutoff']=master['snapshot_cutoff']
