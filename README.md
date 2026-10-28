@@ -1,3 +1,7 @@
+# Kairos v3.0.3 · Hotfix Balancer
+
+Corrige MODE_RENDER por alias PUMP/PUMPFUN en reservas de custodia. Ver RELEASE_NOTES_v3.0.3.md. Compatible con KairosGPT1.3.12, sin cambios en MASTER.
+
 # Kairos v3 · 3.0.2 · Homologación
 
 Compatible por contrato y pruebas con KairosGPT 1.3.12. Ver RELEASE_NOTES_v3.0.2.md. Se mantienen los cambios de versiones anteriores. Desplegar el contenido completo y verificar /health. MASTER no se modifica al instalar.

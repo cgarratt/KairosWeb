@@ -2,12 +2,12 @@
   "status": "PASS_EN_ESCENARIOS_VERIFICADOS",
   "versions": {
     "KairosGPT": "1.3.12",
-    "KairosWeb": "3.0.2",
+    "KairosWeb": "3.0.3",
     "MASTER_schema": "5.0.0"
   },
   "scope": "REGLAS_CALCULO_Y_GUARDAS_DE_CODIGO_NO_CERTIFICACION_DE_DEPLOY_O_SENALES",
   "tests": {
-    "web_pytest_passed": 287,
+    "web_pytest_passed": 289,
     "web_subtests": 8,
     "gpt_pytest_passed": 103,
     "gpt_extended_source_with_mcp_reference_tests": 162,
@@ -26,5 +26,6 @@
   "o3_cash_percentage_cap": false,
   "o5_split": "APPROVED_MASTER_DYNAMIC",
   "custody_min_transfer_fraction_exclusive": 0.05,
-  "unreconciled_journal_credits_inventory": false
+  "unreconciled_journal_credits_inventory": false,
+  "hotfix": "Normalizar PUMP/PUMPFUN en reservas SELL del adaptador Balancer; prueba completa reporte+plantilla con12tokens"
 }
