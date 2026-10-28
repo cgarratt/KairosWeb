@@ -629,37 +629,9 @@
     const ix=state.sections.pivots.findIndex(x=>x.token===rec.token);
     if(ix<0)return;
     const current=state.sections.pivots[ix];
-    for(const field of ['cycle_low','o1','o2','o3','o4','o5']){
-      const input=tab==='pivots'
-        ? document.querySelector(`[data-pivot-token="${rec.token}"][data-pivot-field="${field}"]`)
-        : body.querySelector(`[data-index="${ix}"][data-field="${field}"]`);
-      if(!input || input.dataset.userEdited==='true')continue;
-      // Historical/approved values from the official table always have priority.
-      // MCP only modifies officially PROPUESTO pivots. VALIDADO and
-      // CONFIRMADO retain their published anchors unless the admin explicitly edits.
-      if(field==='cycle_low'&&current.cl_status!=='PROPUESTO')continue;
-      if(field!=='cycle_low'&&current[field+'_status']!=='PROPUESTO')continue;
-      const statusField=field==='cycle_low'?'cl_status':field+'_status';
-      const statusInput=document.querySelector(`[data-pivot-token="${rec.token}"][data-pivot-field="${statusField}"]`);
-      // Protect also VALIDADO selected in an unpublished/admin draft.
-      if(statusInput?.value!=='PROPUESTO')continue;
-      const val=rec[field];
-      if(val!==null&&val!==undefined&&rec.status!=='DATA_ERROR'){
-        input.value=String(val);
-        input.dataset.preloadOrigin=rec.record_origin||rec.source||'MCP_EXPLORATORIO';
-      }
-    }
-    // Suggest dates as well as prices; never replace confirmed or manually edited fields.
-    for(const field of ['cl_date',...WAVE_NAMES.map(w=>w+'_date')]){
-      const input=document.querySelector(`[data-pivot-token="${rec.token}"][data-pivot-field="${field}"]`);
-      if(!input||input.disabled||input.dataset.userEdited==='true')continue;
-      if(field==='cl_date'&&current.cl_status!=='PROPUESTO')continue;
-      if(field!=='cl_date'&&current[field.replace('_date','')+'_status']!=='PROPUESTO')continue;
-      const statusField=field==='cl_date'?'cl_status':field.replace('_date','')+'_status';
-      const statusInput=document.querySelector(`[data-pivot-token="${rec.token}"][data-pivot-field="${statusField}"]`);
-      if(statusInput?.value!=='PROPUESTO')continue;
-      const val=rec[field];if(val&&rec.status!=='DATA_ERROR')input.value=val;
-    }
+    // Candidate MCP data is informational only. Never assign into the published
+    // MASTER form, including PROPUESTO anchors and dates. Admin edits persist
+    // locally until explicitly previewed and published.
     const info=body.querySelector(`[data-pivot-info="${rec.token}"]`);
     if(info){
       const detail=rec.status==='DATA_ERROR'?'MCP no disponible; sin sustitución de campos oficiales':
