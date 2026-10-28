@@ -435,6 +435,10 @@
           const expected=goalRead('tiers.'+tier)*100;
           const ok=Math.abs(subtotal-expected)<1e-6;valid=valid&&ok;
           summaries.push({label:'Tokens '+tier+' (objetivo '+expected.toFixed(2)+'%)',total:subtotal,ok});
+          const status=body.querySelector(`[data-tier-status="${tier}"]`);
+          if(status){status.textContent=subtotal.toFixed(2)+'% / '+expected.toFixed(2)+'%';status.className='goal-token-tier-status '+(ok?'valid-value':'invalid-value');status.setAttribute('aria-label',ok?'Objetivo cumplido':'Objetivo del Tier no cumplido');}
+          const progress=body.querySelector(`[data-tier-progress="${tier}"]`);
+          if(progress){progress.style.width=(expected>0?Math.max(0,Math.min(100,subtotal/expected*100)):0)+'%';progress.classList.toggle('goal-token-progress-invalid',!ok);}
         }catch(_){valid=false;summaries.push({label:'Tokens '+tier,total:NaN,ok:false});}
       }
     }
@@ -491,9 +495,17 @@
     const tokens=el('section','goal-card');tokens.append(el('h4','','5. Pesos objetivo por Token'),
       el('p','settings-hint','Los 12 tokens suman 100% de la manga cripto. Cada grupo debe coincidir exactamente con el objetivo de su Tier; no se cambia la clasificación T1/T2/T3.'));
     for(const tier of ['T1','T2','T3']){
-      const group=el('div','goal-grid');group.append(el('strong','goal-tier',tier));
-      g.token_targets.filter(r=>r.tier===tier).forEach(r=>group.append(goalInput('token.'+r.token,r.target,r.token+' (%)')));
-      tokens.append(group);
+      const card=el('section','goal-token-tier-card');
+      const head=el('div','goal-token-tier-head');
+      const heading=el('div','goal-token-tier-heading');
+      heading.append(el('strong','',`Tier ${tier.slice(1)}`),el('span','settings-hint',`Objetivo del Tier: ${(Number(g.tiers[tier])*100).toFixed(2)}%`));
+      const indicator=el('span','goal-token-tier-status');indicator.dataset.tierStatus=tier;
+      head.append(heading,indicator);card.append(head);
+      const group=el('div','goal-token-fields');
+      g.token_targets.filter(r=>r.tier===tier).forEach(r=>group.append(goalInput('token.'+r.token,r.target,(r.token==='PUMPFUN'?'PUMP':r.token)+' (%)')));
+      card.append(group);
+      const track=el('div','goal-token-progress');const fill=el('div','goal-token-progress-fill');fill.dataset.tierProgress=tier;track.append(fill);card.append(track);
+      tokens.append(card);
     }
     body.append(tokens);
     const preview=el('section','goal-preview');preview.id='goal-preview';body.append(preview);

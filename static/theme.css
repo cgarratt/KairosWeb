@@ -292,3 +292,17 @@ html[data-privacy-boot="pending"] .shell{visibility:hidden}
   outline:2px solid #79baff; outline-offset:2px;
 }
 .goal-derived-amount {display:block;margin:12px 0;font-size:1.25rem;color:var(--text)}
+
+/* v3.0.8: independent, responsive token allocation cards */
+.goal-token-tier-card{border:1px solid var(--line);border-radius:13px;padding:16px;margin:14px 0;background:var(--surface,#f5f8fc)}
+.goal-token-tier-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.goal-token-tier-heading{display:flex;flex-direction:column;gap:3px}
+.goal-token-tier-status{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.goal-token-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.goal-token-fields .goal-field{min-width:0}
+.goal-token-progress{height:6px;background:var(--line);border-radius:999px;overflow:hidden;margin-top:15px}
+.goal-token-progress-fill{height:100%;background:#219f78;transition:width .15s ease}
+.goal-token-progress-fill.goal-token-progress-invalid{background:#e5a23d}
+:root[data-theme="dark"] .goal-token-tier-card{background:#182b45;border-color:#415876}
+@media(max-width:850px){.goal-token-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.goal-token-fields{grid-template-columns:1fr}.goal-token-tier-card{padding:12px}}
