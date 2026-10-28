@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.3'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.4'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -444,7 +444,7 @@ def diagnostic_error(exc, scope):
         category='INVALID_URL'; hint='La URL MCP debe usar HTTPS.'
     elif isinstance(exc,(TimeoutError,httpx.TimeoutException)) or 'timeout' in etype.lower():
         category='TIMEOUT';hint='Se agotó el tiempo de espera del servicio MCP.'
-    elif 'stale' in msg:
+    elif 'stale' in msg or 'spot vencido' in msg:
         category='STALE_DATA';hint='Las cotizaciones no cumplen el límite de frescura.'
     elif 'missing one' in msg or 'invalid records' in msg:
         category='INCOMPLETE_DATA';hint='La respuesta no contiene todas las cotizaciones requeridas.'
@@ -590,9 +590,10 @@ def _load_live_dashboard_uncached(*, force=False):
         if _MARKET_CACHE['prices'] is not None and not force:
             observed=datetime.fromisoformat(_MARKET_CACHE['observed'].replace('Z','+00:00'))
             age=(datetime.now(timezone.utc)-observed.astimezone(timezone.utc)).total_seconds()
-            if age < -30 or age > 180:
-                raise RuntimeError('Spot vencido: pulsa Actualizar Spot antes de un nuevo análisis')
-            return _MARKET_CACHE['observed'], core_dashboard(dict(_MARKET_CACHE['prices']))
+            if -30 <= age <= 180:
+                return _MARKET_CACHE['observed'], core_dashboard(dict(_MARKET_CACHE['prices']))
+            # Expired observations trigger a fresh fetch below. Never value
+            # a new report from expired prices, even if the upstream fails.
     # Shared resilient fetch with fresh session for each transient gateway failure.
     data = call_mcp_resilient('BINANCE_MCP_URL', 'get_kairos_spot_prices')
     if data.get('status') != 'OK':

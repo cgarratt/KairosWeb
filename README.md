@@ -1,3 +1,7 @@
+# KairosWeb 3.0.4 · Renovación automática de Spot
+
+Ver RELEASE_NOTES_v3.0.4.md. Incluye hotfix Balancer 3.0.3.
+
 # Kairos v3.0.3 · Hotfix Balancer
 
 Corrige MODE_RENDER por alias PUMP/PUMPFUN en reservas de custodia. Ver RELEASE_NOTES_v3.0.3.md. Compatible con KairosGPT1.3.12, sin cambios en MASTER.
