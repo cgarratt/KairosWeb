@@ -181,15 +181,25 @@ function drawCurve(waves){
  const prices=choice.values;
  const domain=validSpot?[...prices,spot]:prices;
  const lo=Math.min(...domain),hi=Math.max(...domain),span=(hi-lo)||1;
- const xx=i=>95+i*116, yy=n=>407-(n-lo)/span*340;
+ const xx=i=>145+i*104, yy=n=>407-(n-lo)/span*340;
+ const axisDecimals=hi>=1000?0:hi>=1?2:hi>=0.01?4:8;
+ const axisPrice=n=>'$'+n.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:axisDecimals});
+ // Use nice 1/2/5 scale increments for human-readable Y ticks.
+ const rough=span/4, magnitude=Math.pow(10,Math.floor(Math.log10(rough)));
+ const step=[1,2,5,10].map(v=>v*magnitude).find(v=>v>=rough)||10*magnitude;
+ const firstTick=Math.ceil(lo/step)*step;
  const points=prices.map((p,i)=>[xx(i),yy(p)]);
  const names=['Cycle Low','O1','O2','O3','O4','O5'];
  const ns='http://www.w3.org/2000/svg';svg.replaceChildren();
  function node(tag,attrs,text){const e=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,String(v)));if(text!=null)e.textContent=text;svg.appendChild(e);return e}
- for(let i=0;i<5;i++){const y=67+i*85;node('line',{x1:44,y1:y,x2:703,y2:y,stroke:'#e1eaf8','stroke-width':1});node('text',{x:39,y:y+4,'text-anchor':'end',class:'fc-muted','font-size':'10'},price(hi-(i/4)*span));}
+ for(let tick=firstTick;tick<=hi+step*1e-8;tick+=step){
+  const y=yy(tick);
+  node('line',{x1:110,y1:y,x2:710,y2:y,stroke:'currentColor','stroke-opacity':'.22','stroke-width':1});
+  node('text',{x:102,y:y+5,'text-anchor':'end',fill:'currentColor','font-size':'14','font-weight':'600'},axisPrice(tick));
+ }
  if(validSpot){
   const ySpot=yy(spot);
-  const line=node('line',{x1:44,y1:ySpot,x2:703,y2:ySpot,class:'fc-spot-line','data-spot-reference':'binance-mcp',
+  const line=node('line',{x1:110,y1:ySpot,x2:710,y2:ySpot,class:'fc-spot-line','data-spot-reference':'binance-mcp',
     'aria-label':`Spot actual ${choice.token} ${price(spot)} observado ${fc.generated_at||'N/D'}`});
   const tooltip=document.createElementNS(ns,'title');tooltip.textContent=`Spot Binance MCP: ${price(spot)} · Observado: ${fc.generated_at||'N/D'} · Referencia informativa; no modifica ondas.`;line.appendChild(tooltip);
   const labelY=ySpot>390?ySpot-10:ySpot+17;

@@ -82,12 +82,11 @@ const maxBuyCash=Math.max(0,Number(source.current.reference_cap ?? (cash-trading
 const grossBuyCash=Math.max(0,Number(source.current.gross_non_qf_cap ?? (cash-trading)));
 // Start from the effective published Master O2/O4 mix. This is a local UI
 // override only: nothing here writes Google Sheets or changes the Orders mode.
-const fiboMasterMix=mode==='compras'
- ? window.KairosO2Sequential.calculate(source.tokens,source.o2_levels,o2Weights,100,source.drift_band_pp,{
-    requireEligibility:true,eligibility:source.buy_eligibility,weightsByToken:source.buy_stage_weights
-   }).stageBudgets
+// Display the approved MASTER mix, never the post-eligibility stage budgets.
+// Eligibility changes deployed amounts, not the four published percentages.
+const fiboMasterPercentages=mode==='compras'
+ ? window.KairosPurchaseWeights.normalize(o2Weights)
  : null;
-const fiboMasterPercentages=mode==='compras'?window.KairosPurchaseWeights.normalize(fiboMasterMix):null;
 let fiboPercentages=fiboMasterPercentages?fiboMasterPercentages.slice():null;
 let fiboCustom=false;
 function showFiboControls(){
