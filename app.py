@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.9'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.10'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1958,7 +1958,7 @@ def _deployed_asset_status():
         'orders_filters': ('static/orders_inbox.js', ('function visible(', 'orders-venue', 'orders-tier', 'orders-side', 'orders-token', 'orders-level')), 
         'pivot_timeline_contract': ('pivot_timeline.py', ('def timeline_issues(', 'def require_timeline(')),
         'forecast_cycle_engine': ('static/forecast_cycle.js', ('function simulateWave(input)', 'pools')),
-        'pivot_mcp_status_protection': ('static/settings_master.js', ("current.cl_status!=='PROPUESTO'", "statusInput?.value!=='PROPUESTO'", "if(!['PROPUESTO','VALIDADO'].includes(rec[field]))continue")),
+        'pivot_mcp_status_protection': ('static/settings_master.js', ('function applyPivotCandidate(rec)', 'Candidate MCP data is informational only.', 'Never assign into the published', 'updatePivotTimeline();')) ,
         'virtual_flash_exclusion': ('structural_outliers.py', ('VIRTUAL_FLASH_WEEK_START', 'virtual_flash_cl')), 
         'config_admin_entry': ('app.py', ("@app.route('/settings')", "return redirect(url_for('admin_login'", "@app.route('/api/settings/data')")),
         'config_admin_login': ('templates/admin_login.html', ('login_csrf', 'settings_tab', 'Acceso administrativo')),
