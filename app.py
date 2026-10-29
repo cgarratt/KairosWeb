@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.11'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.12'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -346,8 +346,11 @@ def historical_cache_status():
                 'policy':'UTC_DAY_AND_MANUAL_REFRESH', 'is_spot':False}
 
 def _invalidate_historical_cache():
+    global _BTC_TREND_FETCH_DAY
     with _HIST_LOCK:
         _HIST_CACHE.clear()
+    with _BTC_TREND_LOCK:
+        _BTC_TREND_FETCH_DAY=None
 
 def call_mcp_resilient(env_name, tool, args=None):
     """Fresh MCP sessions each attempt; retry only gateway errors/timeouts.
@@ -509,24 +512,61 @@ def executive_risk_index(rows, physical_usdt):
             'model':'PRI v1 · proxy exposición 35% + concentración 35% + drift 30%; no VaR'}
 
 
+# BTC-only prefetch runs asynchronously: Portafolio must never wait for MCP.
+_BTC_TREND_LOCK = threading.Lock()
+_BTC_TREND_FETCH_DAY = None
+_BTC_TREND_ERROR = None
+
+def _btc_weekly_prefetch():
+    global _BTC_TREND_ERROR
+    try:
+        result=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
+            {'symbol':'BTCUSDT','interval':'1d','limit':210})
+        if not isinstance(result,dict) or result.get('status')=='DATA_ERROR':
+            raise ValueError('BTC daily history unavailable')
+        # Validate the source contract; do not silently accept other markets.
+        if result.get('source')!='Binance Spot' or result.get('interval')!='1d' or result.get('closed_only') is not True:
+            raise ValueError('BTC historical source not certified')
+        from wave_structure import full_utc_weeks
+        if len(full_utc_weeks(result.get('records') or []))<21:
+            raise ValueError('Fewer than 21 complete BTC UTC weeks')
+        _BTC_TREND_ERROR=None
+    except Exception as exc:
+        _BTC_TREND_ERROR=type(exc).__name__
+        app.logger.warning('BTC weekly prefetch unavailable: %s',type(exc).__name__)
+
+def start_btc_weekly_prefetch():
+    global _BTC_TREND_FETCH_DAY
+    today=datetime.now(timezone.utc).date().isoformat()
+    if _BTC_TREND_FETCH_DAY==today:return
+    with _BTC_TREND_LOCK:
+        if _BTC_TREND_FETCH_DAY==today:return
+        _BTC_TREND_FETCH_DAY=today
+        threading.Thread(target=_btc_weekly_prefetch,daemon=True,name='btc-weekly-prefetch').start()
+
 def cached_btc_weekly_regime():
-    """Never call MCP during portfolio rendering: only certified closed daily history cached."""
+    """BTC trend only from Binance Spot complete UTC weeks in the daily cache."""
     from wave_structure import full_utc_weeks
     with _HIST_LOCK:
-        series=[v for k,v in _HIST_CACHE.items() if 'BTC' in str(k) and isinstance(v,dict)
+        series=[v for k,v in _HIST_CACHE.items() if 'BTCUSDT' in str(k) and isinstance(v,dict)
                 and v.get('source')=='Binance Spot' and v.get('interval')=='1d'
                 and v.get('closed_only') is True and v.get('status')=='OK']
     for data in series:
         weeks=full_utc_weeks(data.get('records') or [])
-        if len(weeks)<20:continue
+        if len(weeks)<21:continue
         closes=[float(w['close']) for w in weeks]
         last=closes[-1]; sma20=sum(closes[-20:])/20
-        prev=sum(closes[-21:-1])/20 if len(closes)>=21 else None
-        if prev is None:continue
-        if last>sma20*1.02 and sma20>prev:return {'regime':'ALCISTA','btc_close':last,'sma20':sma20,'week':weeks[-1]['week_end']}
-        if last<sma20*.98 and sma20<prev:return {'regime':'BAJISTA','btc_close':last,'sma20':sma20,'week':weeks[-1]['week_end']}
-        return {'regime':'LATERAL','btc_close':last,'sma20':sma20,'week':weeks[-1]['week_end']}
-    return {'regime':'N/D','reason':'Se requieren 21 cierres semanales BTC completos en caché; abrir Compras/Forecast para cargar histórico'}
+        prev=sum(closes[-21:-1])/20
+        if last>sma20*1.02 and sma20>prev:regime='ALCISTA'
+        elif last<sma20*.98 and sma20<prev:regime='BAJISTA'
+        else:regime='LATERAL'
+        return {'regime':regime,'btc_close':last,'sma20':sma20,'week':weeks[-1]['week_end']}
+    return {'regime':'N/D','reason':'Histórico BTC 1W pendiente o insuficiente'}
+
+@app.route('/api/portfolio/btc-trend')
+def portfolio_btc_trend_status():
+    start_btc_weekly_prefetch()
+    return jsonify(cached_btc_weekly_regime())
 
 
 def historical_bsi(prices):
@@ -1278,6 +1318,7 @@ def integral_portfolio_page():
         btc_reference_price,btc_total=live['btc_usdt_spot'],live['total_btc_equivalent']
         bsi_archive=live['bsi_historical']
         pri=executive_risk_index(candidate_rows,live['usdt_total'])
+        start_btc_weekly_prefetch()
         market_trend=cached_btc_weekly_regime()
     except Exception as exc:
         origin='BINANCE_SPOT_MCP' if stage=='BINANCE_SPOT_MCP' else 'PORTFOLIO_CALCULATION'

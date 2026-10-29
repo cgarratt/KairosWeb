@@ -111,6 +111,22 @@
 .port-homologation span{font-size:11px;color:var(--port-sub)}
 .port-archive-label{display:inline-flex;align-items:center;border:1px solid #b57f37;color:#94651a;border-radius:999px;font-size:10px;font-weight:800;padding:4px 9px;letter-spacing:.03em}
 :root[data-theme="dark"] .port-archive-label{color:#ffd387;border-color:#93682f}
+
+/* v3.0.12 executive risk/trend panel */
+.ki-title{font-size:14px;font-weight:800;color:var(--port-ink);text-align:center}
+.ki-help{font-size:11px;color:var(--port-sub)}
+.ki-gauge{width:min(100%,240px);margin:2px auto 0}.ki-gauge svg{display:block;width:100%;height:auto}
+.ki-status{color:var(--ki-accent);font-size:13px;font-weight:800;text-align:center;letter-spacing:.02em}
+.ki-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:13px;padding-top:12px;border-top:1px solid var(--port-border)}
+.ki-metrics div{text-align:center;min-width:0}.ki-metrics small{display:block;color:var(--port-sub);font-size:10px}.ki-metrics strong{font-size:14px;color:var(--port-ink);font-variant-numeric:tabular-nums}
+.ki-details{font-size:11px;color:var(--port-sub);margin-top:12px}.ki-details summary{cursor:pointer}.ki-details p{margin:6px 0}
+.ki-trend{text-align:center;padding:19px 0 13px}.ki-trend-icon{font-size:66px;font-weight:800;line-height:1.1}.ki-trend-label{font-size:24px;font-weight:800;margin-top:4px}.ki-trend-week{font-size:11px;color:var(--port-sub);margin-top:12px}
+.ki-trend[data-regime="ALCISTA"] .ki-trend-icon,.ki-trend[data-regime="ALCISTA"] .ki-trend-label{color:#24a77d}
+.ki-trend[data-regime="BAJISTA"] .ki-trend-icon,.ki-trend[data-regime="BAJISTA"] .ki-trend-label{color:#dc5965}
+.ki-trend[data-regime="LATERAL"] .ki-trend-icon,.ki-trend[data-regime="LATERAL"] .ki-trend-label{color:#e8a638}
+.ki-trend[data-regime="N/D"] .ki-trend-icon,.ki-trend[data-regime="N/D"] .ki-trend-label{color:var(--port-sub)}
+.ki-empty{text-align:center;font-size:32px;font-weight:800;margin:22px 0}
+
 </style>
 {% endblock %}
 {% block content %}
@@ -143,17 +159,51 @@
  <div class="port-kpi"><small>Cripto invertido</small><strong data-private="money">{{ '${:,.2f}'.format(spot.total-spot.liquidity-spot.trading) if spot else 'N/D' }}</strong><span>Manga cripto · {{ '%.2f%%'|format((spot.total-spot.liquidity-spot.trading)/spot.total*100) if spot and spot.total else 'N/D' }} del patrimonio</span></div>
 </div>
 <div class="port-pair" data-layout-region="risk-trend">
- <article class="port-card" data-indicator="pri-v1"><h3>PRI · Portfolio Risk Index</h3>
- {% if pri %}<div class="port-risk-value" data-private="money">{{ '%.1f'|format(pri.score) }} / 100 · {{ pri.label }}</div>
- <p class="sub">Exposición cripto {{ pri.exposure_pct }}% · Concentración máxima {{ pri.concentration_pct }}% · Desviación total {{ pri.drift_pct }} pp.</p>
- <p class="port-foot">{{ pri.model }}. Indicador descriptivo, no señal de trading ni riesgo probabilístico.</p>
- {% else %}<p>PRI N/D · requiere valoración Spot completa.</p>{% endif %}</article>
- <article class="port-card" data-indicator="market-trend"><h3>Tendencia de mercado · BTC 1W</h3>
- <div class="port-risk-value">{{ market_trend.regime }}</div>
- {% if market_trend.week %}<p class="sub">Cierre semanal UTC {{ market_trend.week }} · BTC {{ '${:,.2f}'.format(market_trend.btc_close) }} · SMA20 {{ '${:,.2f}'.format(market_trend.sma20) }}</p>
- {% else %}<p class="sub">{{ market_trend.reason or 'Histórico semanal no certificado' }}</p>{% endif %}
- <p class="port-foot">BTC semanal cerrado, SMA20 y pendiente; solo información. No sustituye BSI ni habilita órdenes.</p></article>
+ <article class="port-card kairos-indicator" data-indicator="pri-v1">
+  <div class="ki-title">Portfolio Risk Index <span class="ki-help" title="Indicador descriptivo; no es VaR ni señal de trading">ⓘ</span></div>
+  {% if pri %}
+  {% set risk_color = '#dc5965' if pri.score >= 70 else '#e8a638' if pri.score >= 40 else '#24a77d' %}
+  <div class="ki-gauge" role="img" aria-label="PRI {{ pri.score }} de 100, {{ pri.label }}">
+   <svg viewBox="0 0 220 128" aria-hidden="true"><path d="M 25 112 A 85 85 0 0 1 195 112" pathLength="100" fill="none" stroke="var(--port-border)" stroke-width="15" stroke-linecap="round"/><path d="M 25 112 A 85 85 0 0 1 195 112" pathLength="100" fill="none" stroke="{{ risk_color }}" stroke-width="15" stroke-linecap="round" stroke-dasharray="{{ pri.score }} 100"/><text x="110" y="94" text-anchor="middle" font-size="36" font-weight="800" fill="var(--port-ink)">{{ '%.1f'|format(pri.score) }}</text><text x="110" y="113" text-anchor="middle" font-size="12" fill="var(--port-sub)">de 100</text></svg>
+  </div>
+  <div class="ki-status" style="--ki-accent:{{ risk_color }}">{{ 'RIESGO ' ~ pri.label|upper }}</div>
+  <div class="ki-metrics"><div><small>Exposición</small><strong>{{ pri.exposure_pct }}%</strong></div><div><small>Concentración</small><strong>{{ pri.concentration_pct }}%</strong></div><div><small>Drift</small><strong>{{ pri.drift_pct }} pp</strong></div></div>
+  <details class="ki-details"><summary>Metodología</summary><p>{{ pri.model }}. No representa probabilidad de pérdida.</p></details>
+  {% else %}<div class="ki-empty">N/D</div><p class="sub">Se requiere valoración Spot completa</p>{% endif %}
+ </article>
+ <article class="port-card kairos-indicator" data-indicator="market-trend">
+  <div class="ki-title">Tendencia BTC · 1W</div>
+  <div id="btc-trend-display" class="ki-trend" data-regime="{{ market_trend.regime }}">
+   <div id="btc-trend-icon" class="ki-trend-icon" aria-hidden="true">{{ '↗' if market_trend.regime=='ALCISTA' else '↘' if market_trend.regime=='BAJISTA' else '→' if market_trend.regime=='LATERAL' else '—' }}</div>
+   <div id="btc-trend-label" class="ki-trend-label" role="status" aria-live="polite">{{ market_trend.regime }}</div>
+   <div id="btc-trend-week" class="ki-trend-week">{{ 'Cierre UTC ' ~ market_trend.week if market_trend.week else 'Consultando BTC semanal…' }}</div>
+  </div>
+  <details class="ki-details"><summary>Metodología</summary><p>Cierres semanales completos UTC, SMA20 y pendiente. Informativo; no sustituye BSI ni habilita órdenes.</p></details>
+ </article>
 </div>
+<script>
+(function(){
+  const panel=document.getElementById('btc-trend-display');
+  if(!panel || panel.dataset.regime!=='N/D')return;
+  let attempts=0;
+  async function refresh(){
+    if(document.hidden)return;
+    attempts++;
+    try{
+      const res=await fetch('{{ url_for("portfolio_btc_trend_status") }}',{credentials:'same-origin',cache:'no-store'});
+      if(!res.ok)return;
+      const data=await res.json();
+      if(!['ALCISTA','BAJISTA','LATERAL'].includes(data.regime))return;
+      panel.dataset.regime=data.regime;
+      document.getElementById('btc-trend-label').textContent=data.regime;
+      document.getElementById('btc-trend-icon').textContent=({'ALCISTA':'↗','BAJISTA':'↘','LATERAL':'→'})[data.regime];
+      document.getElementById('btc-trend-week').textContent='Cierre UTC '+data.week;
+    }catch(e){ /* N/D remains, never fabricate a trend */ }
+  }
+  refresh();
+  const timer=setInterval(()=>{if(panel.dataset.regime!=='N/D'||attempts>=12){clearInterval(timer);return;}refresh();},5000);
+})();
+</script>
 <!-- Fila 1: current capital by custody, current allocation 12 tokens + USDT -->
 <div class="port-pair" data-layout-row="1">
  <article class="port-card" data-capital-chart="donut" data-source="02_POSICIONES_03_LIQUIDEZ_BINANCE_SPOT">
