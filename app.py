@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.12'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.13'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -544,6 +544,34 @@ def start_btc_weekly_prefetch():
         _BTC_TREND_FETCH_DAY=today
         threading.Thread(target=_btc_weekly_prefetch,daemon=True,name='btc-weekly-prefetch').start()
 
+def _btc_weekly_chart(weeks):
+    """Confirmed 2L/2R weekly swing extremes, display-only; no Elliott mutation."""
+    if len(weeks)<7:return {'candles':[],'pivots':[]}
+    swings=[]
+    for i in range(2,len(weeks)-2):
+        w=weeks[i]
+        if all(w['high']>weeks[j]['high'] for j in range(i-2,i+3) if j!=i):
+            swings.append({'index':i,'kind':'H','price':float(w['high']),'date':w['high_date']})
+        if all(w['low']<weeks[j]['low'] for j in range(i-2,i+3) if j!=i):
+            swings.append({'index':i,'kind':'L','price':float(w['low']),'date':w['low_date']})
+    swings.sort(key=lambda x:x['index'])
+    alternating=[]
+    for swing in swings:
+        if alternating and swing['kind']==alternating[-1]['kind']:
+            previous=alternating[-1]
+            if (swing['kind']=='H' and swing['price']>previous['price']) or (swing['kind']=='L' and swing['price']<previous['price']):
+                alternating[-1]=swing
+        else:alternating.append(swing)
+    chosen=alternating[-3:]
+    if len(chosen)<3:return {'candles':[],'pivots':[],'reason':'Tres pivotes semanales no confirmados'}
+    # Keep enough candles to include all three confirmed pivots, capped for legibility.
+    start=max(0,min(chosen[0]['index']-2,len(weeks)-32))
+    visible=weeks[start:]
+    candles=[{'date':w['week_end'],'high':float(w['high']),'low':float(w['low']),
+              'close':float(w['close'])} for j,w in enumerate(weeks) if j>=start]
+    pivots=[{**v,'index':v['index']-start} for v in chosen]
+    return {'candles':candles,'pivots':pivots,'pivot_rule':'2L/2R · 1W UTC cerrado'}
+
 def cached_btc_weekly_regime():
     """BTC trend only from Binance Spot complete UTC weeks in the daily cache."""
     from wave_structure import full_utc_weeks
@@ -560,7 +588,7 @@ def cached_btc_weekly_regime():
         if last>sma20*1.02 and sma20>prev:regime='ALCISTA'
         elif last<sma20*.98 and sma20<prev:regime='BAJISTA'
         else:regime='LATERAL'
-        return {'regime':regime,'btc_close':last,'sma20':sma20,'week':weeks[-1]['week_end']}
+        return {'regime':regime,'btc_close':last,'sma20':sma20,'week':weeks[-1]['week_end'],**_btc_weekly_chart(weeks)}
     return {'regime':'N/D','reason':'Histórico BTC 1W pendiente o insuficiente'}
 
 @app.route('/api/portfolio/btc-trend')
