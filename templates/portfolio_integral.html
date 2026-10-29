@@ -142,6 +142,18 @@
  <div class="port-kpi"><small>Liquidez física</small><strong data-private="money">{{ '${:,.2f}'.format(spot.liquidity+spot.trading) if spot else 'N/D' }}</strong><span>QF incluido una sola vez</span></div>
  <div class="port-kpi"><small>Cripto invertido</small><strong data-private="money">{{ '${:,.2f}'.format(spot.total-spot.liquidity-spot.trading) if spot else 'N/D' }}</strong><span>Manga cripto · {{ '%.2f%%'|format((spot.total-spot.liquidity-spot.trading)/spot.total*100) if spot and spot.total else 'N/D' }} del patrimonio</span></div>
 </div>
+<div class="port-pair" data-layout-region="risk-trend">
+ <article class="port-card" data-indicator="pri-v1"><h3>PRI · Portfolio Risk Index</h3>
+ {% if pri %}<div class="port-risk-value" data-private="money">{{ '%.1f'|format(pri.score) }} / 100 · {{ pri.label }}</div>
+ <p class="sub">Exposición cripto {{ pri.exposure_pct }}% · Concentración máxima {{ pri.concentration_pct }}% · Desviación total {{ pri.drift_pct }} pp.</p>
+ <p class="port-foot">{{ pri.model }}. Indicador descriptivo, no señal de trading ni riesgo probabilístico.</p>
+ {% else %}<p>PRI N/D · requiere valoración Spot completa.</p>{% endif %}</article>
+ <article class="port-card" data-indicator="market-trend"><h3>Tendencia de mercado · BTC 1W</h3>
+ <div class="port-risk-value">{{ market_trend.regime }}</div>
+ {% if market_trend.week %}<p class="sub">Cierre semanal UTC {{ market_trend.week }} · BTC {{ '${:,.2f}'.format(market_trend.btc_close) }} · SMA20 {{ '${:,.2f}'.format(market_trend.sma20) }}</p>
+ {% else %}<p class="sub">{{ market_trend.reason or 'Histórico semanal no certificado' }}</p>{% endif %}
+ <p class="port-foot">BTC semanal cerrado, SMA20 y pendiente; solo información. No sustituye BSI ni habilita órdenes.</p></article>
+</div>
 <!-- Fila 1: current capital by custody, current allocation 12 tokens + USDT -->
 <div class="port-pair" data-layout-row="1">
  <article class="port-card" data-capital-chart="donut" data-source="02_POSICIONES_03_LIQUIDEZ_BINANCE_SPOT">
@@ -249,3 +261,5 @@
 </div>
 </div>
 {% endblock %}
+
+<style>.port-risk-value{font-size:clamp(22px,3vw,34px);font-weight:800;margin:12px 0;color:var(--port-text,#dce9ff)}</style>

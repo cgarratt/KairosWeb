@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.10'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.11'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -488,6 +488,46 @@ def custody_summary(prices):
         for key,qty in zip(sums,units):
             sums[key]+=float(qty)*price
     return sums
+
+def executive_risk_index(rows, physical_usdt):
+    """PRI v1: transparent 0-100 exposure proxy; not VaR or a forecast."""
+    crypto=sum(float(r['value']) for r in rows)
+    total=crypto+float(physical_usdt)
+    if total<=0 or crypto<=0 or len(rows)!=12:return None
+    weights=[float(r['value'])/crypto for r in rows]
+    targets=[float(r['target']) for r in rows]
+    liquidity_pct=100*float(physical_usdt)/total
+    concentration=max(weights)*100
+    drift=sum(abs(w-t) for w,t in zip(weights,targets))*50
+    exposure=100*crypto/total
+    # All components are dimensionless risk proxies with explicit caps.
+    score=round(min(100,0.35*exposure+0.35*min(100,concentration*3)+0.30*min(100,drift*4)),1)
+    return {'score':score,'exposure_pct':round(exposure,1),
+            'concentration_pct':round(concentration,1),'drift_pct':round(drift,1),
+            'liquidity_pct':round(liquidity_pct,1),
+            'label':'Elevado' if score>=70 else 'Moderado' if score>=40 else 'Bajo',
+            'model':'PRI v1 · proxy exposición 35% + concentración 35% + drift 30%; no VaR'}
+
+
+def cached_btc_weekly_regime():
+    """Never call MCP during portfolio rendering: only certified closed daily history cached."""
+    from wave_structure import full_utc_weeks
+    with _HIST_LOCK:
+        series=[v for k,v in _HIST_CACHE.items() if 'BTC' in str(k) and isinstance(v,dict)
+                and v.get('source')=='Binance Spot' and v.get('interval')=='1d'
+                and v.get('closed_only') is True and v.get('status')=='OK']
+    for data in series:
+        weeks=full_utc_weeks(data.get('records') or [])
+        if len(weeks)<20:continue
+        closes=[float(w['close']) for w in weeks]
+        last=closes[-1]; sma20=sum(closes[-20:])/20
+        prev=sum(closes[-21:-1])/20 if len(closes)>=21 else None
+        if prev is None:continue
+        if last>sma20*1.02 and sma20>prev:return {'regime':'ALCISTA','btc_close':last,'sma20':sma20,'week':weeks[-1]['week_end']}
+        if last<sma20*.98 and sma20<prev:return {'regime':'BAJISTA','btc_close':last,'sma20':sma20,'week':weeks[-1]['week_end']}
+        return {'regime':'LATERAL','btc_close':last,'sma20':sma20,'week':weeks[-1]['week_end']}
+    return {'regime':'N/D','reason':'Se requieren 21 cierres semanales BTC completos en caché; abrir Compras/Forecast para cargar histórico'}
+
 
 def historical_bsi(prices):
     # This is an archived 4H-synchronized MCP sample, NOT a live BSI signal.
@@ -1210,6 +1250,8 @@ def integral_portfolio_page():
     btc_total = None
     btc_reference_price = None
     bsi_archive = None
+    pri = None
+    market_trend = {'regime':'N/D'}
     portfolio_diagnostic = None
     attempt_utc = datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
     stage = 'BINANCE_SPOT_MCP'
@@ -1235,6 +1277,8 @@ def integral_portfolio_page():
         allocation,categories,portfolio_rows=candidate_allocation,candidate_categories,candidate_rows
         btc_reference_price,btc_total=live['btc_usdt_spot'],live['total_btc_equivalent']
         bsi_archive=live['bsi_historical']
+        pri=executive_risk_index(candidate_rows,live['usdt_total'])
+        market_trend=cached_btc_weekly_regime()
     except Exception as exc:
         origin='BINANCE_SPOT_MCP' if stage=='BINANCE_SPOT_MCP' else 'PORTFOLIO_CALCULATION'
         info=diagnostic_error(exc,'portfolio') if stage=='BINANCE_SPOT_MCP' else None
@@ -1254,7 +1298,7 @@ def integral_portfolio_page():
                            spot=spot_breakdown, spot_observed=spot_observed, pnl_report=pnl_report,
                            allocation=allocation, categories=categories, portfolio_rows=portfolio_rows,
                            btc_total=btc_total, btc_reference_price=btc_reference_price,
-                           bsi_archive=bsi_archive, portfolio_diagnostic=portfolio_diagnostic,
+                           bsi_archive=bsi_archive, pri=pri, market_trend=market_trend, portfolio_diagnostic=portfolio_diagnostic,
                            homologation=g.kairos_state.get('homologation'))
 
 def _cycle_order_allowed(side, stage):
