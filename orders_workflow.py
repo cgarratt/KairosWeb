@@ -82,16 +82,28 @@ def latest_orders(events):
     return list(reversed(list(state.values())))
 
 
-def validate_transition(action, data, old=None, others=(), existing_exchange=()):
+def validate_transition(action, data, old=None, others=(), existing_exchange=(), *, channel="GPT", image_verified=False, prompt_override=False, prompt_instruction=""):
     """Pure validation, no Sheets or network effects."""
     action=str(action or '').upper().strip()
     if action not in STATES:raise WorkflowError('INVALID_TRANSITION','Estado de orden no admitido')
     if old is None and action!='PROPUESTA':
         raise WorkflowError('INVALID_TRANSITION','Primero registra la propuesta')
-    if old and ((old['estado']=='EJECUTADA') or (old['estado'] in ('PROPUESTA','NO_APLICA') and action not in ('NO_APLICA','CONFIRMADA','PARCIAL','EJECUTADA'))
-                or (old['estado']=='CONFIRMADA' and action not in ('PARCIAL','EJECUTADA'))
-                or (old['estado']=='PARCIAL' and action not in ('PARCIAL','EJECUTADA'))):
-        raise WorkflowError('INVALID_TRANSITION','Transición no autorizada')
+    if prompt_override:
+        if channel!='GPT' or not old:
+            raise WorkflowError('INVALID_TRANSITION','La excepción por prompt solo está disponible en KairosGPT para órdenes existentes')
+        instruction=text(prompt_instruction,'Instrucción explícita del usuario',350,True)
+        item={k:old.get(k) for k in HEADERS}
+        item.update(estado=action,observaciones=text(('PROMPT EXPLÍCITO: '+instruction),'Auditoría',500,True))
+        return item  # State correction only; preserve every receipt/cash/unit field.
+    if old:
+        permitted=(old['estado']=='NO_APLICA' and action=='PROPUESTA')
+        permitted|=(old['estado']=='PROPUESTA' and action=='CONFIRMADA' and channel=='GPT' and image_verified is True)
+        permitted|=(old['estado']=='CONFIRMADA' and action=='EJECUTADA' and channel=='WEB')
+        # An effective NO_APLICA proposal may be reaffirmed without changing its underlying state.
+        permitted|=(old['estado']=='PROPUESTA' and action=='PROPUESTA' and channel=='WEB')
+        if not permitted:raise WorkflowError('INVALID_TRANSITION','Solo No aplica → Propuesta; Propuesta → Confirmada con imagen en GPT; Confirmada → Ejecutada en Web')
+        if action=='PROPUESTA':
+            return dict(old,estado='PROPUESTA')
     if action=='PROPUESTA':
         token=text(data.get('token'),'Token',20,True).upper()
         side=text(data.get('side'),'Lado',8,True).upper()
@@ -129,6 +141,16 @@ def validate_transition(action, data, old=None, others=(), existing_exchange=())
         item['evidencia']=text(data.get('evidence'),'Evidencia de orden colocada',500,True)
         item['conciliacion']='PENDIENTE_FILL'
     elif action in ('EJECUTADA','PARCIAL'):
+        if channel=='WEB':
+            if (item['venue'],str(item.get('exchange_order_id') or '')) in existing_exchange:
+                raise WorkflowError('ALREADY_RECONCILED','Esta transacción ya está conciliada; no registrarla de nuevo')
+            eid=text(data.get('exchange_order_id'),'ID de orden del exchange',120,True)
+            if not _ID.fullmatch(eid):raise WorkflowError('INVALID_EXCHANGE_ID','ID de orden inválido')
+            if (item['venue'],eid) in existing_exchange or any(o['venue']==item['venue'] and str(o.get('exchange_order_id'))==eid and o['kairos_order_id']!=old['kairos_order_id'] for o in others):
+                raise WorkflowError('DUPLICATE_EXCHANGE_ORDER','El ID ya pertenece a otra transacción')
+            item['exchange_order_id']=eid
+            item['unidades_previstas']=number(data.get('planned_units'),'Unidades de la orden',positive=True)
+            item['importe_previsto']=number(data.get('planned_usdt'),'Importe de la orden',positive=True)
         if old['estado'] in ('PROPUESTA','NO_APLICA'):
             item['unidades_previstas']=number(data.get('planned_units'),'Unidades de la orden',positive=True)
             item['importe_previsto']=number(data.get('planned_usdt'),'Importe de la orden',positive=True)
@@ -231,12 +253,11 @@ def write_event(data, *, expected_snapshot_id):
         latest=latest_orders(events)
         key=text(data.get('kairos_order_id'),'ID Kairos',85)
         old=next((r for r in latest if r['kairos_order_id']==key),None) if key else None
-        if old is None and (data.get('_web_transition') or str(data.get('action') or '').upper() in ('PROPUESTA','CONFIRMAR_RECOMENDACION','EJECUTAR_RECOMENDACION')):key='KORD-'+uuid.uuid4().hex[:16]
-        elif old is None:raise WorkflowError('UNKNOWN_ORDER','Primero registra la propuesta')
+        if old is None:
+            if key or data.get('action')!='PROPUESTA':raise WorkflowError('UNKNOWN_ORDER','Solo una orden No aplica puede reabrirse como Propuesta')
+            key='KORD-'+uuid.uuid4().hex[:16]
         if old and not re.fullmatch(r'O(?:2|4)C[1-4]' if old['lado']=='BUY' else r'O(?:3|5)V[1-4]',old['tramo']):
             raise WorkflowError('OUT_OF_SCOPE','Solo órdenes del ciclo O2/O4 BUY y O3/O5 SELL')
-        if data.get('_web_confirmed_only') and (not old or old['estado']!='CONFIRMADA' or data.get('action')!='EJECUTADA'):
-            raise WorkflowError('INVALID_TRANSITION','En Web solo se permite CONFIRMADA → EJECUTADA')
         expected_revision=data.get('expected_revision')
         if old and (str(expected_revision)!=str(old['revision'])):
             raise WorkflowError('REVISION_CONFLICT','La orden cambió; actualiza la página')
@@ -246,30 +267,15 @@ def write_event(data, *, expected_snapshot_id):
         ledger=_api('GET','/values:batchGet',params=[('ranges',"'05_ORDENES'!A4:P250"),('valueRenderOption','UNFORMATTED_VALUE')])
         for r in ledger.get('valueRanges',[{}])[0].get('values',[])[1:]:
             if len(r)>1 and r[0] and r[1]:existing.append((str(r[0]),str(r[1])))
-        # One-click recommendation confirmation writes proposal and confirmation
-        # together in a single Sheets batch, never as two separate requests.
         initial_event=None
         confirmed_event=None
-        if data.get('_web_transition') and old is None:
+        if old is None:
             if any(r['token']==data.get('token') and r['venue']==data.get('venue') and r['lado']==data.get('side') and r['tramo']==data.get('stage') for r in latest):
-                raise WorkflowError('REVISION_CONFLICT','La propuesta ya fue registrada; recarga la tabla')
-            proposed=validate_transition('PROPUESTA',data,None,latest,existing)
-            initial_event=dict(proposed,event_id='KEVT-'+uuid.uuid4().hex,kairos_order_id=key,revision=1)
+                raise WorkflowError('REVISION_CONFLICT','La orden ya existe; recarga antes de editar')
+            proposed=validate_transition('PROPUESTA',data,channel='WEB')
+            initial_event=dict(proposed,estado='NO_APLICA',event_id='KEVT-'+uuid.uuid4().hex,kairos_order_id=key,revision=1)
             old=dict(initial_event)
-        if action in ('CONFIRMAR_RECOMENDACION','EJECUTAR_RECOMENDACION'):
-            if old is not None:raise WorkflowError('INVALID_TRANSITION','Orden ya registrada')
-            proposed=validate_transition('PROPUESTA',data,None,latest,existing)
-            initial_event=dict(proposed,event_id='KEVT-'+uuid.uuid4().hex,
-                               kairos_order_id=key,revision=1)
-            fake_old=dict(proposed,kairos_order_id=key,revision=1)
-            confirmed=validate_transition('CONFIRMADA',data,fake_old,latest,existing)
-            if action=='EJECUTAR_RECOMENDACION':
-                confirmed_event=dict(confirmed,event_id='KEVT-'+uuid.uuid4().hex,
-                                     kairos_order_id=key,revision=2)
-                validated=validate_transition('EJECUTADA',data,confirmed_event,latest,existing)
-            else:validated=confirmed
-        else:
-            validated=validate_transition(action,data,old,latest,existing)
+        validated=validate_transition(action,data,old,latest,existing,channel='WEB')
         now=datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
         if initial_event:initial_event.update(actualizado_utc=now,snapshot_referencia=state['control']['snapshot_id'])
         if confirmed_event:confirmed_event.update(actualizado_utc=now,snapshot_referencia=state['control']['snapshot_id'])

@@ -6,15 +6,15 @@
 document.addEventListener('DOMContentLoaded',()=>{
  const dialog=document.getElementById('order-manager'),form=document.getElementById('order-manager-form'),page=document.getElementById('orders-inbox');if(!dialog||!form)return;let selected=null;
  const field=n=>form.elements.namedItem(n),feedback=document.getElementById('order-manager-feedback');
- function toggle(){const action=field('action').value,fill=['PARCIAL','EJECUTADA'].includes(action),active=action!=='NO_APLICA';document.getElementById('order-fill-fields').hidden=!fill;
+ function toggle(){const action=field('action').value,fill=['PARCIAL','EJECUTADA'].includes(action),active=action==='EJECUTADA';document.getElementById('order-fill-fields').hidden=!fill;
  for(const n of ['executed_units','executed_usdt']){field(n).required=fill;field(n).disabled=!fill;}
  for(const n of ['exchange_order_id','planned_units','planned_usdt','evidence']){field(n).required=active;field(n).disabled=!active;}}
  document.querySelectorAll('[data-order]').forEach(button=>button.addEventListener('click',()=>{
- selected=JSON.parse(button.dataset.order);if(selected.estado==='EJECUTADA')return;form.reset();feedback.textContent='';
+ selected=JSON.parse(button.dataset.order);if((selected.effective_status||selected.display_status||selected.estado)!=='NO_APLICA' && selected.estado!=='CONFIRMADA')return;form.reset();feedback.textContent='';
  const q=selected.quantity??selected.unidades_previstas??0,a=selected.usdt??selected.importe_previsto??0;
  field('planned_units').value=q;field('planned_usdt').value=a;field('executed_units').value='';field('executed_usdt').value='';field('exchange_order_id').value=selected.exchange_order_id||'';
- for(const option of field('action').options)option.disabled=['CONFIRMADA','PARCIAL'].includes(selected.estado)&&!['PARCIAL','EJECUTADA'].includes(option.value);
- field('action').value=['CONFIRMADA','PARCIAL'].includes(selected.estado)?'EJECUTADA':'CONFIRMADA';
+ for(const option of field('action').options)option.disabled=option.value!==(selected.estado==='CONFIRMADA'?'EJECUTADA':'PROPUESTA');
+ field('action').value=selected.estado==='CONFIRMADA'?'EJECUTADA':'PROPUESTA';
  document.getElementById('order-manager-summary').textContent=[selected.token,selected.stage||selected.tramo,selected.venue].join(' · ');toggle();dialog.showModal();}));
  field('action').addEventListener('change',toggle);document.getElementById('order-manager-cancel').addEventListener('click',()=>dialog.close());
  form.addEventListener('submit',async event=>{event.preventDefault();const submit=form.querySelector('[type="submit"]');submit.disabled=true;feedback.textContent='Guardando…';

@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.25'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.26'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -505,12 +505,20 @@ def executive_risk_index(rows, physical_usdt):
     exposure=100*crypto/total
     # All components are dimensionless risk proxies with explicit caps.
     score=round(min(100,0.35*exposure+0.35*min(100,concentration*3)+0.30*min(100,drift*4)),1)
-    components=sorted([(0.35*exposure,'la exposición a cripto',f'{exposure:.1f}%'),
-        (0.35*min(100,concentration*3),'la concentración en el token de mayor peso',f'{concentration:.1f}%'),
-        (0.30*min(100,drift*4),'la desviación frente a los pesos objetivo',f'{drift:.1f} pp')],reverse=True)
     label='elevado' if score>=70 else 'moderado' if score>=40 else 'bajo'
-    explanation=(f'El riesgo es {label} según el PRI. Los factores con mayor aporte son '
-        + ' y '.join(f'{name} ({value})' for _,name,value in components[:2])+'.')
+    largest=max(range(len(rows)),key=lambda i:weights[i])
+    over=max(range(len(rows)),key=lambda i:weights[i]-targets[i])
+    top=rows[largest]
+    explanation=(f'Riesgo {label}: exposición a cripto de {exposure:.1f}% (${crypto:,.2f}). '
+        f"{top['token']} concentra el {100*weights[largest]:.1f}% de la cartera cripto.")
+    excess=max(0.,(weights[over]-targets[over])*crypto)
+    if excess>0.005:
+        explanation+=(f" {rows[over]['token']} es el token más sobreponderado: "
+            f'{100*weights[over]:.1f}% frente a una meta de {100*targets[over]:.1f}%, '
+            f'un exceso referencial de ${excess:,.2f} '
+            f'({100*(weights[over]-targets[over]):.1f} pp).')
+    else:explanation+=' No hay tokens por encima de su peso objetivo.'
+    explanation+=f' La desviación agregada frente a metas es {drift:.1f} pp.'
     return {'explanation':explanation,'score':score,'exposure_pct':round(exposure,1),
             'concentration_pct':round(concentration,1),'drift_pct':round(drift,1),
             'liquidity_pct':round(liquidity_pct,1),
@@ -1530,9 +1538,10 @@ def manage_order_lifecycle():
     if not _cycle_order_allowed(body.get('lado') or body.get('side'),body.get('tramo') or body.get('stage')):
         return jsonify({'status':'INVALID','error_code':'OUT_OF_SCOPE',
                         'reason':'Órdenes solo admite BUY O2/O4 y SELL O3/O5.'}),400
-    if body.get('action') not in ('NO_APLICA','CONFIRMADA','PARCIAL','EJECUTADA'):
+    if body.get('action') not in ('PROPUESTA','EJECUTADA'):
         return jsonify({'status':'INVALID','reason':'Estado no permitido.'}),409
-    body.pop('_web_confirmed_only',None)
+    for key in ('prompt_override','prompt_instruction','image_verified','channel','_web_confirmed_only'):
+        body.pop(key,None)
     body['_web_transition'] = True
     from orders_workflow import write_event,WorkflowError
     try:

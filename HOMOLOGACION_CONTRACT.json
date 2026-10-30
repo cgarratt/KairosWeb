@@ -1,40 +1,27 @@
 {
   "versions": {
-    "KairosGPT": "1.3.13",
-    "KairosWeb": "3.0.25",
+    "KairosGPT": "1.3.15",
+    "KairosWeb": "3.0.26",
     "MASTER_schema": "5.0.0"
   },
-  "scope": "BALANCER_THRESHOLD_PHYSICAL_MINUS_QF",
+  "scope": "ESTADOS_POR_CANAL_Y_PRI_AMPLIADO",
   "master_mutated": false,
   "deployment_verified": false,
-  "browser_visual_tested": false,
+  "project_installation_verified": false,
   "financial_reconciliation_automatic": false,
-  "previous_release_tests_not_rerun": {
-    "conditional_sales_cases_passed": 9,
-    "btc_5l5r_cases_passed": 8,
-    "python_compilation": true,
-    "full_suite_rerun": false,
-    "browser_visual_tested": false
-  },
-  "btc_chart_pivot_radius": 5,
-  "shared_liquidity_module_sha256": "2a9575dd06901ef4dc76b6863a16a2b0f1f203c2fed2d3da2380175f380e1987",
-  "previous_ui_tests_not_rerun": {
-    "numeric_sort_checks_passed": 11,
-    "embedded_javascript_syntax": true,
-    "sorter_javascript_syntax": true,
-    "full_suite_rerun": false,
-    "browser_visual_tested": false
-  },
+  "web_actions": [
+    "NO_APLICA->PROPUESTA",
+    "CONFIRMADA->EJECUTADA"
+  ],
+  "gpt_image_confirmation_required": true,
+  "gpt_explicit_prompt_exception": true,
   "tests": {
-    "python_suite_passed": 90,
-    "full_suite_rerun": true,
-    "python_syntax": true,
-    "settings_javascript_syntax": true,
+    "web_python_passed": 140,
+    "gpt_python_passed": 153,
+    "javascript_checks_passed": 7,
+    "pure_validator_byte_identical": true,
+    "liquidity_module_byte_identical": true,
     "browser_visual_tested": false,
-    "live_master_writes_tested": false,
-    "gpt_liquidity_patch_byte_identical": true
-  },
-  "gpt_compat_patch": "compat/kairos_gpt/buy_weekly_policy.py",
-  "gpt_compat_patch_installed": false,
-  "balancer_threshold_formula": "(physical_liquidity - QF) / spot_portfolio_value"
+    "live_master_writes_tested": false
+  }
 }
