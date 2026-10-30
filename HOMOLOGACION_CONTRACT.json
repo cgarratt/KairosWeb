@@ -1,10 +1,10 @@
 {
   "versions": {
     "KairosGPT": "1.3.13",
-    "KairosWeb": "3.0.22",
+    "KairosWeb": "3.0.23",
     "MASTER_schema": "5.0.0"
   },
-  "scope": "UBICACION_INDICADOR_JUNTO_PRECIO_OBJETIVO",
+  "scope": "P1_P2_MASTER_PRIORITARIO_COMPRAS",
   "master_mutated": false,
   "deployment_verified": false,
   "browser_visual_tested": false,
@@ -26,9 +26,13 @@
     "browser_visual_tested": false
   },
   "tests": {
-    "template_javascript_syntax": true,
-    "indicator_in_price_cell_only": true,
-    "numeric_sort_keys_preserved": true,
+    "master_priority_cases_passed": 9,
+    "conditional_sales_cases_passed": 9,
+    "btc_pivot_cases_passed": 8,
+    "python_syntax": true,
+    "full_suite_rerun": false,
     "browser_visual_tested": false
-  }
+  },
+  "gpt_compat_patch": "compat/kairos_gpt/buy_weekly_policy.py",
+  "gpt_compat_patch_installed": false
 }

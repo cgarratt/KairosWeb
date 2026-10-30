@@ -5,7 +5,7 @@ from 07 are never recertified. Archived cycle data is exploratory only.
 """
 from wave_structure import (full_utc_weeks, weekly_o1_candidate, fib_grid,
                             post_o1_daily_low, weekly_wave_candidates, WaveStructureError)
-from buy_weekly_policy import select_p1_p2_buy_impulse
+from buy_weekly_policy import select_p1_p2_buy_impulse, published_buy_impulse
 from structural_outliers import virtual_flash_cl
 
 def resolve(token, published, archived, data):
@@ -60,6 +60,10 @@ def resolve_long_term_buy(token, published, data, archived=None):
     P2 can be proposed; no other 5L/5R/BOS gate is applied to simulations.
     Other modes (including ordinary Ventas and Forecast) remain unrestricted.
     """
+    authoritative=published_buy_impulse(published)
+    if authoritative is not None:
+        return {**authoritative,'history':{'status':'MASTER_PUBLICADO'},
+                'quote_currency':'USDC' if token=='HYPE' else 'USDT'}
     deny={'status':'MCP_DATA_ERROR','eligible':False,'levels':None,
           'reason':'FUENTE_MCP_NO_VERIFICADA','mode':None,'history':{'status':'N/D'}}
     if data.get('status')!='OK' or data.get('closed_only') is not True or data.get('interval')!='1d':return deny

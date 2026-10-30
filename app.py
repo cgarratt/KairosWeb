@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.22'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.23'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -907,6 +907,10 @@ def build_mode_payload(slug, d, observed):
         pub=g.kairos_state['wave_pivots']
         def weekly_reference(row):
             token=row['token']; source_token='PUMPFUN' if token=='PUMP' else token
+            if slug=='compras':
+                from buy_weekly_policy import published_buy_impulse
+                if published_buy_impulse(pub.get(token,{})) is not None:
+                    return token,resolve_long_term_buy(source_token,pub.get(token,{}),{})
             try:
                 if source_token=='HYPE':
                     data=call_mcp_resilient('HYPERLIQUID_MCP_URL','get_hype_spot_ohlcv',

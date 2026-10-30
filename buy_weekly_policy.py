@@ -157,6 +157,60 @@ def select_buy_impulse(weeks, published=None, *, left=5, right=5):
 
 
 
+def published_buy_impulse(published):
+    """MASTER is authoritative for dated simulation anchors, regardless of MCP.
+
+    None means an incomplete published pair, permitting MCP fallback. Invalid
+    published chronology or values block; market data never replaces them.
+    """
+    from pivot_timeline import timeline_issues
+    published=published or {}
+    def blocked(reason):
+        return dict(eligible=False,status='BLOQUEADO',reason=reason,
+                    anchors=None,levels=None,mode=None)
+    if timeline_issues(published):return blocked('CRONOLOGIA_INVALIDA')
+    waves=published.get('waves') or {}
+    states={'ESTIMADO':'PROPUESTO','CANDIDATO':'PROPUESTO',
+            'VALIDADO_TECNICAMENTE':'VALIDADO'}
+    lows=[]
+    def anchor(name,price,day,status):
+        if price is None or not day:return None
+        st=states.get(str(status or 'PROPUESTO').upper(),str(status or 'PROPUESTO').upper())
+        if st not in ('PROPUESTO','VALIDADO','CONFIRMADO'):
+            raise ValueError('Invalid published state')
+        dt=iso_date(day,name)
+        from datetime import timedelta
+        return dict(pivot=name,price=positive(price,name),date=dt.isoformat(),
+                    week_start=(dt-timedelta(days=dt.weekday())).isoformat(),
+                    status=st,source='07_PIVOTES_PUBLICADO')
+    try:
+        cl=anchor('CL',published.get('cycle_low'),published.get('cl_date'),published.get('cl_status'))
+        if cl:lows.append(cl)
+        for key in ('o2','o4'):
+            rec=waves.get(key) or {}
+            item=anchor(key.upper(),rec.get('price'),rec.get('date'),rec.get('status'))
+            if item:lows.append(item)
+        if not lows:return None
+        low=max(lows,key=lambda x:x['date'])
+        high_key={'CL':'o1','O2':'o3','O4':'o5'}[low['pivot']]
+        rec=waves.get(high_key) or {}
+        high=anchor(high_key.upper(),rec.get('price'),rec.get('date'),rec.get('status'))
+        if high is None:return None
+        if high['date']<=low['date'] or high['price']<=low['price']:
+            return blocked('IMPULSO_PUBLICADO_INVALIDO')
+        grid=fib_grid('O2',{'CL':low['price'],'O1':high['price']})
+        provisional=any(x['status']=='PROPUESTO' for x in (low,high))
+        return dict(eligible=True,status='PROPUESTO_SIMULACION' if provisional else 'SIMULACION_ESTRUCTURA_PUBLICADA',
+            simulation_only=True,operational_blocked=True,
+            reason='P1_P2_MASTER_PRIORITARIO',mode=_anchor_match(published,low,high),
+            anchors={'low':low,'high':high},
+            pivot_authority={k:{'pivot':v['pivot'],'status':v['status']} for k,v in [('low',low),('high',high)]},
+            levels=dict(zip(('ref382','c1','c2','ref786'),grid.values())),
+            requires_explicit_user_trade_approval=True)
+    except (ValueError,TypeError,KeyError,OverflowError):
+        return blocked('ESTRUCTURA_PUBLICADA_INVALIDA')
+
+
 def select_p1_p2_buy_impulse(weeks, published=None, archived=None):
     """Simulación: último P1 semanal documentado, incluso PROPUESTO;
     P2 es el mayor HIGH de semanas UTC completas posteriores a P1.
@@ -173,6 +227,8 @@ def select_p1_p2_buy_impulse(weeks, published=None, archived=None):
         return {'eligible':False,'status':'BLOQUEADO','reason':reason,
                 'anchors':None,'levels':None,'mode':None,**details}
     published=published or {};archived=archived or {}
+    authoritative=published_buy_impulse(published)
+    if authoritative is not None:return authoritative
     if not weeks:return deny('HISTORICO_SEMANAL_INSUFICIENTE')
     try:
         if any(iso_date(w['week_start'],'week')>=iso_date(w['week_end'],'end') for w in weeks):
@@ -208,7 +264,7 @@ def select_p1_p2_buy_impulse(weeks, published=None, archived=None):
             if w['week_start']<=p1['date']<=w['week_end']),None)
         if located is None:return deny('P1_FUERA_DE_HISTORICO_1W',p1=p1)
         w1=weeks[located]
-        if not isclose(float(w1['low']),p1['price'],rel_tol=1e-5,abs_tol=1e-12):
+        if p1['source']!='07_PIVOTES_PUBLICADO' and not isclose(float(w1['low']),p1['price'],rel_tol=1e-5,abs_tol=1e-12):
             return deny('P1_NO_COINCIDE_MINIMO_SEMANAL',p1=p1,observed_weekly_low=w1['low'])
         later=[w for w in weeks[located+1:] if float(w['high'])>p1['price']]
         if not later:return deny('P2_MAXIMO_POSTERIOR_ND',p1=p1)
