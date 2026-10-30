@@ -81,7 +81,10 @@ def test_render_only_no_aplica_or_confirmed_have_controls():
    html=app.render_template('ordenes.html',master='3.0.26',snapshot='test',managed_orders={'records':[]},inbox={'candidates':[item]},tier_by_token={'SOL':'T1'},error=None)
   assert ('data-order=' in html)==button
   assert 'span hidden class="order-traffic' not in html
-  assert 'name="action"><option value="PROPUESTA">' in html
+  assert html.count('id="orders-save-all"')==1
+  assert '>Cambiar estado</button>' not in html
+  assert 'Validar datos</button>' in html
+  if button:assert 'class="orders-manage orders-next-state"' in html
   assert '<option value="PARCIAL">Parcial</option></select></label>' not in html
 
 def test_pri_names_overweight_token_and_reference_amount():
