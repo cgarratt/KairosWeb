@@ -411,6 +411,7 @@
       if(Math.abs(vals.reduce((a,b)=>a+b,0)-1)>1e-8)throw Error(name+' debe sumar exactamente 100%.');
     }
     if(body.querySelector('[data-goal="reserve_caps.balancer"]')){l.balancer_cap=goalRead('reserve_caps.balancer');l.trading_cap=goalRead('reserve_caps.trading');}
+    l.balancer_min_o2_o4=goalRead('balancer_min_o2_o4_fraction');
     const base=state.sections.portfolio_goals.token_targets;
     const tokenTargets=base.map(r=>({token:r.token,tier:r.tier,target:goalRead('token.'+r.token)}));
     const tierTotals=Object.fromEntries(['T1','T2','T3'].map(tier=>[tier,tokenTargets.filter(r=>r.tier===tier).reduce((a,r)=>a+r.target,0)]));
@@ -446,6 +447,7 @@
       try{goalRead('reserve_caps.balancer');goalRead('reserve_caps.trading');}
       catch(_){valid=false;}
     }
+    try{goalRead('balancer_min_o2_o4_fraction');}catch(_){valid=false;}
     const panel=el('div','settings-total-panel goal-sums');summaries.forEach(x=>panel.append(el('span',x.ok?'valid-value':'invalid-value',x.label+': '+(Number.isFinite(x.total)?x.total.toFixed(2)+'%':'N/D')+' / 100%')));totals.append(panel);
     const m=body.querySelector('#goal-preview');
     if(state){
@@ -456,7 +458,7 @@
         const amount=Math.round((total*fraction+Number.EPSILON)*100)/100;
         const value=body.querySelector('#balancer-derived-amount');
         if(value)value.textContent=money(amount)+' de base, antes del tope Spot · '+(fraction*100).toFixed(2)+'% × '+money(total);
-        if(amount>free+1e-6){valid=false;totals.append(el('p','invalid-value','Reserva Balancer objetivo supera USDT fuera de QF; revisar porcentajes publicados.'));}
+        if(amount>free+1e-6)totals.append(el('p','settings-hint','La reserva efectiva queda limitada a la caja sin QF y al umbral O2/O4.'));
       }catch(_){valid=false;}
     }
     if(m&&valid&&state){
@@ -486,6 +488,7 @@
       row.append(goalInput('reserve_caps.balancer',g.reserve_caps.balancer,'Tope Balancer (% del portafolio)'),goalInput('reserve_caps.trading',g.reserve_caps.trading,'Tope Trading (% del portafolio)'));
       assignment.append(row,el('p','settings-hint','Límites independientes entre 0% y 100%; no tienen que sumar 100%. Se publican junto con los demás objetivos.'));
     }
+    assignment.append(goalInput('balancer_min_o2_o4_fraction',g.balancer_min_o2_o4_fraction,'Umbral mínimo O2/O4 (% del portafolio)'),el('p','settings-hint','Si el fondo O2/O4 libre normal, sin QF, es menor al umbral, Balancer recibe USD 0 y libera su reserva no comprometida. Se evalúa antes de liberar la reserva. Exactamente en el umbral se conserva la regla normal. Es independiente de los repartos que suman 100%.'));
     const cust=el('section','goal-card');cust.append(el('h4','','4. Custodia por Tier'),el('p','settings-hint','Cada Tier suma 100% entre HODL, Core y Exchange. Son metas, no transferencias.'));
     ['T1','T2','T3'].forEach(t=>{
       const row=el('div','goal-grid');row.append(el('strong','goal-tier',t));

@@ -189,9 +189,9 @@
     <div id="btc-trend-label" class="ki-trend-label" role="status" aria-live="polite">{{ market_trend.regime }}</div>
     <div id="btc-trend-week" class="ki-trend-week">{{ 'Cierre UTC ' ~ market_trend.week if market_trend.week else 'Consultando BTC semanal…' }}</div>
    </div>
-   <div class="ki-chart-wrap" id="btc-weekly-pivot-chart" role="img" aria-label="Rangos semanales BTC, cierres y últimos tres pivotes confirmados">
+   <div class="ki-chart-wrap" id="btc-weekly-pivot-chart" role="img" aria-label="Velas japonesas BTC 1W desde Cycle Low publicado y últimos tres pivotes confirmados">
     <div class="ki-chart-empty">Esperando pivotes semanales verificados…</div>
-    <div class="ki-chart-note">1W UTC · máximo/mínimo y cierre · pivotes 2L/2R</div>
+    <div class="ki-chart-note">1W UTC · velas OHLC desde CL · pivotes 2L/2R</div>
    </div>
   </div>
   <details class="ki-details"><summary>Metodología</summary><p>Cierres semanales completos UTC, SMA20 y pendiente. Informativo; no sustituye BSI ni habilita órdenes.</p></details>
@@ -205,7 +205,7 @@
   function draw(data){
     if(!chart)return;
     const cs=data.candles||[],ps=data.pivots||[];
-    if(cs.length<7||ps.length!==3){
+    if(cs.length<1){
       chart.querySelector('.ki-chart-empty').textContent=data.reason||'Tres pivotes semanales no confirmados';return;
     }
     const ns='http://www.w3.org/2000/svg';
@@ -215,7 +215,7 @@
     const lo=Math.min(...lows)*.96,hi=Math.max(...highs)*1.04;
     const x=i=>left+(i+.5)*(width-left-right)/cs.length;
     const y=v=>top+(hi-v)/(hi-lo)*(height-top-bottom);
-    const svg=el('svg',{viewBox:`0 0 ${width} ${height}`,role:'img','aria-label':'BTC 1W, rango máximo mínimo y cierre, tres pivotes confirmados'});
+    const svg=el('svg',{viewBox:`0 0 ${width} ${height}`,role:'img','aria-label':'BTC 1W, velas japonesas OHLC desde CL publicado y tres pivotes semanales confirmados'});
     for(let i=0;i<4;i++){
       const value=lo+(hi-lo)*i/3,yy=y(value);
       svg.appendChild(el('line',{x1:left,y1:yy,x2:width-right,y2:yy,stroke:'currentColor','stroke-opacity':'.13'}));
@@ -223,12 +223,17 @@
     }
     const cw=Math.max(2,Math.min(9,(width-left-right)/cs.length*.6));
     cs.forEach((c,i)=>{
-      const color='#5a9ef5';
-      svg.appendChild(el('line',{x1:x(i),x2:x(i),y1:y(c.high),y2:y(c.low),stroke:color,'stroke-width':1.5}));
-      svg.appendChild(el('line',{x1:x(i),x2:x(i)+cw/2,y1:y(c.close),y2:y(c.close),stroke:'#28b881','stroke-width':2}));
+      const color=c.close>=c.open?'#22bd86':'#e25d69';
+      const cx=x(i), bodyTop=Math.min(y(c.open),y(c.close));
+      const bodyHeight=Math.max(1.5,Math.abs(y(c.open)-y(c.close)));
+      svg.appendChild(el('line',{x1:cx,x2:cx,y1:y(c.high),y2:y(c.low),stroke:color,'stroke-width':1.25}));
+      svg.appendChild(el('rect',{x:cx-cw/2,y:bodyTop,width:cw,height:bodyHeight,fill:color,rx:.4}));
+      const tip=el('title');tip.textContent=`Semana ${c.week_start} UTC | O $${c.open.toFixed(2)} H $${c.high.toFixed(2)} L $${c.low.toFixed(2)} C $${c.close.toFixed(2)}`;svg.lastChild.appendChild(tip);
     });
-    const points=ps.map(p=>`${x(p.index)},${y(p.price)}`).join(' ');
-    svg.appendChild(el('polyline',{points,fill:'none',stroke:'#4b9cff','stroke-width':3,'stroke-linejoin':'round'}));
+    if(ps.length===3){
+      const points=ps.map(p=>`${x(p.index)},${y(p.price)}`).join(' ');
+      svg.appendChild(el('polyline',{points,fill:'none',stroke:'#4b9cff','stroke-width':3,'stroke-linejoin':'round'}));
+    }
     ps.forEach((p,i)=>{
       const px=x(p.index),py=y(p.price),color=p.kind==='H'?'#27c88c':'#f2646b';
       svg.appendChild(el('circle',{cx:px,cy:py,r:5,fill:color,stroke:'#fff','stroke-width':1.4}));
@@ -236,6 +241,7 @@
       label.textContent=`P${i+1} $${Math.round(p.price).toLocaleString('en-US')}`;svg.appendChild(label);
       const title=el('title');title.textContent=`${p.kind==='H'?'Máximo':'Mínimo'} ${p.date} · $${p.price.toFixed(2)}`;svg.appendChild(title);
     });
+    const cl=el('text',{x:left,y:height-6,fill:'currentColor','font-size':10,'fill-opacity':'.8'});cl.textContent='CL';svg.appendChild(cl);
     const old=chart.querySelector('svg');if(old)old.remove();
     const empty=chart.querySelector('.ki-chart-empty');if(empty)empty.remove();
     chart.insertBefore(svg,chart.firstChild);

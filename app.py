@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.13'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.18'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -544,9 +544,24 @@ def start_btc_weekly_prefetch():
         _BTC_TREND_FETCH_DAY=today
         threading.Thread(target=_btc_weekly_prefetch,daemon=True,name='btc-weekly-prefetch').start()
 
-def _btc_weekly_chart(weeks):
-    """Confirmed 2L/2R weekly swing extremes, display-only; no Elliott mutation."""
-    if len(weeks)<7:return {'candles':[],'pivots':[]}
+def _btc_weekly_chart(weeks, daily_records, published_cl_date):
+    """Chart from published BTC CL to last closed UTC week, with confirmed 2L/2R pivots.
+
+    The source of the CL is MASTER, not a candidate from the market provider.
+    No incomplete weeks, inferred OHLC, or automatic Elliott pivot edits.
+    """
+    from datetime import date, timedelta
+    if not published_cl_date:
+        return {'candles':[], 'pivots':[], 'reason':'BTC CL publicado no disponible'}
+    try:
+        cl_day=date.fromisoformat(str(published_cl_date)[:10])
+    except ValueError:
+        return {'candles':[], 'pivots':[], 'reason':'Fecha CL BTC inválida'}
+    cl_monday=(cl_day-timedelta(days=cl_day.weekday())).isoformat()
+    start=next((i for i,w in enumerate(weeks) if w['week_start']>=cl_monday),None)
+    if start is None:
+        return {'candles':[], 'pivots':[], 'reason':'Histórico 1W no cubre CL publicado'}
+    # Preserve the complete series for 2L/2R verification, even if the view starts at CL.
     swings=[]
     for i in range(2,len(weeks)-2):
         w=weeks[i]
@@ -558,21 +573,31 @@ def _btc_weekly_chart(weeks):
     alternating=[]
     for swing in swings:
         if alternating and swing['kind']==alternating[-1]['kind']:
-            previous=alternating[-1]
-            if (swing['kind']=='H' and swing['price']>previous['price']) or (swing['kind']=='L' and swing['price']<previous['price']):
+            prev=alternating[-1]
+            if (swing['kind']=='H' and swing['price']>prev['price']) or (swing['kind']=='L' and swing['price']<prev['price']):
                 alternating[-1]=swing
         else:alternating.append(swing)
-    chosen=alternating[-3:]
-    if len(chosen)<3:return {'candles':[],'pivots':[],'reason':'Tres pivotes semanales no confirmados'}
-    # Keep enough candles to include all three confirmed pivots, capped for legibility.
-    start=max(0,min(chosen[0]['index']-2,len(weeks)-32))
-    visible=weeks[start:]
-    candles=[{'date':w['week_end'],'high':float(w['high']),'low':float(w['low']),
-              'close':float(w['close'])} for j,w in enumerate(weeks) if j>=start]
-    pivots=[{**v,'index':v['index']-start} for v in chosen]
-    return {'candles':candles,'pivots':pivots,'pivot_rule':'2L/2R · 1W UTC cerrado'}
+    chosen=[p for p in alternating if p['index']>=start][-3:]
+    # Weekly open is Monday's daily open; never synthesize it from previous close.
+    daily_open={}
+    for rec in daily_records or []:
+        try:
+            day=date.fromisoformat(str(rec['open_utc'])[:10])
+            value=float(rec['open'])
+            if math.isfinite(value) and value>0:daily_open[day.isoformat()]=value
+        except (ValueError,TypeError,KeyError):continue
+    candles=[]
+    for w in weeks[start:]:
+        opening=daily_open.get(w['week_start'])
+        if opening is None or not w['low']<=opening<=w['high']:
+            return {'candles':[],'pivots':[], 'reason':'OHLC semanal incompleto: apertura no verificable'}
+        candles.append({'date':w['week_end'],'week_start':w['week_start'],'open':opening,
+                        'high':float(w['high']),'low':float(w['low']),'close':float(w['close'])})
+    return {'candles':candles,'pivots':[{**v,'index':v['index']-start} for v in chosen],
+            'pivot_rule':'2L/2R · 1W UTC cerrado','cl_week':cl_monday,
+            'reason':None if len(chosen)==3 else 'Menos de tres pivotes 2L/2R confirmados desde CL'}
 
-def cached_btc_weekly_regime():
+def cached_btc_weekly_regime(published_cl_date=None):
     """BTC trend only from Binance Spot complete UTC weeks in the daily cache."""
     from wave_structure import full_utc_weeks
     with _HIST_LOCK:
@@ -588,13 +613,13 @@ def cached_btc_weekly_regime():
         if last>sma20*1.02 and sma20>prev:regime='ALCISTA'
         elif last<sma20*.98 and sma20<prev:regime='BAJISTA'
         else:regime='LATERAL'
-        return {'regime':regime,'btc_close':last,'sma20':sma20,'week':weeks[-1]['week_end'],**_btc_weekly_chart(weeks)}
+        return {'regime':regime,'btc_close':last,'sma20':sma20,'week':weeks[-1]['week_end'],**_btc_weekly_chart(weeks,data.get('records') or [],published_cl_date)}
     return {'regime':'N/D','reason':'Histórico BTC 1W pendiente o insuficiente'}
 
 @app.route('/api/portfolio/btc-trend')
 def portfolio_btc_trend_status():
     start_btc_weekly_prefetch()
-    return jsonify(cached_btc_weekly_regime())
+    return jsonify(cached_btc_weekly_regime((g.kairos_state.get('wave_pivots',{}).get('BTC') or {}).get('cl_date')))
 
 
 def historical_bsi(prices):
@@ -904,7 +929,21 @@ def build_mode_payload(slug, d, observed):
         weekly_levels={token:(ctx.get('levels') or {}) for token,ctx in weekly_context.items()}
         weekly_histories={token:ctx.get('history',{'status':'N/D'}) for token,ctx in weekly_context.items()}
     if slug == 'compras':
-        return {'o2_histories':weekly_histories,'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
+        from orders_workflow import registered_orders, purchase_order_states
+        order_states=purchase_order_states(registered_orders())
+        from orders_inbox import zero_weight_purchase_states
+        order_states=zero_weight_purchase_states({'tokens':purchase_tokens,'weekly_context':weekly_context,'forecast_o2_allocation':o2_weights,'buy_stage_weights':{t:(fibo_allocations['o4'] if c.get('mode')=='O4' else o2_weights) for t,c in weekly_context.items()},'buy_order_states':order_states})
+        from order_classification import classify_buy_order
+        classes={}
+        for row in purchase_tokens:
+            token=row['token'];mode=weekly_context.get(token,{}).get('mode')
+            stage_weights=fibo_allocations['o4'] if mode=='O4' else o2_weights
+            prefix='O4' if mode=='O4' else 'O2'
+            classes[token]={prefix+'C'+str(j+1):classify_buy_order(spot=row['price'],
+                target=(weekly_levels.get(token) or {}).get(key),stage_pct=stage_weights[j],
+                state=order_states.get(token,{}).get(prefix+'C'+str(j+1),'PROPUESTA'))
+                for j,key in enumerate(('ref382','c1','c2','ref786'))}
+        return {'buy_order_classifications':classes,'buy_order_states':order_states,'o2_histories':weekly_histories,'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
             'kind':'compras', 'current':purchase_current, 'tokens':purchase_tokens,
             'o2_level_reference':'MCP_WEEKLY_PROPOSED_OR_VALIDATED_SIMULATION_ONLY',
             'forecast_o2_allocation':o2_weights, 'o2_levels':weekly_levels,
@@ -1347,7 +1386,7 @@ def integral_portfolio_page():
         bsi_archive=live['bsi_historical']
         pri=executive_risk_index(candidate_rows,live['usdt_total'])
         start_btc_weekly_prefetch()
-        market_trend=cached_btc_weekly_regime()
+        market_trend=cached_btc_weekly_regime((g.kairos_state.get('wave_pivots',{}).get('BTC') or {}).get('cl_date'))
     except Exception as exc:
         origin='BINANCE_SPOT_MCP' if stage=='BINANCE_SPOT_MCP' else 'PORTFOLIO_CALCULATION'
         info=diagnostic_error(exc,'portfolio') if stage=='BINANCE_SPOT_MCP' else None
@@ -1427,6 +1466,10 @@ def orders_inbox_page():
         inbox['candidates']=[x for x in inbox['candidates'] if _cycle_order_allowed(x.get('side'),x.get('stage'))]
         from orders_inbox import annotate_authorized_coverage
         annotate_authorized_coverage(inbox['candidates'],managed_orders.get('records',[]))
+        from orders_inbox import zero_weight_purchase_states
+        zero_weight_purchase_states(buy,managed_orders.get('records',[]))
+        from orders_inbox import classify_purchase_views
+        classify_purchase_views(buy,inbox['candidates'],managed_orders.get('records',[]))
         return render_template('ordenes.html',mode=mode,inbox=inbox,observed=observed,
                                snapshot=g.kairos_state['control']['snapshot_id'],master=APP_VERSION,error=None,
                                structural_note=structural_note,
@@ -1474,7 +1517,9 @@ def manage_order_lifecycle():
     if not _cycle_order_allowed(body.get('lado') or body.get('side'),body.get('tramo') or body.get('stage')):
         return jsonify({'status':'INVALID','error_code':'OUT_OF_SCOPE',
                         'reason':'Órdenes solo admite BUY O2/O4 y SELL O3/O5.'}),400
-    return jsonify({'status':'WRITE_DISABLED','reason':'Las ejecuciones se registran únicamente desde KairosGPT con evidencia y conciliación.'}),403
+    if body.get('action') != 'EJECUTADA' or not body.get('kairos_order_id'):
+        return jsonify({'status':'INVALID','error_code':'INVALID_TRANSITION','reason':'Solo CONFIRMADA → EJECUTADA en Web.'}),409
+    body['_web_confirmed_only'] = True
     from orders_workflow import write_event,WorkflowError
     try:
         saved=write_event(body,expected_snapshot_id=body.get('expected_snapshot_id'))

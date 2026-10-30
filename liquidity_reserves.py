@@ -180,6 +180,22 @@ def budgets_from_master(parameters, physical_usdt, qf_usdt, portfolio_total, **k
     allocation=allocation_from_master(parameters,physical_usdt,qf_usdt,
                                       portfolio_total=portfolio_total)
     result=calculate_budgets(physical_usdt,qf_usdt,balancer_allocated=allocation,**kwargs)
+    # Evaluate the NORMAL envelope, before releasing Balancer, so the rule
+    # cannot oscillate on successive reads. Confirmed commitments stay deducted.
+    threshold=balancer_purchase_threshold(parameters)
+    p=_amount(portfolio_total,'Valor del portafolio Spot')
+    if p<=0 or p<physical_usdt:raise LiquidityPolicyError('Portafolio Spot inválido')
+    baseline=result['weekly_uncommitted']
+    from decimal import Decimal
+    disabled=Decimal(str(baseline)) < Decimal(str(p))*Decimal(str(threshold))
+    result['balancer_liquidity_guard']={'threshold_fraction':threshold,
+        'baseline_o2_o4_usdt':baseline,'baseline_o2_o4_fraction':baseline/p,
+        'disabled':disabled,'reason':'O2_O4_BELOW_THRESHOLD' if disabled else 'THRESHOLD_MET'}
+    if disabled:
+        released=result['balancer_uncommitted']
+        result.update(balancer_allocated=0.,balancer_uncommitted=0.,balancer_max=0.,
+                      weekly_uncommitted=baseline+released,
+                      balancer_with_sales_conditional=0.)
     if caps is None:
         result['reserve_caps']=None
         return result
@@ -207,3 +223,16 @@ def budgets_from_master(parameters, physical_usdt, qf_usdt, portfolio_total, **k
         result['balancer_with_sales_conditional'],
         max(0.,bal_cap-_amount(kwargs.get('balancer_commitments',0.),'Compromisos Balancer')))
     return result
+
+
+BALANCER_O2_O4_MIN_KEY = 'BALANCER_MIN_O2_O4_PORTFOLIO_FRACTION'
+
+def balancer_purchase_threshold(parameters):
+    """Default explicitly approved by user; a present invalid row fails closed."""
+    record=parameters.get(BALANCER_O2_O4_MIN_KEY)
+    if record is None:return 0.10
+    if not isinstance(record,dict) or record.get('status')!='APROBADO':
+        raise LiquidityPolicyError('Umbral Balancer no aprobado')
+    value=_amount(record.get('value'),'Umbral mínimo O2/O4')
+    if value>1:raise LiquidityPolicyError('Umbral mínimo O2/O4: máximo 100%')
+    return value

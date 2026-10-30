@@ -1,0 +1,55 @@
+from unittest.mock import patch
+import pytest
+from orders_workflow import WorkflowError
+import app
+from orders_workflow import purchase_order_states, validate_transition
+
+def test_states_include_canonical_and_journal_without_balancer_leak():
+    book={'records':[{'lado':'BUY','token':'PUMP','tramo':'O2C2','estado':'CONFIRMADA'}, {'lado':'BUY','token':'SOL','tramo':'BALANCER','estado':'EJECUTADA'}], 'canonical_rows':[[],['Binance','id','LINK','BUY','LIMIT','O2C2',1,1,1,0,0,'FILLED']]}
+    states=purchase_order_states(book)
+    assert states['PUMP']['O2C2']=='CONFIRMADA'
+    assert states['LINK']['O2C2']=='FILLED'
+    assert 'O2C2' not in states['SOL']
+
+def test_proposed_to_confirmed_and_executed_requires_evidence():
+    p=validate_transition('PROPUESTA',dict(token='SOL',side='BUY',source='ESTRUCTURA',stage='O2C2',venue='Binance',planned_units=2,planned_usdt=20))
+    p.update(kairos_order_id='test-order',revision=1)
+    data=dict(exchange_order_id='12345',planned_units=2,planned_usdt=20,evidence='Comprobante',executed_units=2,executed_usdt=20,fee_units=.002,fee_quote=0)
+    confirmed=validate_transition('CONFIRMADA',data,p)
+    assert confirmed['conciliacion']=='PENDIENTE_FILL'
+    with pytest.raises(WorkflowError): validate_transition('EJECUTADA',data,p)
+    assert validate_transition('EJECUTADA',data,confirmed)['conciliacion']=='PENDIENTE_CONCILIACION'
+
+def test_endpoint_reaches_journal_without_balance_mutation():
+    with app.app.test_request_context('/api/orders/manage',method='POST',json=dict(side='BUY',stage='O2C2',expected_snapshot_id='test',action='EJECUTADA',kairos_order_id='test-order')):
+        with patch.object(app,'_same_origin',return_value=True),patch.object(app,'_admin_authorized',return_value=True),patch.object(app,'_csrf_ok',return_value=True),patch.dict('os.environ',{'KAIROS_GOOGLE_WRITER_JSON':'test'}),patch('orders_workflow.write_event',return_value={'status':'OK','balances_updated':False}) as writer:
+            response=app.manage_order_lifecycle()
+            assert response.json['status']=='OK'
+            writer.assert_called_once()
+
+def test_templates_parse():
+    for name in ('ordenes.html','trade_sim.html'):app.app.jinja_env.get_template(name)
+
+@pytest.mark.parametrize('action',['PROPUESTA','CONFIRMADA','CONFIRMAR_RECOMENDACION','EJECUTAR_RECOMENDACION'])
+def test_web_rejects_proposal_creation_and_confirmation(action):
+    with app.app.test_request_context('/api/orders/manage',method='POST',json=dict(side='BUY',stage='O2C2',action=action)):
+        with patch.object(app,'_same_origin',return_value=True),patch.object(app,'_admin_authorized',return_value=True),patch.object(app,'_csrf_ok',return_value=True),patch.dict('os.environ',{'KAIROS_GOOGLE_WRITER_JSON':'test'}),patch('orders_workflow.write_event') as writer:
+            response,status=app.manage_order_lifecycle()
+            assert status==409
+            writer.assert_not_called()
+
+def test_web_requires_authentication():
+    with app.app.test_request_context('/api/orders/manage',method='POST',json={}):
+        with patch.object(app,'_same_origin',return_value=True),patch.object(app,'_admin_authorized',return_value=False):
+            assert app.manage_order_lifecycle()[1]==403
+
+@pytest.mark.parametrize('old_status',['PROPUESTA','EJECUTADA'])
+def test_persisted_state_is_checked_before_any_write(old_status):
+    from orders_workflow import write_event, TAB, HEADERS, to_sheet_row
+    rec=validate_transition('PROPUESTA',dict(token='SOL',side='BUY',source='ESTRUCTURA',stage='O2C2',venue='Binance',planned_units=2,planned_usdt=20))
+    rec.update(kairos_order_id='test-order',event_id='event1',revision=1,estado=old_status)
+    response={'valueRanges':[{'values':[list(HEADERS),to_sheet_row(rec)]}]}
+    with patch('google_sheets_master.get_state',return_value={'control':{'snapshot_id':'test'}}),patch('kairos_sheets_features._sheet_ids',return_value={TAB:1}),patch('kairos_sheets_features._api',return_value=response) as api:
+        with pytest.raises(WorkflowError,match='CONFIRMADA'):
+            write_event(dict(kairos_order_id='test-order',action='EJECUTADA',_web_confirmed_only=True),expected_snapshot_id='test')
+        assert all(call.args[0]=='GET' for call in api.call_args_list)

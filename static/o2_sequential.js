@@ -84,7 +84,11 @@ function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
     // 12_PARAMETROS_KAIROS), with maximum fill capped at the target weight.
     // Includes units bought in earlier steps and values all positions at this
     // step's prices. Tokens missing Fib anchors never receive liquidity.
-    const permitted=tokens.map((_,i)=>prices[i][j]>0 && allowed[i] && drift[i].status==='INFRA');
+    const permitted=tokens.map((t,i)=>{
+      const stage=(policy.modes?.[t.token]==='O4'?'O4':'O2')+'C'+(j+1);
+      const state=policy.orderStates?.[t.token]?.[stage]||'PROPUESTA';
+      return prices[i][j]>0 && prices[i][j]<Number(t.price) && state==='PROPUESTA' && allowed[i] && drift[i].status==='INFRA';
+    });
     const gap0=permitted.map((yes,i)=>yes?Math.max(0,target[i]*crypto-values[i]):0);
     const g0=gap0.reduce((a,b)=>a+b,0);
     const targetShare=permitted.reduce((a,yes,i)=>a+(yes?target[i]:0),0);

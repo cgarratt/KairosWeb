@@ -493,10 +493,13 @@ def portfolio_goals_data(raw):
     from liquidity_reserves import derive_balancer_allocation, LiquidityPolicyError, reserve_caps_from_master
     try:
         reserve_caps_from_master({k:{'value':r[2],'status':r[5]} for k,r in params.items()})
-        assignment=derive_balancer_allocation(physical,physical-operating,liq['balancer']) if complete else 0.
+        assignment=min(round(physical*liq['balancer'],2),operating) if complete else 0.
     except LiquidityPolicyError as exc:
         raise SettingsError(str(exc)) from exc
-    return {'portfolio':{'crypto':crypto,'liquidity':liquidity},'tiers':tiers,
+    from liquidity_reserves import balancer_purchase_threshold
+    min_o2=balancer_purchase_threshold({k:{'value':r[2],'status':r[5]} for k,r in params.items()})
+    return {'balancer_min_o2_o4_fraction':min_o2,'balancer_min_o2_o4_published':'BALANCER_MIN_O2_O4_PORTFOLIO_FRACTION' in params,
+            'portfolio':{'crypto':crypto,'liquidity':liquidity},'tiers':tiers,
             'liquidity_mix':liq,'custody':custody,'liquidity_mix_published':complete,
             'token_targets':[{'token':r[0],'tier':r[2],'target':float(r[3])} for r in pos],
             'capital_historical_reference':capital,
@@ -547,6 +550,8 @@ def _goal_entries(entries):
         if not all(k in groups['liquidity'] for k in cap_keys):
             raise SettingsError('Se requieren ambos topes de reservas')
         for k in cap_keys:_goal_fraction(groups['liquidity'][k],k)
+    if 'balancer_min_o2_o4' in groups['liquidity']:
+        _goal_fraction(groups['liquidity']['balancer_min_o2_o4'],'Umbral mínimo O2/O4')
     expected={'BTC':'T1','ETH':'T1','SOL':'T1','LINK':'T1','HYPE':'T1',
               'HBAR':'T2','SUI':'T2','ONDO':'T2','PUMPFUN':'T2','PLUME':'T2',
               'VIRTUAL':'T3','PEPE':'T3'}
@@ -601,6 +606,23 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
                 if value!=_get(b,'parameters',row,2):
                     change('parameters',row,2,value)
                     change('parameters',row,7,'Aprobación administrativa KairosWeb · '+evidence.strip()[:95])
+        if 'balancer_min_o2_o4' in liquid_entry:
+            key='BALANCER_MIN_O2_O4_PORTFOLIO_FRACTION'
+            value=_goal_fraction(liquid_entry['balancer_min_o2_o4'],key)
+            try:row=_find_row(b,'parameters',key,column=1)
+            except SettingsError:
+                row=len(b[SHEETS['parameters']])
+                last_row=int(re.search(r'[A-Z]+(\d+)$',SHEETS['parameters']).group(1))
+                if row+4>last_row:raise SettingsError('Sin espacio para umbral Balancer')
+                metadata=['LIQUIDEZ',key,value,'number','fraction_portfolio','APROBADO',
+                          'BALANCER','KairosWeb Settings · '+evidence.strip()[:100],
+                          'Si O2/O4 libre normal sin QF / P < umbral: reserva Balancer 0. Sin cancelar compromisos.', 'ALTA']
+                for col,val in enumerate(metadata):change('parameters',row,col,val)
+            else:
+                if _get(b,'parameters',row,5)!='APROBADO':raise SettingsError('Umbral Balancer no aprobado')
+                if value!=_get(b,'parameters',row,2):
+                    change('parameters',row,2,value)
+                    change('parameters',row,7,'KairosWeb Settings · '+evidence.strip()[:100])
         # Publish the 12 explicitly approved weights. Never redistribute them.
         for token,row in positions.items():
             if abs(float(_get(b,'positions',row,3))-token_targets[token])>1e-11:
@@ -644,8 +666,8 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
         from liquidity_reserves import derive_balancer_allocation, LiquidityPolicyError
         physical=sum(_numeric(r[1],'USDT '+str(r[0])) for r in b[SHEETS['liquidity']][1:] if len(r)>2 and r[2] in ('OPERATIVO','TRADING_QF'))
         nonqf=sum(_numeric(r[1],'USDT '+str(r[0])) for r in b[SHEETS['liquidity']][1:] if len(r)>2 and r[2]=='OPERATIVO')
-        try:derive_balancer_allocation(physical,physical-nonqf,liq_mix['balancer'])
-        except LiquidityPolicyError as exc:raise SettingsError(str(exc)) from exc
+        if nonqf<0 or nonqf>physical:raise SettingsError('Liquidez QF inconsistente')
+        # Live reserve is capped by non-QF cash and may be disabled by threshold.
         # The four independent sums and 12-token totals were validated above;
         # parse_master then verifies all portfolio/accounting invariants.
     if category in ('units','targets','pivots'):
@@ -880,6 +902,8 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
     from liquidity_reserves import reserve_caps_from_master, liquidity_allocation, LiquidityPolicyError
     try:
         reserve_caps_from_master(state['parameters'])
+        from liquidity_reserves import balancer_purchase_threshold
+        balancer_purchase_threshold(state['parameters'])
         # All real funds must reconcile. No proposed reduction of QF creates cash.
         physical=state['snapshot']['physical_total_USDT']
         qf=state['snapshot']['trading_real_fixed_USDT']

@@ -88,7 +88,7 @@ def validate_transition(action, data, old=None, others=(), existing_exchange=())
     if action not in STATES:raise WorkflowError('INVALID_TRANSITION','Estado de orden no admitido')
     if old is None and action!='PROPUESTA':
         raise WorkflowError('INVALID_TRANSITION','Primero registra la propuesta')
-    if old and ((old['estado']=='EJECUTADA') or (old['estado']=='PROPUESTA' and action not in ('CONFIRMADA','EJECUTADA'))
+    if old and ((old['estado']=='EJECUTADA') or (old['estado']=='PROPUESTA' and action != 'CONFIRMADA')
                 or (old['estado']=='CONFIRMADA' and action not in ('PARCIAL','EJECUTADA'))
                 or (old['estado']=='PARCIAL' and action not in ('PARCIAL','EJECUTADA'))):
         raise WorkflowError('INVALID_TRANSITION','Transición no autorizada')
@@ -169,10 +169,8 @@ def validate_transition(action, data, old=None, others=(), existing_exchange=())
 
 
 def execution_display_status(item):
-    """Accredited execution requires canonical reconciliation; journal alone is evidence."""
-    if item.get('estado')=='EJECUTADA' and item.get('conciliacion')=='CONCILIADA_EN_05':return 'EJECUTADA'
-    if item.get('estado')=='PARCIAL':return 'PARCIAL'
-    return 'PROPUESTA'
+    """Workflow state is independent of financial reconciliation."""
+    return item.get('effective_status') or item.get('estado','PROPUESTA')
 
 
 def to_sheet_row(item):
@@ -199,7 +197,7 @@ def registered_orders():
     for rec in current:
         rec['conciliacion']=('CONCILIADA_EN_05' if rec['estado']=='EJECUTADA' and (rec['venue'],str(rec.get('exchange_order_id') or '')) in reconciled else rec['conciliacion'])
     for rec in current:rec['display_status']=execution_display_status(rec)
-    return {'records':current,'historical':historical,'ledger_present':have_tab,
+    return {'canonical_rows':ranges[-2].get('values',[]),'records':current,'historical':historical,'ledger_present':have_tab,
             'unreconciled':sum(r['estado'] in ('CONFIRMADA','PARCIAL','EJECUTADA') and r['conciliacion']!='CONCILIADA_EN_05' for r in current)}
 
 
@@ -230,6 +228,10 @@ def write_event(data, *, expected_snapshot_id):
         old=next((r for r in latest if r['kairos_order_id']==key),None) if key else None
         if old is None and str(data.get('action') or '').upper() in ('PROPUESTA','CONFIRMAR_RECOMENDACION','EJECUTAR_RECOMENDACION'):key='KORD-'+uuid.uuid4().hex[:16]
         elif old is None:raise WorkflowError('UNKNOWN_ORDER','Primero registra la propuesta')
+        if old and not re.fullmatch(r'O(?:2|4)C[1-4]' if old['lado']=='BUY' else r'O(?:3|5)V[1-4]',old['tramo']):
+            raise WorkflowError('OUT_OF_SCOPE','Solo órdenes del ciclo O2/O4 BUY y O3/O5 SELL')
+        if data.get('_web_confirmed_only') and (not old or old['estado']!='CONFIRMADA' or data.get('action')!='EJECUTADA'):
+            raise WorkflowError('INVALID_TRANSITION','En Web solo se permite CONFIRMADA → EJECUTADA')
         expected_revision=data.get('expected_revision')
         if old and (str(expected_revision)!=str(old['revision'])):
             raise WorkflowError('REVISION_CONFLICT','La orden cambió; actualiza la página')
@@ -299,3 +301,17 @@ def write_event(data, *, expected_snapshot_id):
         validated['display_status']=execution_display_status(validated)
         return {'status':'OK','order':validated,'balances_updated':False,
                 'requires_reconciliation':validated['estado'] in ('EJECUTADA','PARCIAL') and validated.get('conciliacion')!='CONCILIADA_EN_05','notice':'Registro de gestión únicamente. No modifica inventario, saldos, 05_ORDENES ni 06_FILLS; una ejecución requiere conciliación independiente.'}
+
+
+def purchase_order_states(book):
+    """Canonical and journal BUYs block another allocation for the same level."""
+    result={}
+    def block(token,stage,status):
+        token='PUMP' if token=='PUMPFUN' else token
+        if status!='PROPUESTA':result.setdefault(token,{})[stage]=status
+    for rec in book.get('records',[]):
+        if rec.get('lado')=='BUY':block(rec['token'],rec['tramo'],rec['estado'])
+    for rec in book.get('canonical_rows',[])[1:]:
+        if len(rec)>11 and rec[3]=='BUY' and str(rec[11]).upper() in ('FILLED','COMPLETED','OPEN','NEW','PENDIENTE','PENDIENT','PARCIAL','PARTIALLY_FILLED','CONFIRMADA'):
+            block(rec[2],rec[5],str(rec[11]).upper())
+    return result

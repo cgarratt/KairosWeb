@@ -1,4 +1,16 @@
-Release v3.0.13: Tendencia BTC 1W con flecha y minigráfico de rangos semanales cerrados, cierres y tres pivotes 2L/2R. Sin datos verificables muestra N/D. No modifica pivotes Elliott ni órdenes.
+# KairosWeb v3.0.18 · KairosGPT v1.3.13
+
+Ver RELEASE_NOTES_v3.0.18.md y HOMOLOGACION_ORDENES.md. Pendiente de instalar y desplegar.
+
+# KairosWeb v3.0.17
+
+Ver RELEASE_NOTES_v3.0.17.md. Umbral Balancer configurable, predeterminado 10%. Pendiente de desplegar y guardar el parámetro en MASTER desde Configuración.
+
+# KairosWeb v3.0.16
+
+Ver RELEASE_NOTES_v3.0.16.md. Paquete preparado; pendiente de despliegue.
+
+Release v3.0.14: Tendencia BTC 1W con flecha y minigráfico de rangos semanales cerrados, cierres y tres pivotes 2L/2R. Sin datos verificables muestra N/D. No modifica pivotes Elliott ni órdenes.
 # KairosWeb v3.0.8 — Objetivos por token y límites Tier
 
 Base: KairosWeb v3.0.6. Configuración > Objetivos de gestión incorpora los 12 pesos editables y valida 100% cripto y sumas exactas T1/T2/T3. La publicación auditada escribe los porcentajes aprobados en 02_POSICIONES sin redistribuirlos proporcionalmente. No cambia unidades ni caja.

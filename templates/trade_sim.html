@@ -127,6 +127,8 @@ function renderO2Fibonacci(sim){
   const total=sim.totalByToken[i];
   const pairs=prices[i].map((level,j)=>{
     const amount=amounts[i][j];
+    const stage=(source.weekly_context?.[t.token]?.mode==='O4'?'O4':'O2')+'C'+(j+1);
+    const orderClass=source.buy_order_classifications?.[t.token]?.[stage];
     const hasLevel=Number.isFinite(level)&&level>0;
     // Weight is computed after purchases in the selected tranche; show it
     // regardless of allocation, but color only when THIS token receives USDT.
@@ -139,7 +141,7 @@ function renderO2Fibonacci(sim){
     const explanation=semaphore.state==='none'
       ? (amount>0?'Sin valoración post-compra verificable':'Sin USDT asignado en este tramo: no se colorea')
       : `Compra hipotética ${dollar(amount)} · Peso post-compra ${weightText} · Objetivo ${(100*t.target).toFixed(2)}% · Desviación ${semaphore.driftPP.toFixed(2)} pp · Semáforo ${semaphore.state.toUpperCase()}. No es orden.`;
-    return `<td class="${css}" title="${explanation}">${fibPrice(level)}</td><td class="${css}" title="${explanation}">${weightText}</td><td class="${css}" title="${explanation}">${dollar(amount)}</td>`;
+    return `<td class="${css}" title="${explanation}">${fibPrice(level)}</td><td class="${css}" title="${explanation}">${weightText}</td><td class="${css}" title="${explanation}">${dollar(amount)}${orderClass?'<small>'+orderClass.indicator+' '+orderClass.effective_status.replaceAll('_',' ')+'</small>':''}</td>`;
   }).join('');
   const ctx=source.weekly_context?.[t.token]||{};
   const kind=ctx.eligible===true?((ctx.mode==='RETROCESO_ALCISTA'?'RETROCESO ALCISTA':ctx.mode)+(ctx.operational_blocked?' · PROPUESTO':'')):'BLOQUEADO';
@@ -176,7 +178,8 @@ if(mode==='compras'){
   const stagedPlan=window.KairosPurchaseWeights.waterfall(referenceCapacity,maxBuyCash,selectedMix);
   const sim=window.KairosO2Sequential.calculate(source.tokens,source.o2_levels,appliedWeights,stagedPlan.selectedBudget,source.drift_band_pp,{
     requireEligibility:true,eligibility:source.buy_eligibility,weightsByToken:appliedByToken,
-    stageBudgets:stagedPlan.stageBudgets});
+    stageBudgets:stagedPlan.stageBudgets,orderStates:source.buy_order_states,
+    modes:Object.fromEntries(Object.entries(source.weekly_context||{}).map(([t,c])=>[t,c.mode]))});
   allocated=sim.totalByToken;
   const sum=sim.spent;after=cash-sum;
    el('third-metric').textContent=dollar(trading);

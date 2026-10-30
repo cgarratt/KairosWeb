@@ -274,13 +274,15 @@ def staged_buy_candidates(buy, budget, proximity_pct=1.0):
         values=[units[i]*sim_prices[i] for i in range(len(tokens))]
         crypto=sum(values)
         planned=min(remaining,stage_budgets[j])
-        items=[{'target':targets[i] if px_all[i][j] is not None else 0.,
+        items=[{'target':targets[i] if (px_all[i][j] is not None and px_all[i][j]<(_finite_pos(t.get('price')) or 0) and buy.get('buy_order_states',{}).get(t['token'],{}).get(('O4' if buy.get('weekly_context',{}).get(t['token'],{}).get('mode')=='O4' else 'O2')+'C'+str(j+1),'PROPUESTA')=='PROPUESTA') else 0.,
                 'current_usdt':values[i]} for i in range(len(tokens))]
         spends=_buy_allocation(items,planned,crypto,buy.get('drift_band_pp',1.0))
         actually_spent=0.
         for i,t in enumerate(tokens):
             price=px_all[i][j];a=max(0.,spends[i]) if price else 0.
-            if not price or a<.005:continue
+            disabled=weights[i][j]==0
+            if not disabled and (not price or a<.005):continue
+            if disabled:a=0.
             token=t['token'];spot=_finite_pos(t.get('price'))
             ctx=buy.get('weekly_context',{}).get(token,{})
             phase=ctx.get('mode') or 'RETROCESO_ALCISTA'
@@ -288,7 +290,7 @@ def staged_buy_candidates(buy, budget, proximity_pct=1.0):
             # tranche cannot create a new BUY proposal, even if a stale
             # per-token budget or sequential simulator supplies a positive sum.
             if phase!='O4' and approved_o2[j]<=0:
-                continue
+                a=0.
             stage=f"O4C{j+1}" if phase=='O4' else f"O2C{j+1}" if phase=='O2' else f"C{j+1}"
             delta,proximity=_proximity('BUY',spot,price,proximity_pct)
             if token=='HYPE':
@@ -299,13 +301,15 @@ def staged_buy_candidates(buy, budget, proximity_pct=1.0):
                 'category':'ESTRUCTURA','side':'BUY','mode':'Compras',
                 'wave':phase,'stage':stage,'fib':FIB_NAMES[j],
                 'spot':spot,'limit':price,'distance_pct':delta,'quote_currency':'USDC' if token=='HYPE' else 'USDT',
-                'usdt':a,'quantity':a/price,'proximity':proximity,
+                'usdt':a,'quantity':a/price if price else 0.,'proximity':proximity,
                 'pivot_status':'PROPUESTO / PROVISIONAL' if ctx.get('operational_blocked') or ctx.get('status')=='PROPUESTO_SIMULACION' else 'VALIDADO / REVISAR MASTER',
-                'order_status':'PROPUESTA_NO_COLOCADA',
+                'order_status':'NO_APLICA' if disabled else 'PROPUESTA_NO_COLOCADA',
+                'policy_reason':'Asignación Fibo publicada: 0%' if disabled else None,
                 'source':'Compras · retroceso semanal','note':'Compra secuencial simulada; toque de precio no acredita fill',
                 'sizing_status':'SIMULADO',
             })
-            units[i]+=a/price;actually_spent+=a
+            if price:units[i]+=a/price
+            actually_spent+=a
         remaining=max(0.,remaining-actually_spent)
     return candidates,remaining
 
@@ -428,7 +432,7 @@ def build_order_inbox(d, buy_payload, balancer_payload, proximity_pct=1.0, wave_
     portfolio=portfolio_candidates(d,balancer_payload,buy_payload.get('drift_band_pp',1.0))
     combined=buys+technical_sells+portfolio
     for c in combined:
-        c['near_reference']=(c['category']=='ESTRUCTURA' and c['proximity']=='CERCA')
+        c['near_reference']=(c.get('order_status')!='NO_APLICA' and c['category']=='ESTRUCTURA' and c['proximity']=='CERCA')
         c['actionable_alert']=False  # fase 1 never executable, especially unsized SELL
         c['proposal_key']='|'.join((c['venue'],c['token'],c['category'],c['side'],c['mode'],c['stage'],
                                     f"{c['limit']:.12g}" if c['limit'] is not None else 'SIN_LIMIT'))
@@ -438,7 +442,7 @@ def build_order_inbox(d, buy_payload, balancer_payload, proximity_pct=1.0, wave_
     for row in d['rows']:
         token=row['token'];spot=_finite_pos(row.get('price'))
         future=[x for x in combined if x['token']==token and x['category']=='ESTRUCTURA' and
-                x['limit'] is not None and x['distance_pct'] is not None and x['distance_pct']>=0]
+                x.get('order_status')!='NO_APLICA' and x['limit'] is not None and x['distance_pct'] is not None and x['distance_pct']>=0]
         nearest=min(future,key=lambda x:x['distance_pct'],default=None)
         balance_fallback=next((x for x in portfolio if x['token']==token and
                                x['usdt'] is not None and x['usdt']>.005),None)
@@ -509,4 +513,50 @@ def annotate_authorized_coverage(candidates, managed_records):
         candidate['remaining_usdt']=max(0.,budget-credited)
         if credited>0:
             candidate['display_status']='EJECUTADA' if credited>=budget-0.01 else 'PARCIAL'
+    return candidates
+
+
+def zero_weight_purchase_states(buy, records=()):
+    """Effective proposal state only; preserve exchange commitments and audit trail."""
+    states={t:dict(v) for t,v in buy.get('buy_order_states',{}).items()}
+    defaults=buy.get('forecast_o2_allocation',[])
+    for token in [t['token'] for t in buy.get('tokens',[])]:
+        o4=buy.get('weekly_context',{}).get(token,{}).get('mode')=='O4'
+        weights=buy.get('buy_stage_weights',{}).get(token,[]) if o4 else defaults
+        if len(weights)!=4:continue
+        for j,value in enumerate(weights):
+            stage=('O4' if o4 else 'O2')+'C'+str(j+1)
+            if float(value)==0 and states.get(token,{}).get(stage,'PROPUESTA')=='PROPUESTA':
+                states.setdefault(token,{})[stage]='NO_APLICA'
+    for rec in records:
+        rec['effective_status']=rec.get('estado')
+        if rec.get('lado')=='BUY' and rec.get('estado')=='PROPUESTA' and states.get(rec.get('token'),{}).get(rec.get('tramo'))=='NO_APLICA':
+            rec['effective_status']='NO_APLICA'
+            rec['policy_reason']='Asignación Fibo publicada: 0%'
+    return states
+
+
+def classify_purchase_views(buy, candidates=(), records=()):
+    from order_classification import classify_buy_order
+    spots={t['token']:t.get('price') for t in buy.get('tokens',[])}
+    def classify(token,stage,state):
+        if not (stage.startswith(('O2C','O4C')) and stage[-1:] in ('1','2','3','4')):return None
+        j=int(stage[-1])-1
+        weights=buy.get('buy_stage_weights',{}).get(token,[]) if stage.startswith('O4') else buy.get('forecast_o2_allocation',[])
+        price=(buy.get('o2_levels',{}).get(token) or {}).get(LEVEL_FIELDS[j])
+        return classify_buy_order(spot=spots.get(token),target=price,stage_pct=weights[j] if len(weights)==4 else None,state=state)
+    for rec in records:
+        if rec.get('lado')!='BUY':continue
+        c=classify(rec['token'],rec['tramo'],rec['estado'])
+        if c:
+            rec.update(c)
+            rec['policy_reason']=c['reason']
+    for rec in candidates:
+        if rec.get('side')!='BUY':continue
+        state=buy.get('buy_order_states',{}).get(rec['token'],{}).get(rec['stage'],'PROPUESTA')
+        if rec.get('display_status') in ('EJECUTADA','PARCIAL'):state=rec['display_status']
+        c=classify(rec['token'],rec['stage'],state)
+        if c:
+            rec.update(c);rec['display_status']=c['effective_status']
+            if not c['may_allocate']:rec.update(usdt=0.,quantity=0.,remaining_usdt=0.)
     return candidates
