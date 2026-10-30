@@ -25,12 +25,12 @@ def test_qf_excluded_and_no_oscillation():
  assert first['qf_protected']==4225.
  assert first['balancer_liquidity_guard']['baseline_o2_o4_usdt']<8160.41351
 
-def test_existing_commitments_stay_protected_and_sales_do_not_bypass_guard():
+def test_existing_commitments_stay_protected_with_conditional_sales():
  r=budgets_from_master(config(),1250,100,10000,buy_commitments=100,balancer_commitments=50,conditional_sell_proceeds=300)
  assert r['balancer_max']==0
  assert r['weekly_uncommitted']==1050
  assert r['buy_commitments']==100 and r['qf_protected']==100
- assert r['balancer_with_sales_conditional']==0
+ assert r['balancer_with_sales_conditional']==300
 
 def test_configurable_zero_disables_guard():
  assert budgets_from_master(config(0),1000,0,10000)['balancer_max']==200

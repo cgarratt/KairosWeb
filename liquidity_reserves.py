@@ -195,7 +195,7 @@ def budgets_from_master(parameters, physical_usdt, qf_usdt, portfolio_total, **k
         released=result['balancer_uncommitted']
         result.update(balancer_allocated=0.,balancer_uncommitted=0.,balancer_max=0.,
                       weekly_uncommitted=baseline+released,
-                      balancer_with_sales_conditional=0.)
+                      balancer_with_sales_conditional=result['conditional_sell_proceeds'])
     if caps is None:
         result['reserve_caps']=None
         return result
@@ -219,9 +219,11 @@ def budgets_from_master(parameters, physical_usdt, qf_usdt, portfolio_total, **k
         'trading_excess_over_cap':max(0.,qf_usdt-trading_cap),
         'trading_excess_over_target':max(0.,qf_usdt-target),
     }
+    # Cap the initial reserve only. Recycling sale proceeds is conditional
+    # and must not be erased by the reserve floor or counted as real cash.
     result['balancer_with_sales_conditional']=min(
-        result['balancer_with_sales_conditional'],
-        max(0.,bal_cap-_amount(kwargs.get('balancer_commitments',0.),'Compromisos Balancer')))
+        result['balancer_uncommitted'],
+        max(0.,bal_cap-_amount(kwargs.get('balancer_commitments',0.),'Compromisos Balancer'))) + result['conditional_sell_proceeds']
     return result
 
 
