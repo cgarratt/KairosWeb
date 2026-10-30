@@ -150,3 +150,57 @@ def test_orders_route_classifies_then_hides_zero_without_changing_source():
  assert 'data-stage="O2C1"' not in html
  assert '0.00 USDT</td>' not in html
  assert source==original
+
+
+def multiscale_buy_fixture():
+ # Mixed quote scales make stale-loop-variable regressions observable.
+ tokens=[dict(token='BTC',price=70000,current_usdt=100,target=.4),
+         dict(token='ETH',price=2000,current_usdt=100,target=.3),
+         dict(token='LINK',price=10,current_usdt=9700,target=.275),
+         dict(token='PEPE',price=.000004,current_usdt=100,target=.025)]
+ weights=[0,40,40,20]
+ return dict(tokens=tokens,o2_levels={t['token']:dict(zip(('ref382','c1','c2','ref786'),[t['price']*x for x in (.95,.9,.8,.7)])) for t in tokens},
+             buy_eligibility={t['token']:True for t in tokens},forecast_o2_allocation=weights,
+             buy_stage_weights={t['token']:weights for t in tokens},
+             weekly_context={t['token']:{'mode':'O2'} for t in tokens},drift_band_pp=.5,
+             buy_order_states={})
+
+
+@pytest.mark.parametrize('last',['BTC','ETH','LINK','PEPE'])
+def test_each_token_uses_own_spot_independent_of_list_order(last):
+ from orders_inbox import staged_buy_candidates,classify_purchase_views,visible_order_rows
+ b=multiscale_buy_fixture()
+ def run():
+  rows,_=staged_buy_candidates(b,1000);classify_purchase_views(b,rows)
+  return {(r['token'],r['stage']):r['usdt'] for r in visible_order_rows(rows,[])[0]}
+ baseline=run()
+ assert baseline[('BTC','O2C2')]>0 and baseline[('ETH','O2C3')]>0
+ b['tokens'].sort(key=lambda t:t['token']==last)
+ assert run()==pytest.approx(baseline)
+
+
+@pytest.mark.parametrize('state',['CONFIRMADA','EJECUTADA','FILLED','NO_APLICA'])
+def test_last_token_order_state_does_not_block_other_tokens(state):
+ from orders_inbox import staged_buy_candidates
+ b=multiscale_buy_fixture();b['buy_order_states']={'PEPE':{'O2C2':state},'BTC':{'O2C3':state}}
+ rows,_=staged_buy_candidates(b,1000)
+ amounts={(r['token'],r['stage']):r['usdt'] for r in rows if r['usdt']>0}
+ assert amounts[('BTC','O2C2')]>0 and amounts[('ETH','O2C2')]>0
+ assert ('PEPE','O2C2') not in amounts and ('BTC','O2C3') not in amounts
+ assert amounts[('BTC','O2C4')]>0
+
+
+def test_orders_python_matches_purchase_javascript_multiscale():
+ import json,subprocess
+ from orders_inbox import staged_buy_candidates
+ b=multiscale_buy_fixture()
+ b['buy_order_states']={'BTC':{'O2C3':'FILLED'},'PEPE':{'O2C2':'NO_APLICA'}}
+ rows,remaining=staged_buy_candidates(b,1000)
+ source="""const fs=require('fs'),b=JSON.parse(fs.readFileSync(0,'utf8'));
+ const sim=require('./static/o2_sequential.js').calculate(b.tokens,b.o2_levels,b.forecast_o2_allocation,1000,b.drift_band_pp,{requireEligibility:true,eligibility:b.buy_eligibility,weightsByToken:b.buy_stage_weights,orderStates:b.buy_order_states,modes:Object.fromEntries(Object.keys(b.weekly_context).map(t=>[t,'O2']))});
+ console.log(JSON.stringify(sim));"""
+ result=subprocess.run(['node','-e',source],input=json.dumps(b),capture_output=True,text=True,check=True)
+ sim=json.loads(result.stdout);amounts={(r['token'],r['stage']):r['usdt'] for r in rows}
+ for i,t in enumerate(b['tokens']):
+  for j in range(4):assert amounts.get((t['token'],'O2C'+str(j+1)),0)==pytest.approx(sim['amounts'][i][j])
+ assert remaining==pytest.approx(sim['cash'])

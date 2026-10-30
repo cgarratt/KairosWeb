@@ -1,3 +1,9 @@
+# KairosWeb v3.0.29
+
+Corrige el cálculo de Órdenes para usar el precio y estado de cada token. Conserva O2C2/O2C3, filtro de importe $0, combos y guardado global. Compatible con KairosGPT v1.3.15. Ver RELEASE_NOTES_v3.0.29.md.
+
+Descomprimir y reemplazar el contenido del repositorio existente. Desplegar en Render y verificar /health: 3.0.29. No se modificó MASTER.
+
 # KairosWeb v3.0.28
 
 Corrige el listado O2C2/O2C3 y oculta órdenes con importe $0.00. Conserva combos y guardado global. Compatible con KairosGPT v1.3.15. Ver RELEASE_NOTES_v3.0.28.md.

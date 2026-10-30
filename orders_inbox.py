@@ -274,8 +274,16 @@ def staged_buy_candidates(buy, budget, proximity_pct=1.0):
         values=[units[i]*sim_prices[i] for i in range(len(tokens))]
         crypto=sum(values)
         planned=min(remaining,stage_budgets[j])
-        items=[{'target':targets[i] if (px_all[i][j] is not None and px_all[i][j]<(_finite_pos(t.get('price')) or 0) and buy.get('buy_order_states',{}).get(t['token'],{}).get(('O4' if buy.get('weekly_context',{}).get(t['token'],{}).get('mode')=='O4' else 'O2')+'C'+str(j+1),'PROPUESTA')=='PROPUESTA') else 0.,
-                'current_usdt':values[i]} for i in range(len(tokens))]
+        items=[]
+        for i,token_row in enumerate(tokens):
+            token=token_row['token']
+            prefix='O4' if buy.get('weekly_context',{}).get(token,{}).get('mode')=='O4' else 'O2'
+            state=buy.get('buy_order_states',{}).get(token,{}).get(prefix+'C'+str(j+1),'PROPUESTA')
+            may_buy=(px_all[i][j] is not None
+                     and px_all[i][j]<(_finite_pos(token_row.get('price')) or 0)
+                     and state=='PROPUESTA')
+            items.append({'target':targets[i] if may_buy else 0.,
+                          'current_usdt':values[i]})
         spends=_buy_allocation(items,planned,crypto,buy.get('drift_band_pp',1.0))
         actually_spent=0.
         for i,t in enumerate(tokens):
