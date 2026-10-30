@@ -1,3 +1,7 @@
+# KairosWeb v3.0.19
+
+Corrección BTC semanal: pivotes 5L/5R. Ver RELEASE_NOTES_v3.0.19.md. Pendiente de desplegar. Compatible con GPT v1.3.13.
+
 # KairosWeb v3.0.18 · KairosGPT v1.3.13
 
 Ver RELEASE_NOTES_v3.0.18.md y HOMOLOGACION_ORDENES.md. Pendiente de instalar y desplegar.

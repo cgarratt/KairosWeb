@@ -1,19 +1,26 @@
 {
   "versions": {
     "KairosGPT": "1.3.13",
-    "KairosWeb": "3.0.18",
+    "KairosWeb": "3.0.19",
     "MASTER_schema": "5.0.0"
   },
-  "scope": "CLASIFICACION_Y_ELEGIBILIDAD_DE_ORDENES_DE_COMPRA_NO_CERTIFICACION_GLOBAL",
-  "tests": {
+  "scope": "FIX_GRAFICO_BTC_1W_5L_5R; REGLAS_COMPARTIDAS_DE_ORDENES_SIN_CAMBIOS",
+  "master_mutated": false,
+  "deployment_verified": false,
+  "browser_visual_tested": false,
+  "financial_reconciliation_automatic": false,
+  "previous_release_tests_not_rerun": {
     "gpt_passed": 121,
     "web_passed": 51,
     "javascript_purchase_cases": 7,
     "cross_engine_allocation_cases": 12,
     "identical_classifier_sha256": "1cb81cfee2c412c115b147b2aea04a79529cf2e0d2bed780e0cfe89c1aca3dca"
   },
-  "master_mutated": false,
-  "deployment_verified": false,
-  "browser_visual_tested": false,
-  "financial_reconciliation_automatic": false
+  "tests": {
+    "btc_chart_production_function_cases_passed": 8,
+    "python_compilation": true,
+    "full_flask_suite_rerun": false,
+    "browser_visual_tested": false
+  },
+  "btc_chart_pivot_radius": 5
 }

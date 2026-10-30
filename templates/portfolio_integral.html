@@ -191,7 +191,7 @@
    </div>
    <div class="ki-chart-wrap" id="btc-weekly-pivot-chart" role="img" aria-label="Velas japonesas BTC 1W desde Cycle Low publicado y últimos tres pivotes confirmados">
     <div class="ki-chart-empty">Esperando pivotes semanales verificados…</div>
-    <div class="ki-chart-note">1W UTC · velas OHLC desde CL · pivotes 2L/2R</div>
+    <div class="ki-chart-note">1W UTC · velas OHLC desde CL · pivotes 5L/5R</div>
    </div>
   </div>
   <details class="ki-details"><summary>Metodología</summary><p>Cierres semanales completos UTC, SMA20 y pendiente. Informativo; no sustituye BSI ni habilita órdenes.</p></details>
@@ -239,12 +239,13 @@
       svg.appendChild(el('circle',{cx:px,cy:py,r:5,fill:color,stroke:'#fff','stroke-width':1.4}));
       const label=el('text',{x:px,y:Math.max(14,Math.min(height-10,py+(p.kind==='H'?-12:18))),fill:'currentColor','text-anchor':'middle','font-size':10,'font-weight':700});
       label.textContent=`P${i+1} $${Math.round(p.price).toLocaleString('en-US')}`;svg.appendChild(label);
-      const title=el('title');title.textContent=`${p.kind==='H'?'Máximo':'Mínimo'} ${p.date} · $${p.price.toFixed(2)}`;svg.appendChild(title);
+      const title=el('title');title.textContent=`${p.kind==='H'?'Máximo':'Mínimo'} ${p.date} · $${p.price.toFixed(2)} · 5L/5R confirmado ${p.confirmed_at_utc||'N/D'}`;svg.appendChild(title);
     });
     const cl=el('text',{x:left,y:height-6,fill:'currentColor','font-size':10,'fill-opacity':'.8'});cl.textContent='CL';svg.appendChild(cl);
     const old=chart.querySelector('svg');if(old)old.remove();
     const empty=chart.querySelector('.ki-chart-empty');if(empty)empty.remove();
     chart.insertBefore(svg,chart.firstChild);
+    const note=chart.querySelector('.ki-chart-note');if(note)note.textContent='1W UTC · velas OHLC desde CL · pivotes 5L/5R'+(ps.length<3?' · '+ps.length+'/3 confirmados':'');
   }
   let attempts=0;
   async function refresh(){

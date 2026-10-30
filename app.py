@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.18'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.19'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -545,7 +545,7 @@ def start_btc_weekly_prefetch():
         threading.Thread(target=_btc_weekly_prefetch,daemon=True,name='btc-weekly-prefetch').start()
 
 def _btc_weekly_chart(weeks, daily_records, published_cl_date):
-    """Chart from published BTC CL to last closed UTC week, with confirmed 2L/2R pivots.
+    """Chart from published BTC CL to last closed UTC week, with confirmed 5L/5R pivots.
 
     The source of the CL is MASTER, not a candidate from the market provider.
     No incomplete weeks, inferred OHLC, or automatic Elliott pivot edits.
@@ -561,23 +561,26 @@ def _btc_weekly_chart(weeks, daily_records, published_cl_date):
     start=next((i for i,w in enumerate(weeks) if w['week_start']>=cl_monday),None)
     if start is None:
         return {'candles':[], 'pivots':[], 'reason':'Histórico 1W no cubre CL publicado'}
-    # Preserve the complete series for 2L/2R verification, even if the view starts at CL.
+    # Strict 5L/5R uses the FULL history, including pre-CL weeks.
+    # Never count the current UTC week as one of the five right-hand weeks.
+    today=datetime.now(timezone.utc).date()
+    weeks=[w for w in weeks if date.fromisoformat(w['week_end'])<today]
+    start=next((i for i,w in enumerate(weeks) if w['week_start']==cl_monday),None)
+    if start is None:return {'candles':[],'pivots':[],'reason':'Histórico 1W no cubre semana CL publicada'}
     swings=[]
-    for i in range(2,len(weeks)-2):
-        w=weeks[i]
-        if all(w['high']>weeks[j]['high'] for j in range(i-2,i+3) if j!=i):
-            swings.append({'index':i,'kind':'H','price':float(w['high']),'date':w['high_date']})
-        if all(w['low']<weeks[j]['low'] for j in range(i-2,i+3) if j!=i):
-            swings.append({'index':i,'kind':'L','price':float(w['low']),'date':w['low_date']})
-    swings.sort(key=lambda x:x['index'])
-    alternating=[]
-    for swing in swings:
-        if alternating and swing['kind']==alternating[-1]['kind']:
-            prev=alternating[-1]
-            if (swing['kind']=='H' and swing['price']>prev['price']) or (swing['kind']=='L' and swing['price']<prev['price']):
-                alternating[-1]=swing
-        else:alternating.append(swing)
-    chosen=[p for p in alternating if p['index']>=start][-3:]
+    radius=5
+    for i in range(radius,len(weeks)-radius):
+        w=weeks[i];window=weeks[i-radius:i+radius+1]
+        days=[date.fromisoformat(v['week_start']) for v in window]
+        if any(days[j+1]-days[j]!=timedelta(days=7) for j in range(len(days)-1)):continue
+        neighbors=window[:radius]+window[radius+1:]
+        confirmed=(date.fromisoformat(weeks[i+radius]['week_end'])+timedelta(days=1)).isoformat()+'T00:00:00Z'
+        if all(w['high']>v['high'] for v in neighbors):
+            swings.append({'index':i,'kind':'H','price':float(w['high']),'date':w['high_date'],'confirmed_at_utc':confirmed})
+        if all(w['low']<v['low'] for v in neighbors):
+            swings.append({'index':i,'kind':'L','price':float(w['low']),'date':w['low_date'],'confirmed_at_utc':confirmed})
+    # Show the last actual confirmed extrema; do not invent alternating points.
+    chosen=[p for p in swings if p['index']>=start][-3:]
     # Weekly open is Monday's daily open; never synthesize it from previous close.
     daily_open={}
     for rec in daily_records or []:
@@ -594,8 +597,8 @@ def _btc_weekly_chart(weeks, daily_records, published_cl_date):
         candles.append({'date':w['week_end'],'week_start':w['week_start'],'open':opening,
                         'high':float(w['high']),'low':float(w['low']),'close':float(w['close'])})
     return {'candles':candles,'pivots':[{**v,'index':v['index']-start} for v in chosen],
-            'pivot_rule':'2L/2R · 1W UTC cerrado','cl_week':cl_monday,
-            'reason':None if len(chosen)==3 else 'Menos de tres pivotes 2L/2R confirmados desde CL'}
+            'pivot_rule':'5L/5R · 1W UTC cerrado','cl_week':cl_monday,
+            'reason':None if len(chosen)==3 else 'Menos de tres pivotes 5L/5R confirmados desde CL'}
 
 def cached_btc_weekly_regime(published_cl_date=None):
     """BTC trend only from Binance Spot complete UTC weeks in the daily cache."""
