@@ -2,6 +2,11 @@
   const collator=new Intl.Collator('es',{numeric:true,sensitivity:'base'});
   function value(cell){
     if(!cell)return {type:'empty',value:null};
+    if(cell.dataset && Object.prototype.hasOwnProperty.call(cell.dataset,'sortValue')){
+      const explicit=cell.dataset.sortValue;
+      if(explicit==='')return {type:'empty',value:null};
+      const n=Number(explicit);return Number.isFinite(n)?{type:'number',value:n}:{type:'empty',value:null};
+    }
     const raw=(cell.textContent||'').replace(/\u00a0/g,' ').trim();
     if(!raw||/^(?:—|–|-|N\/D|Pendiente)$/i.test(raw))return {type:'empty',value:null};
     let s=raw.replace(/(?:USDT|USD|BTC|\$|%|pp|unidades|ud\.)/gi,'').trim();
@@ -75,6 +80,8 @@
       });
     });
   }
+  if(typeof module!=='undefined'&&module.exports)module.exports={value,sortTable};
+  if(typeof document==='undefined')return;
   function scan(){document.querySelectorAll('table').forEach(init);}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',scan,{once:true});else scan();
   // Covers dynamic tables that are inserted after MCP reads.

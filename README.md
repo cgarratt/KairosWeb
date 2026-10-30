@@ -1,3 +1,11 @@
+# KairosWeb v3.0.22
+
+Indicador junto al precio objetivo Fibo; USD sin indicador. Leyenda y ordenación numérica conservadas. Pendiente de desplegar.
+
+# KairosWeb v3.0.21
+
+Tabla Fibo: solo indicadores y leyenda; ordenación monetaria numérica. Ver RELEASE_NOTES_v3.0.21.md. Pendiente de desplegar.
+
 # KairosWeb v3.0.20
 
 Corregido Compras (con ventas) cuando la reserva Balancer es0. Ver RELEASE_NOTES_v3.0.20.md. Incluye parche del módulo de liquidez para KairosGPT v1.3.13. Pendiente de desplegar/instalar.

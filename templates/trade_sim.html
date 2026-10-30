@@ -60,6 +60,7 @@
 <section class="panel span-12" id="o2-fibonacci-panel" data-o2-ui-version="{{ master }}"><h2>Maestro de Precios - Retrocesos Fibo</h2>
 <p class="sub">Solo se colorean Precio, % Peso y USDT cuando el token recibe <strong>USDT &gt; 0</strong> en ese tramo simulado. Semáforo por <strong>desviación del peso cripto post-compra frente al objetivo</strong>, en puntos porcentuales (pp): <strong>verde</strong> = alcanza el objetivo (≥ 0 pp); <strong>ámbar</strong> = desde −1 pp hasta &lt; 0 pp; <strong>rojo</strong> = por debajo de −1 pp. USDT $0 y N/D sin color. Esto no indica ejecución real ni altera el estado de P1/P2.</p>
 <div class="o2-table-scroll"><table class="o2-table"><thead><tr><th>Token</th><th>Spot</th><th>P1</th><th>P2</th><th>Precio 38.2%</th><th>% Peso</th><th>USDT</th><th>Precio 50%</th><th>% Peso</th><th>USDT</th><th>Precio 61.8%</th><th>% Peso</th><th>USDT</th><th>Precio 78.6%</th><th>% Peso</th><th>USDT</th><th>Total USDT</th></tr></thead><tbody id="fib-body"></tbody><tfoot id="fib-total"></tfoot></table></div>
+<p class="sub" id="fibo-indicator-legend">Indicadores: 🟢 Desv. &gt;5% · 🟡 Desv. 0–5% · 🔴 Desv. &lt;0% · 🔵 Confirmada/Ejecutada · ⚪ No aplica. Desv. % = (Spot − objetivo) / objetivo × 100.</p>
 </section>
 {% endif %}
 {% if mode.slug=='ventas' %}
@@ -141,7 +142,7 @@ function renderO2Fibonacci(sim){
     const explanation=semaphore.state==='none'
       ? (amount>0?'Sin valoración post-compra verificable':'Sin USDT asignado en este tramo: no se colorea')
       : `Compra hipotética ${dollar(amount)} · Peso post-compra ${weightText} · Objetivo ${(100*t.target).toFixed(2)}% · Desviación ${semaphore.driftPP.toFixed(2)} pp · Semáforo ${semaphore.state.toUpperCase()}. No es orden.`;
-    return `<td class="${css}" title="${explanation}">${fibPrice(level)}</td><td class="${css}" title="${explanation}">${weightText}</td><td class="${css}" title="${explanation}">${dollar(amount)}${orderClass?'<small>'+orderClass.indicator+' '+orderClass.effective_status.replaceAll('_',' ')+'</small>':''}</td>`;
+    return `<td class="${css}" data-sort-value="${hasLevel?level:''}" title="${explanation}">${fibPrice(level)} ${orderClass?'<span role="img" aria-label="'+orderClass.effective_status+'" title="'+orderClass.effective_status+' · '+(orderClass.reason||'')+'">'+orderClass.indicator+'</span>':''}</td><td class="${css}" data-sort-value="${hasLevel&&Number.isFinite(postWeight)?postWeight:''}" title="${explanation}">${weightText}</td><td class="${css}" data-sort-value="${amount}" title="${explanation}">${dollar(amount)}</td>`;
   }).join('');
   const ctx=source.weekly_context?.[t.token]||{};
   const kind=ctx.eligible===true?((ctx.mode==='RETROCESO_ALCISTA'?'RETROCESO ALCISTA':ctx.mode)+(ctx.operational_blocked?' · PROPUESTO':'')):'BLOQUEADO';
@@ -154,7 +155,7 @@ function renderO2Fibonacci(sim){
     const safeState=['PROPUESTO','VALIDADO','CONFIRMADO'].includes(state)?state:'PROPUESTO';
     return `<td><span class="pivot-anchor-line"><b>${fibPrice(p.price)}</b><span class="pivot-anchor-dot pivot-${safeState.toLowerCase()}" role="img" aria-label="Pivote ${safeState}" title="Pivote ${safeState}"></span></span><small style="display:block;color:var(--muted);font-size:10px">${p.date||'N/D'}</small></td>`;
   };
-  return `<tr><td title="${reason}">${token(t.token)}<small style="display:block;color:var(--muted);font-size:10px">${kind}</small></td><td>${fibPrice(t.price)}</td>${anchorCell(p1)}${anchorCell(p2)}${pairs}<td><b>${dollar(total)}</b></td></tr>`;
+  return `<tr><td title="${reason}">${token(t.token)}<small style="display:block;color:var(--muted);font-size:10px">${kind}</small></td><td>${fibPrice(t.price)}</td>${anchorCell(p1)}${anchorCell(p2)}${pairs}<td data-sort-value="${total}"><b>${dollar(total)}</b></td></tr>`;
  }).join('');
  el('fib-total').innerHTML=`<tr><td>TOTAL USDT</td><td>—</td><td>—</td><td>—</td>${sim.consumed.map(v=>`<td>—</td><td>—</td><td>${dollar(v)}</td>`).join('')}<td><b>${dollar(sim.spent)}</b></td></tr>`;
 }

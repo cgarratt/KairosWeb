@@ -1,22 +1,15 @@
 {
   "versions": {
     "KairosGPT": "1.3.13",
-    "KairosWeb": "3.0.20",
+    "KairosWeb": "3.0.22",
     "MASTER_schema": "5.0.0"
   },
-  "scope": "FIX_RECICLAJE_CONDICIONAL_DE_VENTAS_BALANCER",
+  "scope": "UBICACION_INDICADOR_JUNTO_PRECIO_OBJETIVO",
   "master_mutated": false,
   "deployment_verified": false,
   "browser_visual_tested": false,
   "financial_reconciliation_automatic": false,
   "previous_release_tests_not_rerun": {
-    "gpt_passed": 121,
-    "web_passed": 51,
-    "javascript_purchase_cases": 7,
-    "cross_engine_allocation_cases": 12,
-    "identical_classifier_sha256": "1cb81cfee2c412c115b147b2aea04a79529cf2e0d2bed780e0cfe89c1aca3dca"
-  },
-  "tests": {
     "conditional_sales_cases_passed": 9,
     "btc_5l5r_cases_passed": 8,
     "python_compilation": true,
@@ -24,5 +17,18 @@
     "browser_visual_tested": false
   },
   "btc_chart_pivot_radius": 5,
-  "shared_liquidity_module_sha256": "d71356bc39ed0a4e3bc7d5381fdfe0d19da1f0917441a28985bae298603c41c2"
+  "shared_liquidity_module_sha256": "d71356bc39ed0a4e3bc7d5381fdfe0d19da1f0917441a28985bae298603c41c2",
+  "previous_ui_tests_not_rerun": {
+    "numeric_sort_checks_passed": 11,
+    "embedded_javascript_syntax": true,
+    "sorter_javascript_syntax": true,
+    "full_suite_rerun": false,
+    "browser_visual_tested": false
+  },
+  "tests": {
+    "template_javascript_syntax": true,
+    "indicator_in_price_cell_only": true,
+    "numeric_sort_keys_preserved": true,
+    "browser_visual_tested": false
+  }
 }
