@@ -8,27 +8,27 @@ def config(threshold=.1):
  'PORTFOLIO_LIQ_TRADING_FRACTION':.1,'BALANCER_MAX_PORTFOLIO_FRACTION':.06,
  'TRADING_MAX_PORTFOLIO_FRACTION':.03,BALANCER_O2_O4_MIN_KEY:threshold}.items()}
 
-@pytest.mark.parametrize('physical,disabled',[(1249.98,True),(1250.,False),(1250.01,False)])
+@pytest.mark.parametrize('physical,disabled',[(999.99,True),(1000.,False),(1000.01,False)])
 def test_strict_boundary(physical,disabled):
- # No QF; normal Balancer=20% cash, so weekly=80%; P=10000.
+ # Threshold basis is physical minus QF; P=10000; equality enables reserve.
  r=budgets_from_master(config(),physical,0,10000)
  assert r['balancer_liquidity_guard']['disabled'] is disabled
  assert (r['balancer_max']==0) is disabled
  assert r['weekly_uncommitted']+r['balancer_uncommitted']==pytest.approx(r['compras_max'])
 
 def test_qf_excluded_and_no_oscillation():
- args=(config(),12679.89171,4225.,81604.1350457442)
+ args=(config(),12000.,4225.,81604.1350457442)
  first=budgets_from_master(*args);second=budgets_from_master(*args)
  assert first==second
  assert first['balancer_max']==0
- assert first['weekly_uncommitted']==pytest.approx(8454.89171)
+ assert first['weekly_uncommitted']==pytest.approx(7775.)
  assert first['qf_protected']==4225.
  assert first['balancer_liquidity_guard']['baseline_o2_o4_usdt']<8160.41351
 
 def test_existing_commitments_stay_protected_with_conditional_sales():
- r=budgets_from_master(config(),1250,100,10000,buy_commitments=100,balancer_commitments=50,conditional_sell_proceeds=300)
+ r=budgets_from_master(config(),950,100,10000,buy_commitments=100,balancer_commitments=50,conditional_sell_proceeds=300)
  assert r['balancer_max']==0
- assert r['weekly_uncommitted']==1050
+ assert r['weekly_uncommitted']==750
  assert r['buy_commitments']==100 and r['qf_protected']==100
  assert r['balancer_with_sales_conditional']==300
 
@@ -70,3 +70,25 @@ def test_setting_is_created_then_updated_without_inventory_mutations():
  writes,state=prepare_changes(raw,'portfolio_goals',entries,evidence='Ajuste del umbral por usuario')
  assert state['parameters'][BALANCER_O2_O4_MIN_KEY]['value']==.15
  assert portfolio_goals_data(raw)['balancer_min_o2_o4_fraction']==.1
+
+
+def test_screenshot_liquidity_reenables_balancer():
+ r=budgets_from_master(config(),12608,2100,82962.5)
+ assert r['balancer_liquidity_guard']['non_qf_liquidity_usdt']==10508
+ assert not r['balancer_liquidity_guard']['disabled']
+ assert r['balancer_uncommitted']==pytest.approx(2521.6)
+ assert r['weekly_uncommitted']==pytest.approx(7986.4)
+ assert r['weekly_uncommitted']+r['balancer_uncommitted']+r['qf_protected']==pytest.approx(12608)
+
+def test_commitments_do_not_change_threshold_but_reduce_spendable_cash():
+ r=budgets_from_master(config(),2000,200,10000,buy_commitments=1500,balancer_commitments=100)
+ assert not r['balancer_liquidity_guard']['disabled']
+ assert r['compras_max']==300
+ assert r['balancer_max']<=300
+ assert r['weekly_uncommitted']+r['balancer_uncommitted']==300
+ assert r['buy_commitments']==1500
+
+def test_qf_boundary_exactly_ten_percent():
+ r=budgets_from_master(config(),3000,2000,10000)
+ assert r['balancer_liquidity_guard']['non_qf_liquidity_fraction']==.1
+ assert not r['balancer_liquidity_guard']['disabled']

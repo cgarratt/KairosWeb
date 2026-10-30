@@ -178,6 +178,7 @@
   </div>
   <div class="ki-status" style="--ki-accent:{{ risk_color }}">{{ 'RIESGO ' ~ pri.label|upper }}</div>
   <div class="ki-metrics"><div><small>Exposición</small><strong>{{ pri.exposure_pct }}%</strong></div><div><small>Concentración</small><strong>{{ pri.concentration_pct }}%</strong></div><div><small>Drift</small><strong>{{ pri.drift_pct }} pp</strong></div></div>
+  <p class="ki-details">{{ pri.explanation }}</p>
   <details class="ki-details"><summary>Metodología</summary><p>{{ pri.model }}. No representa probabilidad de pérdida.</p></details>
   {% else %}<div class="ki-empty">N/D</div><p class="sub">Se requiere valoración Spot completa</p>{% endif %}
  </article>

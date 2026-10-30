@@ -1,10 +1,10 @@
 {
   "versions": {
     "KairosGPT": "1.3.13",
-    "KairosWeb": "3.0.23",
+    "KairosWeb": "3.0.25",
     "MASTER_schema": "5.0.0"
   },
-  "scope": "P1_P2_MASTER_PRIORITARIO_COMPRAS",
+  "scope": "BALANCER_THRESHOLD_PHYSICAL_MINUS_QF",
   "master_mutated": false,
   "deployment_verified": false,
   "browser_visual_tested": false,
@@ -17,7 +17,7 @@
     "browser_visual_tested": false
   },
   "btc_chart_pivot_radius": 5,
-  "shared_liquidity_module_sha256": "d71356bc39ed0a4e3bc7d5381fdfe0d19da1f0917441a28985bae298603c41c2",
+  "shared_liquidity_module_sha256": "2a9575dd06901ef4dc76b6863a16a2b0f1f203c2fed2d3da2380175f380e1987",
   "previous_ui_tests_not_rerun": {
     "numeric_sort_checks_passed": 11,
     "embedded_javascript_syntax": true,
@@ -26,13 +26,15 @@
     "browser_visual_tested": false
   },
   "tests": {
-    "master_priority_cases_passed": 9,
-    "conditional_sales_cases_passed": 9,
-    "btc_pivot_cases_passed": 8,
+    "python_suite_passed": 90,
+    "full_suite_rerun": true,
     "python_syntax": true,
-    "full_suite_rerun": false,
-    "browser_visual_tested": false
+    "settings_javascript_syntax": true,
+    "browser_visual_tested": false,
+    "live_master_writes_tested": false,
+    "gpt_liquidity_patch_byte_identical": true
   },
   "gpt_compat_patch": "compat/kairos_gpt/buy_weekly_policy.py",
-  "gpt_compat_patch_installed": false
+  "gpt_compat_patch_installed": false,
+  "balancer_threshold_formula": "(physical_liquidity - QF) / spot_portfolio_value"
 }

@@ -30,7 +30,7 @@
 <div class="sim-metric"><small>◈ USDT físico</small><b id="cash-metric">—</b><small id="cash-pct">—</small></div>
 <div class="sim-metric"><small>{{ '▣ Reserva Trading' if mode.slug=='compras' else '◎ Objetivo USDT' }}</small><b id="third-metric">—</b><small>{{ 'No se utiliza para Compras' if mode.slug=='compras' else 'Sobre patrimonio actual' }}</small></div>
 {% if mode.slug=='compras' %}
-<div class="sim-metric"><small>◇ Disponible libre para nuevas Compras</small><b id="max-buy-metric">—</b><small>Descontando órdenes confirmadas vigentes; techo bruto = USDT físico − QF</small></div>
+<div class="sim-metric"><small>Disponible compras</small><b id="max-buy-metric">—</b><small>Descontando órdenes confirmadas vigentes; techo bruto = USDT físico − QF</small></div>
 {% endif %}
 <div class="sim-metric"><small>{{ '◇ Compra simulada' if mode.slug=='compras' else '◇ Ventas simuladas' }}</small><b id="allocation-metric">—</b><small id="allocation-caption">{{ 'Presupuesto definido por el slider, no compra ejecutada' if mode.slug=='compras' else 'Solo escenario, no orden' }}</small></div>
 </div>

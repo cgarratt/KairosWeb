@@ -616,7 +616,7 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
                 if row+4>last_row:raise SettingsError('Sin espacio para umbral Balancer')
                 metadata=['LIQUIDEZ',key,value,'number','fraction_portfolio','APROBADO',
                           'BALANCER','KairosWeb Settings · '+evidence.strip()[:100],
-                          'Si O2/O4 libre normal sin QF / P < umbral: reserva Balancer 0. Sin cancelar compromisos.', 'ALTA']
+                          'Si (liquidez total - QF) / P < umbral: reserva Balancer 0. Antes de reservas/compromisos; sin cancelarlos.', 'ALTA']
                 for col,val in enumerate(metadata):change('parameters',row,col,val)
             else:
                 if _get(b,'parameters',row,5)!='APROBADO':raise SettingsError('Umbral Balancer no aprobado')

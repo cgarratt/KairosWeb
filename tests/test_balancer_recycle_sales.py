@@ -13,7 +13,7 @@ def config():
 
 class SalesRecycling(unittest.TestCase):
  def test_guard_zeroes_initial_reserve_but_preserves_sale_scenario(self):
-  r=budgets_from_master(config(),12679.89171,4225,82656.11,conditional_sell_proceeds=3694)
+  r=budgets_from_master(config(),12679.89171,4225,90000,conditional_sell_proceeds=3694)
   self.assertEqual(r['balancer_max'],0)
   self.assertEqual(r['balancer_with_sales_conditional'],3694)
   self.assertEqual(r['compras_max'],8454.89171)
@@ -22,9 +22,9 @@ class SalesRecycling(unittest.TestCase):
  def test_no_sale_means_no_buy(self):
   self.assertEqual(budgets_from_master(config(),1000,200,10000)['balancer_with_sales_conditional'],0)
  def test_existing_commitments_not_released(self):
-  r=budgets_from_master(config(),1250,100,10000,buy_commitments=100,balancer_commitments=50,conditional_sell_proceeds=300)
+  r=budgets_from_master(config(),950,100,10000,buy_commitments=100,balancer_commitments=50,conditional_sell_proceeds=300)
   self.assertEqual(r['buy_commitments'],100)
-  self.assertEqual(r['weekly_uncommitted'],1050)
+  self.assertEqual(r['weekly_uncommitted'],750)
   self.assertEqual(r['balancer_max'],0)
   self.assertEqual(r['balancer_with_sales_conditional'],300)
  def test_active_reserve_adds_sales_once(self):
@@ -40,7 +40,7 @@ class SalesRecycling(unittest.TestCase):
   r=budgets_from_master(p,1000,200,10000,conditional_sell_proceeds=300)
   self.assertEqual(r['balancer_with_sales_conditional'],300)
  def test_conditional_proceeds_reach_actual_infra_allocator(self):
-  r=budgets_from_master(config(),12679.89171,4225,82656.11,conditional_sell_proceeds=3694)
+  r=budgets_from_master(config(),12679.89171,4225,90000,conditional_sell_proceeds=3694)
   # Explicitly synthetic post-sale portfolio. Units and cash remain real unchanged.
   rows=[{'token':'BTC','value':5000,'target':.5,'weight':.25,'drift_pp':-25},
         {'token':'HYPE','value':15000,'target':.5,'weight':.75,'drift_pp':25}]

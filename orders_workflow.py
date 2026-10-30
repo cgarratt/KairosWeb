@@ -20,7 +20,7 @@ HEADERS = (
     'importe_ejecutado', 'comision_token', 'comision_cotizada',
     'moneda_comision', 'evidencia', 'observaciones', 'conciliacion', 'moneda_cotizada',
 )
-STATES=('PROPUESTA','CONFIRMADA','PARCIAL','EJECUTADA')
+STATES=('PROPUESTA','NO_APLICA','CONFIRMADA','PARCIAL','EJECUTADA')
 CATEGORIES=('BALANCE','ESTRUCTURA','MANUAL')
 _QUOTES={'HYPE':'USDC'}
 _ALLOWED_TOKENS=set(VENUES)
@@ -88,7 +88,7 @@ def validate_transition(action, data, old=None, others=(), existing_exchange=())
     if action not in STATES:raise WorkflowError('INVALID_TRANSITION','Estado de orden no admitido')
     if old is None and action!='PROPUESTA':
         raise WorkflowError('INVALID_TRANSITION','Primero registra la propuesta')
-    if old and ((old['estado']=='EJECUTADA') or (old['estado']=='PROPUESTA' and action != 'CONFIRMADA')
+    if old and ((old['estado']=='EJECUTADA') or (old['estado'] in ('PROPUESTA','NO_APLICA') and action not in ('NO_APLICA','CONFIRMADA','PARCIAL','EJECUTADA'))
                 or (old['estado']=='CONFIRMADA' and action not in ('PARCIAL','EJECUTADA'))
                 or (old['estado']=='PARCIAL' and action not in ('PARCIAL','EJECUTADA'))):
         raise WorkflowError('INVALID_TRANSITION','Transición no autorizada')
@@ -115,7 +115,9 @@ def validate_transition(action, data, old=None, others=(), existing_exchange=())
                     observaciones=text(data.get('note'),'Nota',350),conciliacion='NO_APLICA')
     item={k:old.get(k) for k in HEADERS}
     if item['token']=='BTC' and item['lado']=='SELL':raise WorkflowError('POLICY_BLOCK','BTC NEVER SELL')
-    if action=='CONFIRMADA':
+    if action=='NO_APLICA':
+        item['conciliacion']='NO_APLICA'
+    elif action=='CONFIRMADA':
         eid=text(data.get('exchange_order_id'),'ID de orden del exchange',120,True)
         if not _ID.fullmatch(eid):raise WorkflowError('INVALID_EXCHANGE_ID','ID de orden con formato inválido')
         if any(o['venue']==item['venue'] and str(o.get('exchange_order_id'))==eid
@@ -127,6 +129,9 @@ def validate_transition(action, data, old=None, others=(), existing_exchange=())
         item['evidencia']=text(data.get('evidence'),'Evidencia de orden colocada',500,True)
         item['conciliacion']='PENDIENTE_FILL'
     elif action in ('EJECUTADA','PARCIAL'):
+        if old['estado'] in ('PROPUESTA','NO_APLICA'):
+            item['unidades_previstas']=number(data.get('planned_units'),'Unidades de la orden',positive=True)
+            item['importe_previsto']=number(data.get('planned_usdt'),'Importe de la orden',positive=True)
         if not item.get('exchange_order_id'):
             eid=text(data.get('exchange_order_id'),'ID de orden del exchange',120,True)
             if not _ID.fullmatch(eid):raise WorkflowError('INVALID_EXCHANGE_ID','Identificador de orden inválido')
@@ -226,7 +231,7 @@ def write_event(data, *, expected_snapshot_id):
         latest=latest_orders(events)
         key=text(data.get('kairos_order_id'),'ID Kairos',85)
         old=next((r for r in latest if r['kairos_order_id']==key),None) if key else None
-        if old is None and str(data.get('action') or '').upper() in ('PROPUESTA','CONFIRMAR_RECOMENDACION','EJECUTAR_RECOMENDACION'):key='KORD-'+uuid.uuid4().hex[:16]
+        if old is None and (data.get('_web_transition') or str(data.get('action') or '').upper() in ('PROPUESTA','CONFIRMAR_RECOMENDACION','EJECUTAR_RECOMENDACION')):key='KORD-'+uuid.uuid4().hex[:16]
         elif old is None:raise WorkflowError('UNKNOWN_ORDER','Primero registra la propuesta')
         if old and not re.fullmatch(r'O(?:2|4)C[1-4]' if old['lado']=='BUY' else r'O(?:3|5)V[1-4]',old['tramo']):
             raise WorkflowError('OUT_OF_SCOPE','Solo órdenes del ciclo O2/O4 BUY y O3/O5 SELL')
@@ -245,6 +250,12 @@ def write_event(data, *, expected_snapshot_id):
         # together in a single Sheets batch, never as two separate requests.
         initial_event=None
         confirmed_event=None
+        if data.get('_web_transition') and old is None:
+            if any(r['token']==data.get('token') and r['venue']==data.get('venue') and r['lado']==data.get('side') and r['tramo']==data.get('stage') for r in latest):
+                raise WorkflowError('REVISION_CONFLICT','La propuesta ya fue registrada; recarga la tabla')
+            proposed=validate_transition('PROPUESTA',data,None,latest,existing)
+            initial_event=dict(proposed,event_id='KEVT-'+uuid.uuid4().hex,kairos_order_id=key,revision=1)
+            old=dict(initial_event)
         if action in ('CONFIRMAR_RECOMENDACION','EJECUTAR_RECOMENDACION'):
             if old is not None:raise WorkflowError('INVALID_TRANSITION','Orden ya registrada')
             proposed=validate_transition('PROPUESTA',data,None,latest,existing)

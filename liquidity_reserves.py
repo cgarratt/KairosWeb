@@ -180,21 +180,24 @@ def budgets_from_master(parameters, physical_usdt, qf_usdt, portfolio_total, **k
     allocation=allocation_from_master(parameters,physical_usdt,qf_usdt,
                                       portfolio_total=portfolio_total)
     result=calculate_budgets(physical_usdt,qf_usdt,balancer_allocated=allocation,**kwargs)
-    # Evaluate the NORMAL envelope, before releasing Balancer, so the rule
-    # cannot oscillate on successive reads. Confirmed commitments stay deducted.
+    # Threshold uses physical cash minus QF BEFORE reserves/commitments.
+    # Spendable budgets still protect confirmed commitments independently.
     threshold=balancer_purchase_threshold(parameters)
     p=_amount(portfolio_total,'Valor del portafolio Spot')
     if p<=0 or p<physical_usdt:raise LiquidityPolicyError('Portafolio Spot inválido')
-    baseline=result['weekly_uncommitted']
+    weekly_before_guard=result['weekly_uncommitted']
+    baseline=result['usdt_non_qf']
     from decimal import Decimal
     disabled=Decimal(str(baseline)) < Decimal(str(p))*Decimal(str(threshold))
     result['balancer_liquidity_guard']={'threshold_fraction':threshold,
         'baseline_o2_o4_usdt':baseline,'baseline_o2_o4_fraction':baseline/p,
-        'disabled':disabled,'reason':'O2_O4_BELOW_THRESHOLD' if disabled else 'THRESHOLD_MET'}
+        'basis':'PHYSICAL_MINUS_QF','non_qf_liquidity_usdt':baseline,
+        'non_qf_liquidity_fraction':baseline/p,
+        'disabled':disabled,'reason':'NON_QF_LIQUIDITY_BELOW_THRESHOLD' if disabled else 'THRESHOLD_MET'}
     if disabled:
         released=result['balancer_uncommitted']
         result.update(balancer_allocated=0.,balancer_uncommitted=0.,balancer_max=0.,
-                      weekly_uncommitted=baseline+released,
+                      weekly_uncommitted=weekly_before_guard+released,
                       balancer_with_sales_conditional=result['conditional_sell_proceeds'])
     if caps is None:
         result['reserve_caps']=None

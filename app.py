@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.23'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.25'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -505,7 +505,13 @@ def executive_risk_index(rows, physical_usdt):
     exposure=100*crypto/total
     # All components are dimensionless risk proxies with explicit caps.
     score=round(min(100,0.35*exposure+0.35*min(100,concentration*3)+0.30*min(100,drift*4)),1)
-    return {'score':score,'exposure_pct':round(exposure,1),
+    components=sorted([(0.35*exposure,'la exposición a cripto',f'{exposure:.1f}%'),
+        (0.35*min(100,concentration*3),'la concentración en el token de mayor peso',f'{concentration:.1f}%'),
+        (0.30*min(100,drift*4),'la desviación frente a los pesos objetivo',f'{drift:.1f} pp')],reverse=True)
+    label='elevado' if score>=70 else 'moderado' if score>=40 else 'bajo'
+    explanation=(f'El riesgo es {label} según el PRI. Los factores con mayor aporte son '
+        + ' y '.join(f'{name} ({value})' for _,name,value in components[:2])+'.')
+    return {'explanation':explanation,'score':score,'exposure_pct':round(exposure,1),
             'concentration_pct':round(concentration,1),'drift_pct':round(drift,1),
             'liquidity_pct':round(liquidity_pct,1),
             'label':'Elevado' if score>=70 else 'Moderado' if score>=40 else 'Bajo',
@@ -1524,9 +1530,10 @@ def manage_order_lifecycle():
     if not _cycle_order_allowed(body.get('lado') or body.get('side'),body.get('tramo') or body.get('stage')):
         return jsonify({'status':'INVALID','error_code':'OUT_OF_SCOPE',
                         'reason':'Órdenes solo admite BUY O2/O4 y SELL O3/O5.'}),400
-    if body.get('action') != 'EJECUTADA' or not body.get('kairos_order_id'):
-        return jsonify({'status':'INVALID','error_code':'INVALID_TRANSITION','reason':'Solo CONFIRMADA → EJECUTADA en Web.'}),409
-    body['_web_confirmed_only'] = True
+    if body.get('action') not in ('NO_APLICA','CONFIRMADA','PARCIAL','EJECUTADA'):
+        return jsonify({'status':'INVALID','reason':'Estado no permitido.'}),409
+    body.pop('_web_confirmed_only',None)
+    body['_web_transition'] = True
     from orders_workflow import write_event,WorkflowError
     try:
         saved=write_event(body,expected_snapshot_id=body.get('expected_snapshot_id'))

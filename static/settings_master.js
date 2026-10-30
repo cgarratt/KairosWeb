@@ -488,7 +488,7 @@
       row.append(goalInput('reserve_caps.balancer',g.reserve_caps.balancer,'Tope Balancer (% del portafolio)'),goalInput('reserve_caps.trading',g.reserve_caps.trading,'Tope Trading (% del portafolio)'));
       assignment.append(row,el('p','settings-hint','Límites independientes entre 0% y 100%; no tienen que sumar 100%. Se publican junto con los demás objetivos.'));
     }
-    assignment.append(goalInput('balancer_min_o2_o4_fraction',g.balancer_min_o2_o4_fraction,'Umbral mínimo O2/O4 (% del portafolio)'),el('p','settings-hint','Si el fondo O2/O4 libre normal, sin QF, es menor al umbral, Balancer recibe USD 0 y libera su reserva no comprometida. Se evalúa antes de liberar la reserva. Exactamente en el umbral se conserva la regla normal. Es independiente de los repartos que suman 100%.'));
+    assignment.append(goalInput('balancer_min_o2_o4_fraction',g.balancer_min_o2_o4_fraction,'Umbral liquidez sin QF (% del portafolio)'),el('p','settings-hint','Se compara (liquidez total − QF) / valor actual del portafolio, antes de descontar reservas y compromisos. Por debajo del umbral, Balancer libera su reserva no comprometida; en igualdad o por encima conserva la asignación normal. Las órdenes confirmadas siguen protegidas y no se cancelan.'));
     const cust=el('section','goal-card');cust.append(el('h4','','4. Custodia por Tier'),el('p','settings-hint','Cada Tier suma 100% entre HODL, Core y Exchange. Son metas, no transferencias.'));
     ['T1','T2','T3'].forEach(t=>{
       const row=el('div','goal-grid');row.append(el('strong','goal-tier',t));
