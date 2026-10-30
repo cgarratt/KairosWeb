@@ -94,3 +94,59 @@ def test_pri_names_overweight_token_and_reference_amount():
  assert '10.0%' in r['explanation'] and 'referencial' in r['explanation']
  for row in rows:row['value']=100;row['target']=1/12
  assert 'No hay tokens' in app.executive_risk_index(rows,100)['explanation']
+
+@pytest.mark.parametrize('mode,prefix',[('O2','O2'),('RETROCESO_ALCISTA','O2'),(None,'O2'),('O4','O4')])
+def test_funded_generic_retracements_survive_cycle_filter(mode,prefix):
+ from test_zero_fibo import payload
+ from orders_inbox import staged_buy_candidates,classify_purchase_views,visible_order_rows
+ b=payload()
+ for context in b['weekly_context'].values():context['mode']=mode
+ candidates,_=staged_buy_candidates(b,100)
+ classify_purchase_views(b,candidates)
+ visible,_=visible_order_rows(candidates,[])
+ assert {r['stage'] for r in visible}=={prefix+'C2',prefix+'C3',prefix+'C4'}
+ assert all(app._cycle_order_allowed(r['side'],r['stage']) for r in visible)
+ assert all(r['usdt']>0 for r in visible)
+ with app.app.test_request_context('/'):
+  html=app.render_template('ordenes.html',master='3.0.28',snapshot='test',managed_orders={'records':[]},inbox={'candidates':visible},tier_by_token={'SOL':'T1'},error=None)
+ for stage in [prefix+'C2',prefix+'C3']:assert 'data-stage="'+stage+'"' in html
+ assert html.count('id="orders-save-all"')==1
+
+
+def test_zero_visibility_preserves_journal_and_displays_real_receipts():
+ from copy import deepcopy
+ from orders_inbox import visible_order_rows
+ candidates=[dict(token='SOL',side='BUY',usdt=v) for v in [0,None,.004,10]]
+ candidates.append(dict(token='ETH',side='SELL',usdt=None))
+ records=[dict(proposal(state),effective_status=state,importe_previsto=planned,importe_ejecutado=actual,unidades_ejecutadas=2)
+          for state,planned,actual in [('PROPUESTA',0,0),('NO_APLICA',20,0),('CONFIRMADA',20,0),('EJECUTADA',0,30),('EJECUTADA',0,0),('PARCIAL',100,10)]]
+ before=deepcopy((candidates,records))
+ visible,registered=visible_order_rows(candidates,records)
+ assert [r['usdt'] for r in visible]==[10,None]
+ assert [r['display_usdt'] for r in registered]==[20,30,10]
+ assert (candidates,records)==before
+ with app.app.test_request_context('/'):
+  html=app.render_template('ordenes.html',master='3.0.28',snapshot='test',managed_orders={'records':registered},inbox={'candidates':[]},tier_by_token={'SOL':'T1'},error=None)
+ assert '30.00 USDT' in html and '10.00 USDT' in html
+ assert html.count('data-stage="O2C2"')==3
+
+
+def test_orders_route_classifies_then_hides_zero_without_changing_source():
+ from copy import deepcopy
+ from flask import g
+ from test_zero_fibo import payload
+ b=payload()
+ for ctx in b['weekly_context'].values():ctx['mode']='RETROCESO_ALCISTA'
+ source={'records':[dict(proposal('EJECUTADA'),importe_previsto=0,importe_ejecutado=0,conciliacion='CONCILIADA_EN_05')],'historical':[]}
+ original=deepcopy(source)
+ d={'rows':[{'token':'SOL','tier':'T1'}]}
+ from orders_inbox import staged_buy_candidates
+ candidates,_=staged_buy_candidates(b,100)
+ with app.app.test_request_context('/mode/ordenes'):
+  g.kairos_state={'control':{'snapshot_id':'test'},'wave_pivots':{}}
+  with patch('orders_workflow.registered_orders',return_value=deepcopy(source)),patch.object(app,'load_live_dashboard',return_value=('test',d)),patch.object(app,'balancer_report',return_value={}),patch.object(app,'build_mode_payload',return_value=b),patch('wave_macro_context.published_wave_levels',return_value={}),patch('orders_inbox.build_order_inbox',return_value={'candidates':candidates}):
+   html=app.orders_inbox_page()
+ assert 'data-stage="O2C2"' in html and 'data-stage="O2C3"' in html
+ assert 'data-stage="O2C1"' not in html
+ assert '0.00 USDT</td>' not in html
+ assert source==original

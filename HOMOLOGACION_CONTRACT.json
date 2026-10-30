@@ -1,10 +1,10 @@
 {
   "versions": {
     "KairosGPT": "1.3.15",
-    "KairosWeb": "3.0.27",
+    "KairosWeb": "3.0.28",
     "MASTER_schema": "5.0.0"
   },
-  "scope": "COMBOS_ESTADO_GUARDADO_GLOBAL_WEB",
+  "scope": "ORDENES_NOMENCLATURA_O2_Y_FILTRO_IMPORTE_CERO",
   "master_mutated": false,
   "deployment_verified": false,
   "project_installation_verified": false,
@@ -16,11 +16,13 @@
   "gpt_image_confirmation_required": true,
   "gpt_explicit_prompt_exception": true,
   "tests": {
-    "web_python_passed": 140,
+    "web_python_passed": 146,
     "javascript_checks_passed": 10,
     "browser_visual_tested": false,
     "live_master_writes_tested": false
   },
   "batch_save_atomic": false,
-  "save_semantics": "SEQUENTIAL_STOP_ON_ERROR_NO_AUTOMATIC_RETRY"
+  "save_semantics": "SEQUENTIAL_STOP_ON_ERROR_NO_AUTOMATIC_RETRY",
+  "zero_amount_orders_hidden": true,
+  "generic_retracement_order_identity": "O2C1..O2C4"
 }

@@ -291,7 +291,8 @@ def staged_buy_candidates(buy, budget, proximity_pct=1.0):
             # per-token budget or sequential simulator supplies a positive sum.
             if phase!='O4' and approved_o2[j]<=0:
                 a=0.
-            stage=f"O4C{j+1}" if phase=='O4' else f"O2C{j+1}" if phase=='O2' else f"C{j+1}"
+            # Generic bullish retracements share the approved O2 grid and identity.
+            stage=f"O4C{j+1}" if phase=='O4' else f"O2C{j+1}"
             delta,proximity=_proximity('BUY',spot,price,proximity_pct)
             if token=='HYPE':
                 # Never compare Binance HYPE/USDT and Hyperliquid HYPE/USDC.
@@ -560,3 +561,32 @@ def classify_purchase_views(buy, candidates=(), records=()):
             rec.update(c);rec['display_status']=c['effective_status']
             if not c['may_allocate']:rec.update(usdt=0.,quantity=0.,remaining_usdt=0.)
     return candidates
+
+
+def visible_order_rows(candidates, records):
+    """Display-only filter after classification; never edit the persistent journal.
+
+    Hide amounts which format as $0.00. Real receipts use actual totals when
+    present, including legacy records without a planned amount. Unsized SELL
+    references retain N/D rather than inventing a monetary allocation.
+    """
+    visible_candidates=[]
+    for item in candidates:
+        amount=item.get('usdt')
+        if amount is None:
+            if item.get('side')=='SELL':visible_candidates.append(dict(item))
+        elif _finite_pos(amount) is not None and float(amount)>=.005:
+            visible_candidates.append(dict(item))
+    visible_records=[]
+    for item in records:
+        state=item.get('effective_status') or item.get('estado')
+        actual=state in ('CONFIRMADA','PARCIAL','EJECUTADA')
+        if not actual and state=='NO_APLICA':continue
+        amount=(_finite_pos(item.get('importe_ejecutado')) if actual else None)
+        units=(_finite_pos(item.get('unidades_ejecutadas')) if amount else None)
+        if amount is None:
+            amount=_finite_pos(item.get('importe_previsto'))
+            units=_finite_pos(item.get('unidades_previstas'))
+        if amount is None or amount<.005:continue
+        visible_records.append(dict(item,display_usdt=amount,display_units=units or 0.))
+    return visible_candidates,visible_records

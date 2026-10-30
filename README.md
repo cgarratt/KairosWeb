@@ -1,3 +1,9 @@
+# KairosWeb v3.0.28
+
+Corrige el listado O2C2/O2C3 y oculta órdenes con importe $0.00. Conserva combos y guardado global. Compatible con KairosGPT v1.3.15. Ver RELEASE_NOTES_v3.0.28.md.
+
+Instalación: descomprimir y subir los archivos al repositorio existente; desplegar en Render. /health debe informar 3.0.28. MASTER no fue modificado.
+
 # KairosWeb v3.0.22
 
 Indicador junto al precio objetivo Fibo; USD sin indicador. Leyenda y ordenación numérica conservadas. Pendiente de desplegar.

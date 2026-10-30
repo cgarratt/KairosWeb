@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.27'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.28'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1491,6 +1491,9 @@ def orders_inbox_page():
         zero_weight_purchase_states(buy,managed_orders.get('records',[]))
         from orders_inbox import classify_purchase_views
         classify_purchase_views(buy,inbox['candidates'],managed_orders.get('records',[]))
+        from orders_inbox import visible_order_rows
+        inbox['candidates'],visible_records=visible_order_rows(inbox['candidates'],managed_orders.get('records',[]))
+        managed_orders=dict(managed_orders,records=visible_records)
         return render_template('ordenes.html',mode=mode,inbox=inbox,observed=observed,
                                snapshot=g.kairos_state['control']['snapshot_id'],master=APP_VERSION,error=None,
                                structural_note=structural_note,
