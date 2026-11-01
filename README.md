@@ -1,3 +1,7 @@
+# KairosWeb v3.0.31
+
+Una carga manual de Binance compartida por las pantallas. Instalar primero MCP v5.4.0 y luego Web. Pulsar Actualizar Spot para cargar datos; no se consulta Binance por navegar. Ver RELEASE_NOTES_v3.0.31.md. Preparado y validado localmente; pendiente de despliegue.
+
 # KairosWeb v3.0.30
 
 Bloqueo Binance visible, botón en pausa con horario Lima e históricos cerrados conservados al actualizar Spot. Ver RELEASE_NOTES_v3.0.30.md para instalación de MCP y Web. Compatible con KairosGPT v1.3.15. Preparado localmente, no desplegado.

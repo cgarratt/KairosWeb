@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.30'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.31'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -87,7 +87,7 @@ _FETCH_LOCK = threading.Lock()
 CACHE_TTL_SECONDS = None  # Spot snapshot remains until explicit refresh or worker restart
 RETRY_HTTP_CODES = frozenset((429, 500, 502, 503, 504))
 MCP_RETRY_DELAYS = (2, 5, 10)
-MCP_TIMEOUT_SECONDS = 35
+MCP_TIMEOUT_SECONDS = 150
 
 # In-process login throttling (one Render Gunicorn worker). Deploy a shared edge
 # limiter if scaling to multiple workers/instances.
@@ -352,12 +352,90 @@ def _invalidate_historical_cache():
     with _BTC_TREND_LOCK:
         _BTC_TREND_FETCH_DAY=None
 
+# Binance is read exclusively from the last explicit dashboard load.
+_BINANCE_SNAPSHOT = None
+_BINANCE_SNAPSHOT_LOCK = threading.RLock()
+_BINANCE_SNAPSHOT_PATH = Path(os.getenv('KAIROS_MARKET_SNAPSHOT_FILE','/tmp/kairos-market-snapshot.json'))
+
+class SpotRefreshRequired(RuntimeError):
+    pass
+
+def _read_binance_snapshot():
+    global _BINANCE_SNAPSHOT
+    with _BINANCE_SNAPSHOT_LOCK:
+        if _BINANCE_SNAPSHOT is None:
+            try:
+                candidate=json.loads(_BINANCE_SNAPSHOT_PATH.read_text())
+                if candidate.get('status')=='OK' and candidate.get('policy')=='MANUAL_SNAPSHOT':
+                    _BINANCE_SNAPSHOT=candidate
+            except (OSError,ValueError,AttributeError):pass
+        if _BINANCE_SNAPSHOT is None:
+            raise SpotRefreshRequired('Pulsa Actualizar Spot para cargar los datos de Binance.')
+        return _BINANCE_SNAPSHOT
+
+def _snapshot_response(tool,args=None):
+    snapshot=_read_binance_snapshot()
+    args=args or {}
+    if tool=='get_kairos_spot_prices':return json.loads(json.dumps(snapshot['spot']))
+    symbol=args.get('symbol','BTCUSDT');interval=args.get('interval','4h')
+    key=symbol+':'+interval
+    if tool=='get_kairos_ohlcv':
+        value=json.loads(json.dumps(snapshot.get('histories',{}).get(key,{})))
+        if value.get('status')=='DATA_ERROR':return value
+        limit=args.get('limit',200)
+        records=value.get('records',[])
+        if value.get('status')=='OK' and isinstance(limit,int) and 1<=limit<=999:
+            if len(records)<limit:
+                return dict(value,status='DATA_ERROR',records=[],reason=f'Insufficient closed candles: {len(records)}/{limit}')
+            value.update(records=records[-limit:],count=limit,snapshot_observed_utc=snapshot['as_observed_utc'])
+            return value
+    elif tool=='get_kairos_indicators':
+        value=snapshot.get('indicators',{}).get(key)
+        if value and args.get('history',300)==value.get('history_candles'):return json.loads(json.dumps(value))
+    elif tool=='get_kairos_cycle_phase' and set(args)<= {'symbol'}:
+        value=snapshot.get('cycles',{}).get(symbol)
+        if value:return json.loads(json.dumps(value))
+    raise SpotRefreshRequired('Datos no disponibles en esta carga. Pulsa Actualizar Spot.')
+
+def _refresh_binance_snapshot():
+    global _BINANCE_SNAPSHOT
+    pause=_active_mcp_pause('BINANCE_MCP_URL')
+    if pause:raise pause
+    # Exactly one tool call, no automatic transport retry or legacy fallback.
+    result=_accept_mcp_response('BINANCE_MCP_URL',asyncio.run(call_mcp(
+        'BINANCE_MCP_URL','get_kairos_dashboard_snapshot',{})))
+    if result.get('status')!='OK' or result.get('policy')!='MANUAL_SNAPSHOT':
+        raise RuntimeError('Invalid dashboard snapshot; update Binance MCP')
+    data=result.get('spot',{})
+    _validate_spot_payload(data)
+    with _BINANCE_SNAPSHOT_LOCK:
+        # Atomic replacement keeps readers on the previous complete observation.
+        target=_BINANCE_SNAPSHOT_PATH
+        temporary=target.with_name(target.name+'.'+uuid.uuid4().hex+'.tmp')
+        try:
+            temporary.write_text(json.dumps(result))
+            os.chmod(temporary,0o600)
+            os.replace(temporary,target)
+        finally:
+            temporary.unlink(missing_ok=True)
+        _BINANCE_SNAPSHOT=result
+    _invalidate_historical_cache()
+    with _HIST_LOCK:
+        for key,value in result.get('histories',{}).items():
+            if key.endswith(':1d') and value.get('status')=='OK':
+                cachekey=_historical_key('BINANCE_MCP_URL','get_kairos_ohlcv',
+                    {'symbol':value['symbol'],'interval':'1d','limit':value['count']})
+                _HIST_CACHE[cachekey]=value
+    return data
+
 def call_mcp_resilient(env_name, tool, args=None):
     """Fresh MCP sessions each attempt; retry only gateway errors/timeouts.
 
     Keep diagnostics/HTML and the live market loader on a shared retry policy.
     Never retry authorization, application errors, or malformed URLs.
     """
+    if env_name == 'BINANCE_MCP_URL':
+        return _snapshot_response(tool,args)
     key = _historical_key(env_name, tool, args)
     if key is not None:
         with _HIST_LOCK:
@@ -465,7 +543,9 @@ def diagnostic_error(exc, scope):
     # Safe structured logging: never log exception text, headers, URLs or tokens.
     app.logger.error('Kairos MCP failure ID=%s scope=%s exception=%s http_status=%s',
                      error_id,scope,etype,http_status if http_status is not None else 'n/a')
-    if http_status==418:
+    if isinstance(exc,SpotRefreshRequired):
+        category='REFRESH_REQUIRED';hint=str(exc)
+    elif http_status==418:
         category='BINANCE_IP_BLOCKED';hint='Binance bloqueó temporalmente la IP del servidor. Consultas en pausa.'
     elif http_status in (401,403):
         category='AUTH'; hint='El MCP respondió con un error de autorización.'
@@ -574,6 +654,8 @@ def _btc_weekly_prefetch():
     try:
         result=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
             {'symbol':'BTCUSDT','interval':'1d','limit':210})
+        with _HIST_LOCK:
+            _HIST_CACHE[_historical_key('BINANCE_MCP_URL','get_kairos_ohlcv',{'symbol':'BTCUSDT','interval':'1d','limit':210})]=result
         if not isinstance(result,dict) or result.get('status')=='DATA_ERROR':
             raise ValueError('BTC daily history unavailable')
         # Validate the source contract; do not silently accept other markets.
@@ -773,17 +855,7 @@ def core_dashboard(prices):
         'forecast_sensitivity':forecast_sensitivity(rows,liquidity)
     }
 
-def _load_live_dashboard_uncached(*, force=False):
-    with _MARKET_LOCK:
-        if _MARKET_CACHE['prices'] is not None and not force:
-            observed=datetime.fromisoformat(_MARKET_CACHE['observed'].replace('Z','+00:00'))
-            age=(datetime.now(timezone.utc)-observed.astimezone(timezone.utc)).total_seconds()
-            if -30 <= age <= 180:
-                return _MARKET_CACHE['observed'], core_dashboard(dict(_MARKET_CACHE['prices']))
-            # Expired observations trigger a fresh fetch below. Never value
-            # a new report from expired prices, even if the upstream fails.
-    # Shared resilient fetch with fresh session for each transient gateway failure.
-    data = call_mcp_resilient('BINANCE_MCP_URL', 'get_kairos_spot_prices')
+def _validate_spot_payload(data):
     if data.get('status') != 'OK':
         raise RuntimeError('Binance MCP DATA_ERROR')
     records = data.get('records')
@@ -805,11 +877,16 @@ def _load_live_dashboard_uncached(*, force=False):
     timestamp=datetime.fromisoformat(observed.replace('Z','+00:00'))
     age=(datetime.now(timezone.utc)-timestamp.astimezone(timezone.utc)).total_seconds()
     if age < -30 or age > 180:
-        raise RuntimeError('Stale MCP data')
+        raise SpotRefreshRequired('La observación Spot caducó. Pulsa Actualizar Spot.')
+    return observed,prices
+
+def _load_live_dashboard_uncached(*, force=False):
+    data=_refresh_binance_snapshot() if force else _snapshot_response('get_kairos_spot_prices')
+    observed,prices=_validate_spot_payload(data)
     dashboard=core_dashboard(prices)
     with _MARKET_LOCK:
-        _MARKET_CACHE.update(stored=time.monotonic(), observed=observed, prices=dict(prices))
-    return observed, dashboard
+        _MARKET_CACHE.update(stored=time.monotonic(),observed=observed,prices=dict(prices))
+    return observed,dashboard
 
 def load_live_dashboard(*, force=False):
     # One in-flight market fetch per application process, shared by all pages.
@@ -2243,7 +2320,7 @@ def _live_provider_probe(provider):
         return {'status':'NOT_CONFIGURED','category':'MCP_URL_MISSING'}
     try:
         # One direct request (no cascading gateway retries); no remote order/fill access.
-        data=asyncio.run(call_mcp(env,tool,{}))
+        data=call_mcp_resilient(env,tool,{})
         if data.get('status')!='OK':raise RuntimeError('non-OK MCP response')
         if provider=='binance':
             rows=data.get('records') or []
@@ -2404,7 +2481,7 @@ def spot_refresh():
     try:
         observed, _ = load_live_dashboard(force=True)
         return jsonify({'status':'OK','observed_at':observed, **market_cache_status(),
-                        'history':'PRESERVED_CLOSED_UTC_DAY'})
+                        'history':'MANUAL_BUNDLED_SNAPSHOT'})
     except Exception as exc:
         diag=diagnostic_error(exc,'spot:manual-refresh')
         # Previous snapshot stays labeled with its original observation time;

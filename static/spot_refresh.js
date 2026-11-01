@@ -13,7 +13,7 @@
  root.KairosSpotTime={formatSpotTime};
  if(typeof module!=='undefined'&&module.exports)module.exports={formatSpotTime};
 })(globalThis);
-/* Spot snapshot is read once per server worker; manual refresh is opt-in. */
+/* No Binance request on page load; only the explicit refresh button loads data. */
 (()=>{'use strict';
  if(typeof document==='undefined')return;
  const btn=document.getElementById('spot-refresh');const label=document.getElementById('spot-observed');

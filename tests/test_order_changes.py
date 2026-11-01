@@ -239,7 +239,7 @@ def test_manual_spot_refresh_preserves_closed_history_cache():
   with app.app.test_request_context('/api/spot/refresh',method='POST'):
    with patch.object(app,'_portfolio_authorized',return_value=True),patch.object(app,'_same_origin',return_value=True),patch.object(app,'_csrf_ok',return_value=True),patch.object(app,'load_live_dashboard',return_value=('test',{})):
     response=app.spot_refresh()
-    assert response.json['history']=='PRESERVED_CLOSED_UTC_DAY'
+    assert response.json['history']=='MANUAL_BUNDLED_SNAPSHOT'
     assert app._HIST_CACHE['test']=={'status':'OK'}
  finally:app._HIST_CACHE.pop('test',None)
 
@@ -262,3 +262,47 @@ def test_pause_ui_disables_then_expires_without_automatic_mcp_poll():
  assert.deepStrictEqual(requests,['/api/market-status']);})().catch(e=>{console.error(e);process.exitCode=1;});
  """
  subprocess.run(['node','-e',script],check=True)
+
+# Manual Binance snapshot integration: all network edges are mocked.
+def test_binance_navigation_never_calls_transport(tmp_path):
+ from unittest.mock import patch
+ with patch.object(app,'_BINANCE_SNAPSHOT',None),patch.object(app,'_BINANCE_SNAPSHOT_PATH',tmp_path/'snapshot.json'),patch.object(app,'call_mcp') as net:
+  for tool,args in [('get_kairos_spot_prices',{}),('get_kairos_ohlcv',{'symbol':'BTCUSDT','interval':'1d','limit':210}),('get_kairos_indicators',{'symbol':'BTCUSDT','interval':'1h'})]:
+   with pytest.raises(app.SpotRefreshRequired):app.call_mcp_resilient('BINANCE_MCP_URL',tool,args)
+  net.assert_not_called()
+
+def _manual_bundle():
+ observed=app.datetime.now(app.timezone.utc).isoformat()
+ spot={'status':'OK','as_observed_utc':observed,'records':[{'symbol':'BTCUSDT','price':'100'}]}
+ return {'status':'OK','policy':'MANUAL_SNAPSHOT','as_observed_utc':observed,'spot':spot,
+         'histories':{'BTCUSDT:1d':{'status':'OK','symbol':'BTCUSDT','interval':'1d','source':'Binance Spot','closed_only':True,'count':3,'records':[{'close':'1'},{'close':'2'},{'close':'3'}]}}}
+
+def test_manual_refresh_is_one_tool_call_and_navigation_uses_local_bundle(tmp_path):
+ from unittest.mock import AsyncMock,patch
+ bundle=_manual_bundle()
+ with patch.object(app,'_BINANCE_SNAPSHOT',None),patch.object(app,'_BINANCE_SNAPSHOT_PATH',tmp_path/'snapshot.json'),patch.object(app,'_active_mcp_pause',return_value=None),patch.object(app,'_validate_spot_payload',return_value=(bundle['as_observed_utc'],{'BTC':100})),patch.object(app,'call_mcp',new_callable=AsyncMock,return_value=bundle) as net:
+  app._refresh_binance_snapshot()
+  for _ in range(3):
+   assert app.call_mcp_resilient('BINANCE_MCP_URL','get_kairos_spot_prices')['as_observed_utc']==bundle['as_observed_utc']
+   result=app.call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',{'symbol':'BTCUSDT','interval':'1d','limit':2})
+   assert result['records']==[{'close':'2'},{'close':'3'}]
+  net.assert_awaited_once_with('BINANCE_MCP_URL','get_kairos_dashboard_snapshot',{})
+  # A worker restart loads the saved observation, without opening MCP.
+  app._BINANCE_SNAPSHOT=None
+  assert app._snapshot_response('get_kairos_spot_prices')['as_observed_utc']==bundle['as_observed_utc']
+  assert net.await_count==1
+
+def test_expired_spot_does_not_automatically_refresh():
+ from unittest.mock import patch
+ data=_manual_bundle()['spot'];data['as_observed_utc']=(app.datetime.now(app.timezone.utc)-app.timedelta(seconds=181)).isoformat()
+ with patch.object(app,'TOKENS',['BTC']),patch.object(app,'_snapshot_response',return_value=data),patch.object(app,'_refresh_binance_snapshot') as net:
+  with pytest.raises(app.SpotRefreshRequired):app._load_live_dashboard_uncached()
+  net.assert_not_called()
+
+def test_failed_refresh_keeps_original_bundle_and_does_not_retry(tmp_path):
+ from unittest.mock import AsyncMock,patch
+ previous=_manual_bundle()
+ with patch.object(app,'_BINANCE_SNAPSHOT',previous),patch.object(app,'_BINANCE_SNAPSHOT_PATH',tmp_path/'snapshot.json'),patch.object(app,'_active_mcp_pause',return_value=None),patch.object(app,'call_mcp',new_callable=AsyncMock,side_effect=TimeoutError) as net:
+  with pytest.raises(TimeoutError):app._refresh_binance_snapshot()
+  assert app._BINANCE_SNAPSHOT is previous
+  assert net.await_count==1
