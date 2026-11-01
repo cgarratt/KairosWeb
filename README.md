@@ -1,3 +1,7 @@
+# KairosWeb v3.0.30
+
+Bloqueo Binance visible, botón en pausa con horario Lima e históricos cerrados conservados al actualizar Spot. Ver RELEASE_NOTES_v3.0.30.md para instalación de MCP y Web. Compatible con KairosGPT v1.3.15. Preparado localmente, no desplegado.
+
 # KairosWeb v3.0.29
 
 Corrige el cálculo de Órdenes para usar el precio y estado de cada token. Conserva O2C2/O2C3, filtro de importe $0, combos y guardado global. Compatible con KairosGPT v1.3.15. Ver RELEASE_NOTES_v3.0.29.md.

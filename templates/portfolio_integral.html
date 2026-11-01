@@ -149,7 +149,9 @@
 {% if portfolio_diagnostic %}
 <div class="port-diagnostic" id="portfolio-diagnostic" role="alert" data-origin="{{ portfolio_diagnostic.origin }}" data-code="{{ portfolio_diagnostic.category }}">
 <strong>Valoración Spot no disponible · {{ portfolio_diagnostic.status }}</strong>
-{{ portfolio_diagnostic.message }} <a class="btn" href="{{ url_for('integral_portfolio_page') }}">Reintentar conexión Spot</a>
+{{ portfolio_diagnostic.message }}
+{% if portfolio_diagnostic.retry_at_utc %}<p>Próximo intento permitido: <time class="spot-retry-at" datetime="{{ portfolio_diagnostic.retry_at_utc }}">{{ portfolio_diagnostic.retry_at_utc }}</time>. No garantiza desbloqueo de Binance.</p>
+{% else %}<a class="btn" href="{{ url_for('integral_portfolio_page') }}">Reintentar conexión Spot</a>{% endif %}
 <div class="diag-meta">Proveedor / etapa: {{ portfolio_diagnostic.origin }} · Categoría: {{ portfolio_diagnostic.category }} · HTTP: {{ portfolio_diagnostic.http_status or 'N/D' }} · ID: {{ portfolio_diagnostic.error_id }}</div>
 <div class="diag-meta">Consulta: {{ portfolio_diagnostic.checked_utc }} · Última consulta válida: {{ portfolio_diagnostic.last_valid_spot_utc or 'N/D' }} (no reutilizada) · Snapshot: {{ portfolio_diagnostic.snapshot_id }} · Corte: {{ portfolio_diagnostic.fecha_corte }}</div>
 </div>

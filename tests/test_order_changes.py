@@ -204,3 +204,61 @@ def test_orders_python_matches_purchase_javascript_multiscale():
  for i,t in enumerate(b['tokens']):
   for j in range(4):assert amounts.get((t['token'],'O2C'+str(j+1)),0)==pytest.approx(sim['amounts'][i][j])
  assert remaining==pytest.approx(sim['cash'])
+
+@pytest.mark.parametrize('status',[418,429])
+def test_binance_pause_prevents_network_retries_and_preserves_expiry(status):
+ from datetime import datetime,timezone,timedelta
+ from unittest.mock import AsyncMock
+ until=(datetime.now(timezone.utc)+timedelta(minutes=10)).isoformat()
+ app._MCP_PAUSES.clear()
+ try:
+  with patch.object(app,'call_mcp',new=AsyncMock(return_value={'status':'DATA_ERROR','http_status':status,'retry_at_utc':until} )) as net,patch.object(app.time,'sleep') as sleep:
+   for _ in range(2):
+    with pytest.raises(app.MCPRateLimitError) as err:app._call_mcp_with_retries('BINANCE_MCP_URL','get_kairos_spot_prices',{})
+   assert net.call_count==1;sleep.assert_not_called()
+   diag=app.diagnostic_error(err.value,'test')
+   assert diag['http_status']==status and diag['retry_at_utc']==until
+   assert app.market_cache_status()['retry_at_utc']==until
+ finally:app._MCP_PAUSES.clear()
+
+
+def test_expired_binance_pause_allows_fresh_fetch():
+ from datetime import datetime,timezone,timedelta
+ from unittest.mock import AsyncMock
+ app._MCP_PAUSES['BINANCE_MCP_URL']=(418,datetime.now(timezone.utc)-timedelta(seconds=1))
+ try:
+  with patch.object(app,'call_mcp',new=AsyncMock(return_value={'status':'OK'})) as net:
+   assert app._call_mcp_with_retries('BINANCE_MCP_URL','get_kairos_spot_prices',{})['status']=='OK'
+   assert net.call_count==1
+ finally:app._MCP_PAUSES.clear()
+
+
+def test_manual_spot_refresh_preserves_closed_history_cache():
+ app._HIST_CACHE['test']={'status':'OK'}
+ try:
+  with app.app.test_request_context('/api/spot/refresh',method='POST'):
+   with patch.object(app,'_portfolio_authorized',return_value=True),patch.object(app,'_same_origin',return_value=True),patch.object(app,'_csrf_ok',return_value=True),patch.object(app,'load_live_dashboard',return_value=('test',{})):
+    response=app.spot_refresh()
+    assert response.json['history']=='PRESERVED_CLOSED_UTC_DAY'
+    assert app._HIST_CACHE['test']=={'status':'OK'}
+ finally:app._HIST_CACHE.pop('test',None)
+
+
+def test_pause_ui_disables_then_expires_without_automatic_mcp_poll():
+ import subprocess
+ script=r"""
+ const fs=require('fs'),vm=require('vm'),assert=require('assert');let timer,click,requests=[];
+ const button={dataset:{csrf:'test'},addEventListener:(name,fn)=>click=fn},label={};
+ const now=Date.now(),deadline=new Date(now+60000).toISOString();
+ let clock=now;class TestDate extends Date{static now(){return clock;}}
+ const context={Date:TestDate,Intl,console,setInterval:fn=>timer=fn,
+ document:{getElementById:id=>id==='spot-refresh'?button:label,
+ querySelectorAll:()=>[{getAttribute:()=>deadline}]},
+ fetch:async(url)=>{requests.push(url);return {json:async()=>({retry_at_utc:deadline,http_status:418})}},window:{location:{reload:()=>assert.fail('No auto reload')}}};
+ vm.runInNewContext(fs.readFileSync('static/spot_refresh.js','utf8'),context);
+ (async()=>{await new Promise(resolve=>setImmediate(resolve));assert(button.disabled);
+ await click();assert.deepStrictEqual(requests,['/api/market-status']);
+ clock=now+61000;timer();assert(!button.disabled);
+ assert.deepStrictEqual(requests,['/api/market-status']);})().catch(e=>{console.error(e);process.exitCode=1;});
+ """
+ subprocess.run(['node','-e',script],check=True)

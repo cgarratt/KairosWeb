@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.29'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.30'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -343,7 +343,7 @@ def historical_cache_status():
     with _HIST_LOCK:
         return {'daily_series_cached':len(_HIST_CACHE),
                 'cache_day_utc':datetime.now(timezone.utc).date().isoformat(),
-                'policy':'UTC_DAY_AND_MANUAL_REFRESH', 'is_spot':False}
+                'policy':'UTC_DAY_CLOSED_HISTORY', 'is_spot':False}
 
 def _invalidate_historical_cache():
     global _BTC_TREND_FETCH_DAY
@@ -378,14 +378,44 @@ def call_mcp_resilient(env_name, tool, args=None):
             return result
     return _call_mcp_with_retries(env_name, tool, args)
 
+_MCP_PAUSE_LOCK=threading.Lock()
+_MCP_PAUSES={}
+
+class MCPRateLimitError(RuntimeError):
+    def __init__(self,status,until):
+        self.http_status=status
+        self.retry_at_utc=until.astimezone(timezone.utc).isoformat()
+        self.retry_after_seconds=max(0,math.ceil((until-datetime.now(timezone.utc)).total_seconds()))
+        super().__init__('Binance temporalmente bloqueado; consultas en pausa')
+
+def _active_mcp_pause(env_name):
+    with _MCP_PAUSE_LOCK:pause=_MCP_PAUSES.get(env_name)
+    if pause and pause[1]>datetime.now(timezone.utc):return MCPRateLimitError(*pause)
+    return None
+
+def _accept_mcp_response(env_name,data):
+    if env_name!='BINANCE_MCP_URL' or not isinstance(data,dict) or data.get('http_status') not in (418,429):return data
+    now=datetime.now(timezone.utc)
+    try:
+        raw=data.get('retry_at_utc','')
+        until=datetime.fromisoformat(raw.replace('Z','+00:00'))
+        if until.tzinfo is None or until<=now:raise ValueError('Invalid deadline')
+    except (ValueError,TypeError,AttributeError):
+        from datetime import timedelta
+        until=now+timedelta(seconds=900 if data['http_status']==418 else 60)
+    with _MCP_PAUSE_LOCK:_MCP_PAUSES[env_name]=(data['http_status'],until)
+    raise MCPRateLimitError(data['http_status'],until)
+
 def _call_mcp_with_retries(env_name, tool, args):
+    pause=_active_mcp_pause(env_name)
+    if pause:raise pause
     for attempt in range(len(MCP_RETRY_DELAYS) + 1):
         try:
-            return asyncio.run(call_mcp(env_name, tool, args))
+            return _accept_mcp_response(env_name,asyncio.run(call_mcp(env_name, tool, args)))
         except Exception as exc:
             status = _http_status(exc)
             timeout = isinstance(exc, (TimeoutError, httpx.TimeoutException)) or 'timeout' in type(exc).__name__.lower()
-            if attempt >= len(MCP_RETRY_DELAYS) or (status not in RETRY_HTTP_CODES and not timeout):
+            if isinstance(exc,MCPRateLimitError) or status in (418,429) or attempt >= len(MCP_RETRY_DELAYS) or (status not in RETRY_HTTP_CODES and not timeout):
                 raise
             delay = MCP_RETRY_DELAYS[attempt]
             app.logger.warning('MCP transient retry provider=%s tool=%s attempt=%s http_status=%s wait_s=%s',
@@ -400,7 +430,10 @@ def market_cache_status():
         observed = _MARKET_CACHE['observed']
         stored = _MARKET_CACHE['stored']
     age = round(max(0.0, time.monotonic() - stored), 1) if observed else None
-    return {'last_valid_observed_at':observed, 'cache_age_seconds':age,
+    pause=_active_mcp_pause('BINANCE_MCP_URL')
+    return {'retry_at_utc':pause.retry_at_utc if pause else None,
+            'http_status':pause.http_status if pause else None,
+            'last_valid_observed_at':observed, 'cache_age_seconds':age,
             'cache_state':'SNAPSHOT' if observed else 'EMPTY', 'refresh_policy':'MANUAL', 'spot_is_live':False}
 
 
@@ -413,6 +446,7 @@ def _http_status(exc):
         if id(current) in seen:
             continue
         seen.add(id(current))
+        if isinstance(current,MCPRateLimitError):return current.http_status
         if isinstance(current, httpx.HTTPStatusError):
             return current.response.status_code
         for nxt in (getattr(current, '__cause__', None), getattr(current,'__context__',None)):
@@ -431,7 +465,9 @@ def diagnostic_error(exc, scope):
     # Safe structured logging: never log exception text, headers, URLs or tokens.
     app.logger.error('Kairos MCP failure ID=%s scope=%s exception=%s http_status=%s',
                      error_id,scope,etype,http_status if http_status is not None else 'n/a')
-    if http_status in (401,403):
+    if http_status==418:
+        category='BINANCE_IP_BLOCKED';hint='Binance bloqueó temporalmente la IP del servidor. Consultas en pausa.'
+    elif http_status in (401,403):
         category='AUTH'; hint='El MCP respondió con un error de autorización.'
     elif http_status in (404,405,406,415):
         category='ENDPOINT'; hint='Revisa la ruta MCP o la negociación del protocolo HTTP.'
@@ -454,7 +490,9 @@ def diagnostic_error(exc, scope):
     else:
         category='MCP_ERROR';hint='Consulta los logs privados usando el ID del error.'
     return {'code':category,'message':hint,'error_id':error_id,
-            'exception_type':etype,'http_status':http_status}
+            'exception_type':etype,'http_status':http_status,
+            'retry_at_utc':getattr(exc,'retry_at_utc',None),
+            'retry_after_seconds':getattr(exc,'retry_after_seconds',None)}
 
 def pretty_error(exc):
     if isinstance(exc, RuntimeError) and ('no configurada' in str(exc) or 'debe usar HTTPS' in str(exc)):
@@ -1420,8 +1458,9 @@ def integral_portfolio_page():
                               'snapshot_id':g.kairos_state['control']['snapshot_id'],
                               'fecha_corte':g.kairos_state['control']['fecha_corte'],
                               'http_status':info.get('http_status') if info else None,
+                              'retry_at_utc':info.get('retry_at_utc') if info else None,
                               'last_valid_spot_utc':market_cache_status()['last_valid_observed_at'],
-                              'message':'Valoración actual no disponible. No se muestran cifras Spot parciales ni se reutiliza una cotización anterior.'}
+                              'message':info['message'] if info and info.get('http_status') in (418,429) else 'Valoración actual no disponible. No se muestran cifras Spot parciales ni se reutiliza una cotización anterior.'}
     return render_template('portfolio_integral.html', master=APP_VERSION,
                            capital_distribution=capital_distribution,
                            spot=spot_breakdown, spot_observed=spot_observed, pnl_report=pnl_report,
@@ -2364,9 +2403,8 @@ def spot_refresh():
         return jsonify({'status':'FORBIDDEN'}), 403
     try:
         observed, _ = load_live_dashboard(force=True)
-        _invalidate_historical_cache()
         return jsonify({'status':'OK','observed_at':observed, **market_cache_status(),
-                        'history':'INVALIDATED_ON_REFRESH'})
+                        'history':'PRESERVED_CLOSED_UTC_DAY'})
     except Exception as exc:
         diag=diagnostic_error(exc,'spot:manual-refresh')
         # Previous snapshot stays labeled with its original observation time;
