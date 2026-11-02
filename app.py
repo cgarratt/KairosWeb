@@ -1680,7 +1680,6 @@ def integral_portfolio_page():
         btc_reference_price,btc_total=live['btc_usdt_spot'],live['total_btc_equivalent']
         bsi_archive=live['bsi_historical']
         pri=executive_risk_index(candidate_rows,live['usdt_total'])
-        market_trend=cached_btc_weekly_regime((g.kairos_state.get('wave_pivots',{}).get('BTC') or {}).get('cl_date'))
     except Exception as exc:
         origin='MARKET_SPOT_MCP' if stage=='MARKET_SPOT_MCP' else 'PORTFOLIO_CALCULATION'
         info=diagnostic_error(exc,'portfolio') if stage=='MARKET_SPOT_MCP' else None

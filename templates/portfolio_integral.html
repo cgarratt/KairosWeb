@@ -8,10 +8,17 @@
 .port-page .port-hero h2{font-size:clamp(24px,3vw,35px);margin:0;color:var(--port-ink)}
 .port-page .port-hero p{margin:4px 0;color:var(--port-sub);font-size:12px}
 .port-tag{padding:7px 12px;border-radius:18px;color:#215b9d;background:#e8f2ff;font-size:11px;font-weight:700;max-width:100%;word-wrap:break-word}
-.port-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin-bottom:13px}
+.port-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:13px;margin-bottom:13px;align-items:start}
+.port-kpis>.port-kpi{min-height:160px;box-sizing:border-box}
+.port-pri-value{display:flex;align-items:baseline;gap:6px}.port-pri-value span{font-size:11px}
+.port-pri-meter{height:6px;border-radius:6px;background:var(--port-border);margin:9px 0;overflow:hidden}
+.port-pri-meter i{display:block;height:100%;background:var(--ki-accent);border-radius:inherit}
+.port-kpi .port-pri-label{color:var(--ki-accent);font-weight:800}
+.port-kpi .ki-details{margin-top:8px}.port-kpi .ki-details p{line-height:1.5}
+@media(min-width:821px) and (max-width:960px){.port-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .port-kpi{padding:15px 18px;background:var(--port-surface);border:1px solid var(--port-border);border-radius:14px;min-width:0}
 .port-kpi small{display:block;font-size:11px;font-weight:750;color:var(--port-sub);text-transform:uppercase;letter-spacing:.03em}
-.port-kpi strong{display:block;font-size:clamp(18px,2.1vw,28px);line-height:1.2;margin:6px 0;font-variant-numeric:tabular-nums;color:var(--port-ink);overflow-wrap:anywhere}
+.port-kpi strong{display:block;font-size:clamp(18px,1.55vw,26px);line-height:1.2;margin:6px 0;font-variant-numeric:tabular-nums;color:var(--port-ink);overflow-wrap:anywhere}
 .port-kpi strong.negative{color:#d9435e}.port-kpi strong.positive{color:#12966f}
 .port-kpi span{display:block;color:var(--port-sub);font-size:11px}
 .port-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin-bottom:13px;align-items:stretch}
@@ -128,15 +135,6 @@
 .ki-empty{text-align:center;font-size:32px;font-weight:800;margin:22px 0}
 
 
-/* BTC 1W combined direction + candle/swing panel */
-.ki-trend-combined{display:grid;grid-template-columns:minmax(110px,.72fr) minmax(0,1.7fr);gap:12px;align-items:center}
-.ki-trend-combined .ki-trend{padding:8px 0}
-.ki-trend-combined .ki-trend-icon{font-size:54px}
-.ki-chart-wrap{min-width:0;position:relative}
-.ki-chart-wrap svg{display:block;width:100%;height:auto;min-height:175px;overflow:visible}
-.ki-chart-note{font-size:10px;color:var(--port-sub);margin-top:4px;text-align:center}
-.ki-chart-wrap .ki-chart-empty{font-size:12px;color:var(--port-sub);padding:55px 5px;text-align:center}
-@media(max-width:670px){.ki-trend-combined{grid-template-columns:1fr}.ki-trend-combined .ki-trend{padding:4px}.ki-chart-wrap svg{min-height:150px}}
 </style>
 {% endblock %}
 {% block content %}
@@ -170,116 +168,20 @@
  <div class="port-kpi"><small>Resultado no realizado</small><strong data-private="money" class="{{ 'negative' if pnl_report and pnl_report.total_usdt is not none and pnl_report.total_usdt < 0 else 'positive' if pnl_report and pnl_report.total_usdt is not none else '' }}">{{ '{:+,.2f}'.format(pnl_report.total_usdt) if pnl_report and pnl_report.total_usdt is not none else 'N/D' }}</strong><span>{{ ('%.2f%% sobre costo abierto'|format(pnl_report.total_pct)) if pnl_report and pnl_report.total_pct is not none else 'Requiere Spot y costos completos' }}</span></div>
  <div class="port-kpi"><small>Liquidez física</small><strong data-private="money">{{ '${:,.2f}'.format(spot.liquidity+spot.trading) if spot else 'N/D' }}</strong><span>QF incluido una sola vez</span></div>
  <div class="port-kpi"><small>Cripto invertido</small><strong data-private="money">{{ '${:,.2f}'.format(spot.total-spot.liquidity-spot.trading) if spot else 'N/D' }}</strong><span>Manga cripto · {{ '%.2f%%'|format((spot.total-spot.liquidity-spot.trading)/spot.total*100) if spot and spot.total else 'N/D' }} del patrimonio</span></div>
-</div>
-<div class="port-pair" data-layout-region="risk-trend">
- <article class="port-card kairos-indicator" data-indicator="pri-v1">
-  <div class="ki-title">Portfolio Risk Index <span class="ki-help" title="Indicador descriptivo; no es VaR ni señal de trading">ⓘ</span></div>
+ <article class="port-kpi port-kpi-pri" data-indicator="pri-v1">
+  <small>Portfolio Risk Index · PRI</small>
   {% if pri %}
   {% set risk_color = '#dc5965' if pri.score >= 70 else '#e8a638' if pri.score >= 40 else '#24a77d' %}
-  <div class="ki-gauge" role="img" aria-label="PRI {{ pri.score }} de 100, {{ pri.label }}">
-   <svg viewBox="0 0 220 128" aria-hidden="true"><path d="M 25 112 A 85 85 0 0 1 195 112" pathLength="100" fill="none" stroke="var(--port-border)" stroke-width="15" stroke-linecap="round"/><path d="M 25 112 A 85 85 0 0 1 195 112" pathLength="100" fill="none" stroke="{{ risk_color }}" stroke-width="15" stroke-linecap="round" stroke-dasharray="{{ pri.score }} 100"/><text x="110" y="94" text-anchor="middle" font-size="36" font-weight="800" fill="var(--port-ink)">{{ '%.1f'|format(pri.score) }}</text><text x="110" y="113" text-anchor="middle" font-size="12" fill="var(--port-sub)">de 100</text></svg>
-  </div>
-  <div class="ki-status" style="--ki-accent:{{ risk_color }}">{{ 'RIESGO ' ~ pri.label|upper }}</div>
-  <div class="ki-metrics"><div><small>Exposición</small><strong>{{ pri.exposure_pct }}%</strong></div><div><small>Concentración</small><strong>{{ pri.concentration_pct }}%</strong></div><div><small>Drift</small><strong>{{ pri.drift_pct }} pp</strong></div></div>
-  <p class="ki-details">{{ pri.explanation }}</p>
-  <details class="ki-details"><summary>Metodología</summary><p>{{ pri.model }}. No representa probabilidad de pérdida.</p></details>
-  {% else %}<div class="ki-empty">N/D</div><p class="sub">Se requiere valoración Spot completa</p>{% endif %}
- </article>
- <article class="port-card kairos-indicator" data-indicator="market-trend">
-  <div class="ki-title">Tendencia BTC · 1W</div>
-  <div class="ki-trend-combined">
-   <div id="btc-trend-display" class="ki-trend" data-regime="{{ market_trend.regime }}">
-    <div id="btc-trend-icon" class="ki-trend-icon" aria-hidden="true">{{ '↗' if market_trend.regime=='ALCISTA' else '↘' if market_trend.regime=='BAJISTA' else '→' if market_trend.regime=='LATERAL' else '—' }}</div>
-    <div id="btc-trend-label" class="ki-trend-label" role="status" aria-live="polite">{{ market_trend.regime }}</div>
-    <div id="btc-trend-week" class="ki-trend-week">{{ 'Cierre UTC ' ~ market_trend.week if market_trend.week else (market_trend.reason or 'Históricos BTC pendientes') }}</div>
-   </div>
-   <div class="ki-chart-wrap" id="btc-weekly-pivot-chart" role="img" aria-label="Velas japonesas BTC 1W desde Cycle Low publicado y últimos tres pivotes confirmados">
-    <div class="ki-chart-empty">{{ market_trend.reason or 'Cargando gráfico desde los históricos guardados…' }}</div>
-    <div class="ki-chart-note">1W UTC · {{ market_trend.source or "fuente histórica pendiente" }} · velas OHLC desde CL · pivotes 5L/5R</div><a class="tiny-control" href="{{ url_for('settings_page', tab='mcp') }}">Gestionar históricos</a>
-   </div>
-  </div>
-  <details class="ki-details"><summary>Metodología</summary><p>Cierres semanales completos UTC, SMA20 y pendiente. Informativo; no sustituye BSI ni habilita órdenes.</p></details>
+  <div class="port-pri-value"><strong>{{ '%.1f'|format(pri.score) }}</strong><span>/ 100</span></div>
+  <div class="port-pri-meter" style="--ki-accent:{{ risk_color }}" role="meter" aria-label="Portfolio Risk Index" aria-valuenow="{{ pri.score }}" aria-valuemin="0" aria-valuemax="100"><i style="width:{{ pri.score }}%"></i></div>
+  <span class="port-pri-label" style="--ki-accent:{{ risk_color }}">{{ 'RIESGO ' ~ pri.label|upper }}</span>
+  <details class="ki-details"><summary>Detalle y metodología</summary>
+   <p>Exposición: {{ pri.exposure_pct }}% · Concentración: {{ pri.concentration_pct }}% · Drift: {{ pri.drift_pct }} pp</p>
+   <p>{{ pri.explanation }}</p><p>{{ pri.model }}. No representa probabilidad de pérdida.</p>
+  </details>
+  {% else %}<strong>N/D</strong><span>Se requiere valoración Spot completa</span>{% endif %}
  </article>
 </div>
-<script>
-(function(){
-  const panel=document.getElementById('btc-trend-display');
-  if(!panel)return;
-  const chart=document.getElementById('btc-weekly-pivot-chart');
-  function draw(data){
-    if(!chart)return;
-    const cs=data.candles||[],ps=data.pivots||[];
-    if(cs.length<1){
-      chart.querySelector('.ki-chart-empty').textContent=data.reason||'Tres pivotes semanales no confirmados';return;
-    }
-    const ns='http://www.w3.org/2000/svg';
-    const el=(tag,attrs)=>{const n=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs||{}))n.setAttribute(k,String(v));return n;};
-    const width=440,height=235,left=18,right=38,top=28,bottom=28;
-    const lows=cs.map(c=>c.low),highs=cs.map(c=>c.high);
-    const lo=Math.min(...lows)*.96,hi=Math.max(...highs)*1.04;
-    const x=i=>left+(i+.5)*(width-left-right)/cs.length;
-    const y=v=>top+(hi-v)/(hi-lo)*(height-top-bottom);
-    const svg=el('svg',{viewBox:`0 0 ${width} ${height}`,role:'img','aria-label':'BTC 1W, velas japonesas OHLC desde CL publicado y tres pivotes semanales confirmados'});
-    for(let i=0;i<4;i++){
-      const value=lo+(hi-lo)*i/3,yy=y(value);
-      svg.appendChild(el('line',{x1:left,y1:yy,x2:width-right,y2:yy,stroke:'currentColor','stroke-opacity':'.13'}));
-      const label=el('text',{x:width-2,y:yy+4,'text-anchor':'end',fill:'currentColor','fill-opacity':'.7','font-size':10});label.textContent='$'+Math.round(value/1000)+'k';svg.appendChild(label);
-    }
-    const cw=Math.max(2,Math.min(9,(width-left-right)/cs.length*.6));
-    cs.forEach((c,i)=>{
-      const color=c.close>=c.open?'#22bd86':'#e25d69';
-      const cx=x(i), bodyTop=Math.min(y(c.open),y(c.close));
-      const bodyHeight=Math.max(1.5,Math.abs(y(c.open)-y(c.close)));
-      svg.appendChild(el('line',{x1:cx,x2:cx,y1:y(c.high),y2:y(c.low),stroke:color,'stroke-width':1.25}));
-      svg.appendChild(el('rect',{x:cx-cw/2,y:bodyTop,width:cw,height:bodyHeight,fill:color,rx:.4}));
-      const tip=el('title');tip.textContent=`Semana ${c.week_start} UTC | O $${c.open.toFixed(2)} H $${c.high.toFixed(2)} L $${c.low.toFixed(2)} C $${c.close.toFixed(2)}`;svg.lastChild.appendChild(tip);
-    });
-    if(ps.length===3){
-      const points=ps.map(p=>`${x(p.index)},${y(p.price)}`).join(' ');
-      svg.appendChild(el('polyline',{points,fill:'none',stroke:'#4b9cff','stroke-width':3,'stroke-linejoin':'round'}));
-    }
-    ps.forEach((p,i)=>{
-      const px=x(p.index),py=y(p.price),color=p.kind==='H'?'#27c88c':'#f2646b';
-      svg.appendChild(el('circle',{cx:px,cy:py,r:5,fill:color,stroke:'#fff','stroke-width':1.4}));
-      const label=el('text',{x:px,y:Math.max(14,Math.min(height-10,py+(p.kind==='H'?-12:18))),fill:'currentColor','text-anchor':'middle','font-size':10,'font-weight':700});
-      label.textContent=`P${i+1} $${Math.round(p.price).toLocaleString('en-US')}`;svg.appendChild(label);
-      const title=el('title');title.textContent=`${p.kind==='H'?'Máximo':'Mínimo'} ${p.date} · $${p.price.toFixed(2)} · 5L/5R confirmado ${p.confirmed_at_utc||'N/D'}`;svg.appendChild(title);
-    });
-    const cl=el('text',{x:left,y:height-6,fill:'currentColor','font-size':10,'fill-opacity':'.8'});cl.textContent='CL';svg.appendChild(cl);
-    const old=chart.querySelector('svg');if(old)old.remove();
-    const empty=chart.querySelector('.ki-chart-empty');if(empty)empty.remove();
-    chart.insertBefore(svg,chart.firstChild);
-    const note=chart.querySelector('.ki-chart-note');if(note)note.textContent='1W UTC · velas OHLC desde CL · pivotes 5L/5R'+(ps.length<3?' · '+ps.length+'/3 confirmados':'');
-  }
-  function showUnavailable(reason){
-    panel.dataset.regime='N/D';
-    document.getElementById('btc-trend-label').textContent='N/D';
-    document.getElementById('btc-trend-icon').textContent='—';
-    document.getElementById('btc-trend-week').textContent=reason;
-    let empty=chart?.querySelector('.ki-chart-empty');
-    if(empty)empty.textContent=reason;
-  }
-  async function refresh(){
-    const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),15000);
-    try{
-      const res=await fetch('{{ url_for("portfolio_btc_trend_status") }}',{credentials:'same-origin',cache:'no-store',signal:controller.signal});
-      if(!res.ok){showUnavailable('No se pudo leer la tendencia BTC. Revisa sesión, MASTER e históricos en Configuración.');return;}
-      const data=await res.json();
-      if(!['ALCISTA','BAJISTA','LATERAL'].includes(data.regime)){
-        showUnavailable(data.reason||'Históricos BTC no disponibles. Revisa Configuración.');return;
-      }
-      panel.dataset.regime=data.regime;
-      document.getElementById('btc-trend-label').textContent=data.regime;
-      document.getElementById('btc-trend-icon').textContent=({'ALCISTA':'↗','BAJISTA':'↘','LATERAL':'→'})[data.regime];
-      document.getElementById('btc-trend-week').textContent='Cierre UTC '+data.week+' · '+data.source;
-      draw(data);
-    }catch(e){showUnavailable('No se pudo cargar la tendencia BTC. Revisa la conexión y los históricos en Configuración.');}
-    finally{clearTimeout(timeout);}
-  }
-  refresh();
-})();
-</script>
 <!-- Fila 1: current capital by custody, current allocation 12 tokens + USDT -->
 <div class="port-pair" data-layout-row="1">
  <article class="port-card" data-capital-chart="donut" data-source="02_POSICIONES_03_LIQUIDEZ_BINANCE_SPOT">
