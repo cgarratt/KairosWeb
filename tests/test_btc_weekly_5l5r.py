@@ -110,7 +110,7 @@ def test_trend_explains_unavailable_history(historical_snapshot,bad):
  snapshot=historical_snapshot;data=snapshot['histories']['BTCUSDT:1d']
  if bad=='stale':snapshot['history_day_utc']='2020-01-01'
  if bad=='missing':snapshot['histories']={}
- if bad=='wrong_source':data['source']='KuCoin Spot'
+ if bad=='wrong_source':data['source']='Wrong Spot'
  if bad=='gap':data['records'].pop(-50)
  if bad=='incomplete_week':
   today=datetime.now(timezone.utc).date();day=today-timedelta(days=today.weekday()+4)
@@ -154,3 +154,11 @@ def test_frontend_reports_missing_history_and_http_errors():
  })().catch(e=>{console.error(e);process.exitCode=1;});
  '''.replace('SCRIPT',json.dumps(script))
  subprocess.run(['node','-e',driver],check=True)
+
+
+def test_trend_reads_primary_kucoin_history(historical_snapshot):
+ data=historical_snapshot['histories']['BTCUSDT:1d'];data['source']='KuCoin Spot'
+ from wave_structure import full_utc_weeks
+ weeks=full_utc_weeks(data['records'])
+ result=web.cached_btc_weekly_regime(weeks[2]['week_start'])
+ assert result['status']=='OK' and result['source']=='KuCoin Spot' and result['candles']

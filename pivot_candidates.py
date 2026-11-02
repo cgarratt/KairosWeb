@@ -108,3 +108,28 @@ def add_uncertified_daily_extrema(candidate, ohlcv):
     result['warning']=(str(result.get('warning') or '')+
         '; O1 candidato semanal, requiere 5L/5R, BOS y certificación humana; NO operativo').strip('; ')
     return result
+
+
+def candidates_daily(token,data,published,archived=None):
+    """Weekly candidates from one loaded Spot series, never publishing states."""
+    from wave_structure import full_utc_weeks,weekly_wave_candidates
+    archived=archived or {}
+    if data.get('status')!='OK' or data.get('source') not in ('KuCoin Spot','Binance Spot') or data.get('interval')!='1d' or data.get('closed_only') is not True:
+        return {'token':token,'status':'DATA_ERROR','warning':'Históricos diarios no disponibles o fuente inválida'}
+    cl=published.get('cycle_low') or archived.get('cycle_low')
+    day=published.get('cl_date') or archived.get('cl_date')
+    if not cl or not day:
+        return {'token':token,'status':'DATA_ERROR','warning':'CL fechado no disponible; revisar Master, sin inventar anclas'}
+    if token=='VIRTUAL' and virtual_flash_cl(cl,day):
+        return {'token':token,'status':'DATA_ERROR','warning':'CL VIRTUAL excluido: requiere revisión explícita'}
+    weeks=full_utc_weeks(data.get('records') or [])
+    waves=weekly_wave_candidates(weeks,day)
+    result={'token':token,'market':('PUMP' if token=='PUMPFUN' else token)+'/USDT',
+            'source':data['source']+' 1D / WEEKLY UTC','status':'CANDIDATO_NO_CERTIFICADO',
+            'cycle_low':cl,'cl_date':day,'cycle_high':archived.get('cycle_high'),'ch_date':archived.get('ch_date'),
+            'warning':'CL de referencia publicado/archivado; ondas 5L/5R PROPUESTAS. BOS y publicación humana pendientes. No modifica pivotes protegidos.',
+            'method':'CLOSED_UTC_WEEKLY_5L5R','certified':False}
+    for wave in ('o1','o2','o3','o4','o5'):
+        row=waves.get(wave.upper(),{})
+        result[wave]=row.get('price');result[wave+'_date']=row.get('date')
+    return result

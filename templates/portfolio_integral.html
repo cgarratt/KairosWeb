@@ -146,7 +146,7 @@
 <span class="port-coin" data-token="{{ symbol }}"><span class="port-coin-logo" aria-hidden="true"><span class="port-coin-glyph">{{ glyphs.get(symbol,symbol[:1]) }}</span>{% if symbol in logos %}<img loading="lazy" src="https://cryptologos.cc/logos/{{ logos[symbol] }}-logo.png" alt="" onerror="this.remove()">{% endif %}</span><span class="port-coin-name">{{ symbol }}</span></span>
 {%- endmacro %}
 <div class="port-page">
-{% if spot_source == "KuCoin Spot" %}<div class="port-diagnostic" role="status"><strong>Respaldo activo · KuCoin Spot</strong><p>Valoración con precios de KuCoin. Los precios pueden diferir de Binance. La fuente histórica de pivotes y BSI permanece separada.</p></div>{% endif %}
+{% if spot_source == "Binance Spot" %}<div class="port-diagnostic" role="status"><strong>Respaldo activo · Binance Spot</strong><p>Valoración con precios de Binance como respaldo de KuCoin. Los históricos conservan su propia fuente. La fuente histórica de pivotes y BSI permanece separada.</p></div>{% endif %}
 {% if portfolio_diagnostic %}
 <div class="port-diagnostic" id="portfolio-diagnostic" role="alert" data-origin="{{ portfolio_diagnostic.origin }}" data-code="{{ portfolio_diagnostic.category }}">
 <strong>Valoración Spot no disponible · {{ portfolio_diagnostic.status }}</strong>
@@ -195,7 +195,7 @@
    </div>
    <div class="ki-chart-wrap" id="btc-weekly-pivot-chart" role="img" aria-label="Velas japonesas BTC 1W desde Cycle Low publicado y últimos tres pivotes confirmados">
     <div class="ki-chart-empty">{{ market_trend.reason or 'Cargando gráfico desde los históricos guardados…' }}</div>
-    <div class="ki-chart-note">1W UTC · Binance Spot · velas OHLC desde CL · pivotes 5L/5R</div><a class="tiny-control" href="{{ url_for('settings_page', tab='mcp') }}">Gestionar históricos</a>
+    <div class="ki-chart-note">1W UTC · {{ market_trend.source or "fuente histórica pendiente" }} · velas OHLC desde CL · pivotes 5L/5R</div><a class="tiny-control" href="{{ url_for('settings_page', tab='mcp') }}">Gestionar históricos</a>
    </div>
   </div>
   <details class="ki-details"><summary>Metodología</summary><p>Cierres semanales completos UTC, SMA20 y pendiente. Informativo; no sustituye BSI ni habilita órdenes.</p></details>

@@ -50,7 +50,7 @@ def resolve(token, published, archived, data):
     if token=='HYPE':
         if source!='Hyperliquid Spot' or data.get('pair')!='HYPE/USDC' or data.get('interval')!='1d':
             return dict(empty,status='WRONG_HYPE_SOURCE')
-    elif source!='Binance Spot' or data.get('interval')!='1d':
+    elif source not in ('KuCoin Spot','Binance Spot') or data.get('interval')!='1d':
         return dict(empty,status='WRONG_BINANCE_SOURCE')
     records=data.get('records') or []
     weeks=full_utc_weeks(records)
@@ -101,7 +101,7 @@ def resolve_long_term_buy(token, published, data, archived=None):
     if data.get('status')!='OK' or data.get('closed_only') is not True or data.get('interval')!='1d':return deny
     if token=='HYPE':
         if data.get('source')!='Hyperliquid Spot' or data.get('pair')!='HYPE/USDC':return dict(deny,reason='VENUE_HYPE_INVALIDO')
-    elif data.get('source')!='Binance Spot':return dict(deny,reason='VENUE_BINANCE_INVALIDO')
+    elif data.get('source') not in ('KuCoin Spot','Binance Spot'):return dict(deny,reason='VENUE_BINANCE_INVALIDO')
     if token=='VIRTUAL' and virtual_flash_cl(published.get('cycle_low'),published.get('cl_date')):
         return {**deny,'status':'BLOQUEADO','reason':'VIRTUAL_CL_FLASH_EXCLUIDO_REQUIERE_REVISION'}
     try:

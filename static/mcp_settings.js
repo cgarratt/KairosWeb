@@ -132,6 +132,6 @@
     const button=event.target.closest('button[data-provider]');if(!button)return;
     check(button.dataset.provider,button.classList.contains('mcp-refresh'));
   });
-  document.addEventListener('kairos-mcp-check',()=>{if(!panel.hidden)providers.forEach(p=>check(p));});
-  if(new URLSearchParams(location.search).get('tab')==='mcp')providers.forEach(p=>check(p));
+  // Opening this tab never probes providers; buttons are explicit diagnostic actions.
+
 })();

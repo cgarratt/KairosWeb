@@ -8,12 +8,12 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import app as a
 TOKENS=('BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMP','PLUME','PEPE','VIRTUAL')
 
-def spot(source='Binance Spot',age=0):
- return dict(status='OK',source=source,provider='KUCOIN' if source=='KuCoin Spot' else 'BINANCE',as_observed_utc=(datetime.now(timezone.utc)-timedelta(seconds=age)).isoformat(),records=[dict(symbol=t+'USDT',price='10',source=source) for t in TOKENS])
+def spot(source='KuCoin Spot',age=0):
+ return dict(status='OK',source=source,provider='BINANCE' if source=='Binance Spot' else 'KUCOIN',as_observed_utc=(datetime.now(timezone.utc)-timedelta(seconds=age)).isoformat(),records=[dict(symbol=t+'USDT',price='10',source=source) for t in TOKENS])
 
 def bundle():
  day=datetime.now(timezone.utc).date().isoformat()
- return dict(status='OK',policy='MANUAL_SNAPSHOT',source='Binance Spot',histories={t+'USDT:1d':dict(status='OK',source='Binance Spot',symbol=t+'USDT',interval='1d',closed_only=True,records=[dict(close_utc=day+'T00:00:00+00:00',close='10')]) for t in TOKENS},indicators={},cycles={})
+ return dict(status='OK',policy='MANUAL_SNAPSHOT',source='KuCoin Spot',histories={t+'USDT:1d':dict(status='OK',source='KuCoin Spot',symbol=t+'USDT',interval='1d',closed_only=True,records=[dict(open_utc=(datetime.now(timezone.utc).date()-timedelta(days=1)).isoformat()+'T00:00:00+00:00',close_utc=day+'T00:00:00+00:00',open='10',high='11',low='9',close='10')]) for t in TOKENS},indicators={},cycles={})
 
 @pytest.fixture(autouse=True)
 def setup(tmp_path,monkeypatch):
@@ -21,7 +21,8 @@ def setup(tmp_path,monkeypatch):
  monkeypatch.setattr(a,'_BINANCE_SNAPSHOT_PATH',tmp_path/'market.json')
  monkeypatch.setattr(a,'_active_mcp_pause',lambda env:None)
  monkeypatch.setattr(a,'_accept_mcp_response',lambda env,data:data)
- monkeypatch.setenv('KUCOIN_MCP_URL','https://backup.example/mcp')
+ monkeypatch.setenv('KUCOIN_MCP_URL','https://primary.example/mcp')
+ monkeypatch.setenv('BINANCE_MCP_URL','https://backup.example/mcp')
  monkeypatch.setattr(a,'TOKENS',TOKENS)
  a._HIST_CACHE.clear()
 
@@ -29,7 +30,7 @@ def setup(tmp_path,monkeypatch):
 def test_fast_spot_fetches_no_history(monkeypatch):
  remote=AsyncMock(return_value=spot());monkeypatch.setattr(a,'call_mcp',remote)
  a._refresh_binance_snapshot()
- assert remote.call_args.args[1]=='get_kairos_spot_prices'
+ assert remote.call_args.args[1]=='get_kairos_kucoin_spot_prices'
  assert 'histories' not in a._BINANCE_SNAPSHOT
 
 
@@ -42,7 +43,7 @@ def test_cached_spot_no_request_preserves_time(monkeypatch):
 def test_timeout_falls_back_and_retains_history(monkeypatch):
  h=bundle();h.update(spot=spot(age=100),as_observed_utc='old',history_day_utc=datetime.now(timezone.utc).date().isoformat())
  a._BINANCE_SNAPSHOT=copy.deepcopy(h)
- remote=AsyncMock(side_effect=[TimeoutError(),spot('KuCoin Spot')]);monkeypatch.setattr(a,'call_mcp',remote)
+ remote=AsyncMock(side_effect=[TimeoutError(),spot('Binance Spot')]);monkeypatch.setattr(a,'call_mcp',remote)
  a._refresh_binance_snapshot()
  assert remote.call_count==2
  assert a._BINANCE_SNAPSHOT['fallback']['active']
@@ -51,17 +52,17 @@ def test_timeout_falls_back_and_retains_history(monkeypatch):
 
 def test_known_pause_skips_primary(monkeypatch):
  pause=a.PrimaryUnavailable(418)
- monkeypatch.setattr(a,'_active_mcp_pause',lambda env:pause if env=='BINANCE_MCP_URL' else None)
- remote=AsyncMock(return_value=spot('KuCoin Spot'));monkeypatch.setattr(a,'call_mcp',remote)
+ monkeypatch.setattr(a,'_active_mcp_pause',lambda env:pause if env=='KUCOIN_MCP_URL' else None)
+ remote=AsyncMock(return_value=spot('Binance Spot'));monkeypatch.setattr(a,'call_mcp',remote)
  a._refresh_binance_snapshot()
- assert remote.call_count==1 and remote.call_args.args[0]=='KUCOIN_MCP_URL'
+ assert remote.call_count==1 and remote.call_args.args[0]=='BINANCE_MCP_URL'
 
 @pytest.mark.parametrize('bad',['missing','duplicate','mixed','stale'])
 def test_invalid_primary_does_not_use_backup(monkeypatch,bad):
  raw=spot()
  if bad=='missing':raw['records'].pop()
  if bad=='duplicate':raw['records'][1]=raw['records'][0]
- if bad=='mixed':raw['records'][0]['source']='KuCoin Spot'
+ if bad=='mixed':raw['records'][0]['source']='Binance Spot'
  if bad=='stale':raw=spot(age=181)
  remote=AsyncMock(return_value=raw);monkeypatch.setattr(a,'call_mcp',remote)
  with pytest.raises((ValueError,RuntimeError)):a._refresh_binance_snapshot()
@@ -77,12 +78,12 @@ def test_both_fail_keep_previous_observation(monkeypatch):
 
 
 def test_history_does_not_change_spot_or_refetch_same_day(monkeypatch):
- a._BINANCE_SNAPSHOT=dict(status='OK',policy='MANUAL_SNAPSHOT',spot=spot('KuCoin Spot'),source='KuCoin Spot')
+ a._BINANCE_SNAPSHOT=dict(status='OK',policy='MANUAL_SNAPSHOT',spot=spot('Binance Spot'),source='Binance Spot')
  before=copy.deepcopy(a._BINANCE_SNAPSHOT['spot'])
  remote=AsyncMock(return_value=bundle());monkeypatch.setattr(a,'call_mcp',remote)
  a._refresh_history_snapshot();a._refresh_history_snapshot()
  assert remote.call_count==1 and a._BINANCE_SNAPSHOT['spot']==before
- assert a._snapshot_response('get_kairos_ohlcv',dict(symbol='BTCUSDT',interval='1d',limit=1))['source']=='Binance Spot'
+ assert a._snapshot_response('get_kairos_ohlcv',dict(symbol='BTCUSDT',interval='1d',limit=1))['source']=='KuCoin Spot'
 
 
 def test_history_missing_or_wrong_day_fails_closed(monkeypatch):
@@ -141,16 +142,16 @@ def test_concurrent_clicks_coalesce(monkeypatch):
 def test_history_and_spot_concurrent_updates_do_not_overwrite(monkeypatch):
  started=threading.Event();release=threading.Event()
  async def remote(env,tool,args):
-  if tool=='get_kairos_dashboard_snapshot':
+  if tool=='get_kairos_kucoin_history_snapshot':
    started.set();assert release.wait(3);return bundle()
-  return spot('KuCoin Spot')
+  return spot('Binance Spot')
  # History waits upstream while Spot can finish independently.
  monkeypatch.setattr(a,'call_mcp',remote)
  with ThreadPoolExecutor(max_workers=2) as pool:
   history=pool.submit(a._refresh_history_snapshot);assert started.wait(3)
-  monkeypatch.setattr(a,'_active_mcp_pause',lambda env:a.PrimaryUnavailable(418) if env=='BINANCE_MCP_URL' else None)
+  monkeypatch.setattr(a,'_active_mcp_pause',lambda env:a.PrimaryUnavailable(418) if env=='KUCOIN_MCP_URL' else None)
   a._refresh_binance_snapshot();release.set();history.result()
- assert a._BINANCE_SNAPSHOT['spot']['source']=='KuCoin Spot'
+ assert a._BINANCE_SNAPSHOT['spot']['source']=='Binance Spot'
  assert len(a._BINANCE_SNAPSHOT['histories'])==12
 
 @pytest.mark.parametrize('field,value',[('as_observed_utc','2026-11-02T12:00:00'),('boolean',True)])
@@ -162,15 +163,15 @@ def test_naive_timestamp_and_boolean_price_rejected(field,value):
 
 
 def test_spot_timeout_config_and_history_budget(monkeypatch):
- assert a._mcp_timeout('BINANCE_MCP_URL','get_kairos_spot_prices')==10
  assert a._mcp_timeout('KUCOIN_MCP_URL','get_kairos_kucoin_spot_prices')==45
- assert a._mcp_timeout('BINANCE_MCP_URL','get_kairos_dashboard_snapshot')==150
+ assert a._mcp_timeout('KUCOIN_MCP_URL','get_kairos_kucoin_spot_prices')==45
+ assert a._mcp_timeout('BINANCE_MCP_URL','get_kairos_kucoin_history_snapshot')==150
  monkeypatch.setenv('KAIROS_PRIMARY_SPOT_TIMEOUT_SECONDS','8')
- assert a._mcp_timeout('BINANCE_MCP_URL','get_kairos_spot_prices')==8
+ assert a._mcp_timeout('BINANCE_MCP_URL','get_kairos_kucoin_spot_prices')==8
 
 
 def test_history_failure_keeps_valid_spot(monkeypatch):
- a._BINANCE_SNAPSHOT={'status':'OK','policy':'MANUAL_SNAPSHOT','spot':spot('KuCoin Spot')}
+ a._BINANCE_SNAPSHOT={'status':'OK','policy':'MANUAL_SNAPSHOT','spot':spot('Binance Spot')}
  before=copy.deepcopy(a._BINANCE_SNAPSHOT)
  monkeypatch.setattr(a,'call_mcp',AsyncMock(side_effect=TimeoutError()))
  with pytest.raises(TimeoutError):a._refresh_history_snapshot()
@@ -208,7 +209,7 @@ def test_primary_deadline_covers_connection_and_invocation(monkeypatch):
   await asyncio.sleep(.1)
  monkeypatch.setattr(a,'call_mcp',slow)
  monkeypatch.setattr(a,'_mcp_timeout',lambda env,tool:.001)
- with pytest.raises(TimeoutError):asyncio.run(a._spot_call('BINANCE_MCP_URL','get_kairos_spot_prices'))
+ with pytest.raises(TimeoutError):asyncio.run(a._spot_call('BINANCE_MCP_URL','get_kairos_kucoin_spot_prices'))
 
 
 @pytest.mark.parametrize('provider,source,tool',[('binance','Binance Spot','get_kairos_spot_prices'),('kucoin','KuCoin Spot','get_kairos_kucoin_spot_prices')])
@@ -262,7 +263,7 @@ def test_diagnostic_modules_allow_spot_backup_only():
  states=a._module_dependency_states(providers)
  for name in ('portafolio','balancer','ventas'):assert states[name]['status']=='DEPENDENCIES_OK'
  assert states['tradingbot']['status']=='BLOCKED_OR_PARTIAL'
- assert states['compras']['status']=='BLOCKED_OR_PARTIAL'
+ assert states['compras']['status']=='DEPENDENCIES_OK'
 
 
 def test_kucoin_diagnostic_routes_and_refresh(monkeypatch):
@@ -337,3 +338,49 @@ def test_provider_validation_without_bound_master(monkeypatch,provider,source,ro
    else:result=c.post('/api/mcp-refresh',json={'provider':provider}).get_json()['result']
  assert result['status']=='OK',result
  assert result['source']==source and result['records']==12
+
+
+def test_kucoin_history_primary_without_spot_or_binance_calls(monkeypatch):
+ remote=AsyncMock(return_value=bundle());monkeypatch.setattr(a,'call_mcp',remote)
+ result=a._refresh_history_snapshot()
+ assert result['source']=='KuCoin Spot'
+ assert remote.call_count==1
+ assert remote.call_args.args[:2]==('KUCOIN_MCP_URL','get_kairos_kucoin_history_snapshot')
+ assert 'spot' not in a._BINANCE_SNAPSHOT
+ assert a.market_cache_status()['history_source']=='KuCoin Spot'
+
+
+def test_history_timeout_uses_whole_backup_and_retains_old_provider(monkeypatch):
+ old=bundle();old.update(history_source='KuCoin Spot',history_day_utc='2020-01-01')
+ a._BINANCE_SNAPSHOT=copy.deepcopy(old)
+ backup=bundle();backup['source']='Binance Spot'
+ for row in backup['histories'].values():row['source']='Binance Spot'
+ remote=AsyncMock(side_effect=[TimeoutError(),backup]);monkeypatch.setattr(a,'call_mcp',remote)
+ result=a._refresh_history_snapshot()
+ assert result['source']=='Binance Spot' and result['fallback_active']
+ assert [c.args[0] for c in remote.call_args_list]==['KUCOIN_MCP_URL','BINANCE_MCP_URL']
+ saved=a._BINANCE_SNAPSHOT['history_by_source']
+ assert set(saved)=={'KuCoin Spot','Binance Spot'}
+ assert saved['KuCoin Spot']['histories']==old['histories']
+ assert all(r['source']=='Binance Spot' for r in a._BINANCE_SNAPSHOT['histories'].values())
+
+
+def test_mixed_history_fails_without_fallback_or_publishing(monkeypatch):
+ data=bundle();data['histories']['BTCUSDT:1d']['source']='Binance Spot'
+ remote=AsyncMock(return_value=data);monkeypatch.setattr(a,'call_mcp',remote)
+ with pytest.raises(ValueError):a._refresh_history_snapshot()
+ assert remote.call_count==1 and a._BINANCE_SNAPSHOT is None
+
+
+def test_configuration_does_not_probe_providers_on_open():
+ import subprocess
+ script=r'''
+ const vm=require('vm'),fs=require('fs'),assert=require('assert');
+ let requests=0;const panel={addEventListener(){}};
+ const context={Intl,Date,URLSearchParams,location:{search:'?tab=mcp'},
+ document:{getElementById:id=>id==='settings-mcp-panel'?panel:null,addEventListener(){}},
+ fetch:()=>{requests++;throw Error('No automatic network');}};
+ vm.runInNewContext(fs.readFileSync('static/mcp_settings.js','utf8'),context);
+ assert.equal(requests,0);
+ '''
+ subprocess.run(['node','-e',script],check=True)

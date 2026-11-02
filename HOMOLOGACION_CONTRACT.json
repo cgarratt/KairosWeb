@@ -1,13 +1,13 @@
 {
   "versions": {
-    "KairosWeb": "3.0.38",
-    "KairosGPT": "1.3.17",
+    "KairosWeb": "3.0.39",
+    "KairosGPT": "1.3.18",
+    "MCP_KuCoin": "1.1.0",
     "MCP_Binance": "5.4.1",
-    "MCP_KuCoin": "1.0.1",
     "MCP_Hyperliquid": "1.0.1",
     "MASTER_schema": "5.0.0"
   },
-  "scope": "BTC_TREND_EXPLICIT_HISTORY_AND_TERMINAL_UI_STATES",
+  "scope": "KUCOIN_PRIMARY_SPOT_DAILY_HISTORY_BINANCE_BACKUP",
   "master_mutated": false,
   "deployment_verified": false,
   "project_installation_verified": false,
@@ -19,25 +19,48 @@
   "gpt_image_confirmation_required": true,
   "gpt_explicit_prompt_exception": true,
   "tests": {
-    "web_python_passed": 234,
-    "javascript_regressions_included": true,
-    "live_master_writes_tested": false,
-    "browser_visual_tested": false,
-    "remote_market_tested": false,
-    "new_mcp_required": false
+    "release": "2026.11.02.7",
+    "versions": {
+      "KairosWeb": "3.0.39",
+      "KairosGPT": "1.3.18",
+      "MCP_KuCoin": "1.1.0",
+      "MCP_Binance": "5.4.1",
+      "MCP_Hyperliquid": "1.0.1",
+      "MASTER_schema": "5.0.0"
+    },
+    "web_tests_passed": 239,
+    "gpt_tests_passed": 175,
+    "kucoin_tests_passed": 22,
+    "total_tests_passed": 436,
+    "javascript_syntax_checked": true,
+    "javascript_behavior_checks_included": true,
+    "web_health_and_jinja_verified": true,
+    "kucoin_mcp_discovery_verified": true,
+    "kucoin_mcp_tool_count": 4,
+    "kucoin_mcp_history_protocol_test": "SYNTHETIC_12_SERIES",
+    "remote_deployment_verified": false,
+    "historical_upstream_live_verified": false,
+    "historical_live_attempt": "Public REST returned non-JSON in this environment for all12 attempted pairs; coverage remains unverified from Render",
+    "master_mutated": false,
+    "orders_sent": false,
+    "automation_mutated": false
   },
   "batch_save_atomic": false,
   "save_semantics": "SEQUENTIAL_STOP_ON_ERROR_NO_AUTOMATIC_RETRY",
   "zero_amount_orders_hidden": true,
   "generic_retracement_order_identity": "O2C1..O2C4",
   "companion_mcp_release": "5.4.1",
-  "companion_kucoin_mcp_release": "1.0.1",
-  "release_suite": "2026.11.02.6",
+  "companion_kucoin_mcp_release": "1.1.0",
+  "release_suite": "2026.11.02.7",
   "companion_hyperliquid_mcp_release": "1.0.1",
   "limitations": [
     "No shared deployed gateway",
-    "No external persistence provisioned",
-    "No incremental upstream history API change",
-    "Local per-process caches and pauses"
-  ]
+    "No external persistent storage provisioned",
+    "SQLite cache is ephemeral on Render Free unless an existing persistent disk is configured",
+    "Live historical coverage and remote deployment still require verification"
+  ],
+  "market_primary": "KuCoin Spot",
+  "market_backup": "Binance Spot",
+  "hype_macro": "Hyperliquid Spot HYPE/USDC",
+  "bsi_source": "Binance4H specialised contract, SELL blocked"
 }
