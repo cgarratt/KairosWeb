@@ -65,7 +65,10 @@
     if(state==='ESCENARIO'&&locked.length)state='FIJOS: '+locked.map(w=>w.toUpperCase()+' '+statuses[w]).join(', ');
     return {token:p.token,values,locked,statuses,dates,state};
   }
-  const api={BUY_LEVELS,SELL_LEVELS,DEFAULTS,shares,budget,scenarioBuyPrices,scenarioSellPrices,wavePath};
+  function holdValues(values,units){
+    return (values||Array(6).fill(null)).map(v=>Number.isFinite(v)&&v>0?units*v:null);
+  }
+  const api={holdValues,BUY_LEVELS,SELL_LEVELS,DEFAULTS,shares,budget,scenarioBuyPrices,scenarioSellPrices,wavePath};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   root.KairosForecastFibo=api;
 })(typeof window!=='undefined'?window:globalThis);

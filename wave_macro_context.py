@@ -8,8 +8,40 @@ from wave_structure import (full_utc_weeks, weekly_o1_candidate, fib_grid,
 from buy_weekly_policy import select_p1_p2_buy_impulse, published_buy_impulse
 from structural_outliers import virtual_flash_cl
 
+def published_forecast_context(token, published):
+    """Dated published CL/O1 suffice for a hypothetical Forecast, not a trade.
+
+    Does not certify weekly candidates or change any published pivot state.
+    """
+    from datetime import date
+    import math
+    cl=published.get('cycle_low')
+    o1=(published.get('waves') or {}).get('o1') or {}
+    try:
+        low,high=float(cl),float(o1.get('price'))
+        low_date=date.fromisoformat(published.get('cl_date'))
+        high_date=date.fromisoformat(o1.get('date'))
+        if not (math.isfinite(low) and math.isfinite(high) and 0<low<high and low_date<high_date):
+            return None
+    except (TypeError,ValueError,OverflowError):
+        return None
+    levels=fib_grid('O2',{'CL':low,'O1':high})
+    return {'status':'FORECAST_MASTER_PUBLICADO','certified':False,
+            'simulation_only':True,'operational_blocked':True,
+            'quote_currency':'USDC' if token=='HYPE' else 'USDT',
+            'history':{'status':'NOT_REQUIRED_FOR_PUBLISHED_FORECAST'},
+            'levels':{'ref382':levels['O2C1'],'c1':levels['O2C2'],
+                      'c2':levels['O2C3'],'ref786':levels['O2C4']},
+            'anchors':{'CL':low,'CL_date':low_date.isoformat(),
+                       'O1':high,'O1_date':high_date.isoformat(),
+                       'O1_status':o1.get('status','PROPUESTO'),
+                       'O1_source':'07_PIVOTES_PUBLICADO'}}
+
+
 def resolve(token, published, archived, data):
     """Build an explicit CL/O1 and Fib O2 reference with traceable evidence."""
+    published_context=published_forecast_context(token,published)
+    if published_context is not None:return published_context
     empty={'status':'NO_WEEKLY_ANCHORS','levels':None,'history':{'status':'NO_WEEKLY_ANCHORS'},
            'anchors':{'CL':None,'O1':None},'certified':False}
     if data.get('status')!='OK' or data.get('closed_only') is not True:

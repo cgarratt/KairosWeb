@@ -42,3 +42,42 @@ class MasterAnchors(unittest.TestCase):
   r=resolve_long_term_buy('HYPE',self.p,{'status':'DATA_ERROR'})
   self.assertTrue(r['eligible']);self.assertEqual(r['quote_currency'],'USDC')
 if __name__=='__main__':unittest.main()
+
+# Published Forecast is independent of historical-provider availability.
+import pytest
+from wave_macro_context import resolve, published_forecast_context
+
+@pytest.mark.parametrize('state',['PROPUESTO','VALIDADO','CONFIRMADO'])
+def test_forecast_published_anchors_without_history(state):
+ p={'cycle_low':20.5,'cl_date':'2026-01-19','cl_status':state,
+    'waves':{'o1':{'price':76.9,'date':'2026-06-01','status':state}}}
+ from copy import deepcopy
+ before=deepcopy(p)
+ ctx=resolve('BTC',p,{}, {'status':'DATA_ERROR'})
+ assert ctx['anchors']['CL']==20.5 and ctx['anchors']['O1']==76.9
+ assert ctx['simulation_only'] and ctx['operational_blocked']
+ assert not ctx['certified'] and p==before
+
+@pytest.mark.parametrize('cl,day,high',[(0,'2026-01-19',76.9),(float('nan'),'2026-01-19',76.9),
+ (20.5,'2026-07-01',76.9),(20.5,'invalid',76.9),(80,'2026-01-19',76.9)])
+def test_forecast_rejects_invalid_published_anchors(cl,day,high):
+ p={'cycle_low':cl,'cl_date':day,'waves':{'o1':{'price':high,'date':'2026-06-01'}}}
+ assert published_forecast_context('BTC',p) is None
+
+
+def test_forecast_paths_and_no_spot_substitution():
+ import subprocess
+ script=r"""
+ const assert=require('assert');const f=require('./static/forecast_fibo_plan.js');
+ const selectors={o2:.618,o3:1.618,o4:.5,o5:1.618};
+ for(const token of ['BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMP','PLUME','PEPE','VIRTUAL']){
+ const p={token,cycle_low:20.5,published_cl:20.5,published_cl_date:'2026-01-19',cl_status:'VALIDADO',o1:76.9,waves:{o1:{price:76.9,date:'2026-06-01',status:'PROPUESTO'}}};
+ const w=f.wavePath(p,selectors);assert(w.values);assert.equal(w.values[0],20.5);
+ assert.equal(f.holdValues(w.values,2)[3],2*w.values[3]);
+ }
+ assert.deepEqual(f.holdValues(null,2),Array(6).fill(null));
+ const p={token:'HYPE',cycle_low:20.5,published_cl:20.5,published_cl_date:'2026-01-19',cl_status:'CONFIRMADO',o1:76.9,waves:{o1:{price:76.9,date:'2026-06-01',status:'VALIDADO'},o2:{price:51.11,date:'2026-07-01',status:'VALIDADO'}}};
+ assert.equal(f.wavePath(p,selectors).values[2],51.11);
+ assert.equal(f.wavePath(p,{...selectors,o2:.382}).values[2],51.11);
+ """
+ subprocess.run(['node','-e',script],check=True)

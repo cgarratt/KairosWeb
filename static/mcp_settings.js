@@ -4,7 +4,7 @@
   if(!panel)return;
   const msg=document.getElementById('mcp-message');
   const lang=new Intl.DateTimeFormat('es-PE',{dateStyle:'short',timeStyle:'medium',timeZone:'America/Lima'});
-  const providers=['binance','hyperliquid'];
+  const providers=['binance','kucoin','hyperliquid'];
   const deepButton=document.getElementById('health-check-all'),deepOutput=document.getElementById('health-check-output');
   let working=new Set();
   function render(provider,result){
@@ -13,11 +13,12 @@
     const state=card.querySelector('.mcp-health-state'),stamp=card.querySelector('.mcp-health-checked');
     const status=result?.status||'SIN_VERIFICAR';
     const label={OK:'Conectado',DATA_ERROR:'No disponible',NOT_CONFIGURED:'No configurado'}[status]||status;
-    state.textContent=label+(provider==='binance'&&result?.records?` · ${result.records}/12 precios`: '');
+    state.textContent=label+(['binance','kucoin'].includes(provider)&&result?.records?` · ${result.records}/12 precios`: '');
     state.dataset.status=status;
     const when=result?.last_success_utc;
     stamp.textContent=when?`Última respuesta exitosa: ${lang.format(new Date(when))} (Lima)`:'Sin respuesta exitosa registrada en este proceso';
-    if(result?.diagnostic?.category)stamp.textContent+=` · Diagnóstico: ${result.diagnostic.category}`;
+    if(result?.observed_at)stamp.textContent+=` · Mercado: ${lang.format(new Date(result.observed_at))} (Lima) · ${result.source}`;
+    if(result?.diagnostic?.code)stamp.textContent+=` · Diagnóstico: ${result.diagnostic.code}`;
   }
   async function check(provider,refresh=false){
     if(working.has(provider))return;
@@ -26,22 +27,24 @@
     for(const button of card.querySelectorAll('button'))button.disabled=true;
     card.querySelector('.mcp-health-state').textContent=refresh?'Refrescando sesión MCP…':'Verificando conectividad…';
     msg.textContent=refresh?'Reintentando con una sesión nueva del MCP. No se reiniciará Render.':'Consultando estado MCP…';
+    let received=false;
     try{
       let url='/api/mcp-diagnostics?provider='+encodeURIComponent(provider),opts={credentials:'same-origin',cache:'no-store'};
       if(refresh){
         const res=await fetch('/api/admin/session',{credentials:'same-origin',cache:'no-store'});
         const credentials=await res.json();
-        if(!res.ok||!credentials.is_admin||!credentials.csrf_token)throw new Error('Inicia sesión administrativa antes de refrescar. Verificación funciona sin sesión.');
+        if(!res.ok||!credentials.is_admin||!credentials.csrf_token)throw new Error('Inicia sesión administrativa antes de refrescar. La verificación utiliza tu sesión de usuario.');
         url='/api/mcp-refresh';opts={method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-Kairos-Csrf':credentials.csrf_token},body:JSON.stringify({provider})};
       }
       const response=await fetch(url,opts),data=await response.json();
       const result=refresh?data.result:data.providers?.[provider];
+      received=Boolean(result);
       if(result)render(provider,result);
       else render(provider,{status:'DATA_ERROR'});
       if(!response.ok||!result||result.status!=='OK')throw new Error('No hay conexión válida. Consulta el estado y los logs privados de Render.');
-      msg.textContent=`${provider==='binance'?'Binance':'Hyperliquid'} MCP conectado. Consulta de solo lectura validada.`;
+      msg.textContent=`${{binance:'Binance',kucoin:'KuCoin',hyperliquid:'Hyperliquid'}[provider]} MCP conectado. Consulta de solo lectura validada.`;
     }catch(error){
-      if(!card.querySelector('.mcp-health-state').dataset.status)render(provider,{status:'DATA_ERROR'});
+      if(!received)render(provider,{status:'DATA_ERROR'});
       msg.textContent=error.message||'No se pudo completar la consulta MCP.';
     }finally{
       working.delete(provider);for(const button of card.querySelectorAll('button'))button.disabled=false;
@@ -50,13 +53,13 @@
   if(deepButton&&deepOutput){
     deepButton.addEventListener('click',async()=>{
       deepButton.disabled=true;
-      deepOutput.textContent='Verificando las tres dependencias…';
+      deepOutput.textContent='Verificando Google Sheets y los tres MCP…';
       try{
         const resp=await fetch('/api/health/diagnostics',{credentials:'same-origin',cache:'no-store'});
         const data=await resp.json();
         const providers=data.operational_providers||{},modules=data.functional_modules||{};
         // textContent only: never interpret provider response as HTML.
-        const providerText=['sheets','binance','hyperliquid'].map(p=>p+': '+(providers[p]?.status||'SIN_VERIFICAR')).join(' · ');
+        const providerText=['sheets','binance','kucoin','hyperliquid'].map(p=>p+': '+(providers[p]?.status||'SIN_VERIFICAR')).join(' · ');
         const moduleText=Object.keys(modules).sort().map(m=>m+': '+modules[m].status).join(' · ');
         deepOutput.textContent='Servidor: '+(data.server?.status||'N/D')+' | Proveedores: '+providerText+' | Módulos (solo dependencias): '+moduleText+' | UTC: '+(data.checked_utc||'N/D')+(resp.ok?'':' | Requiere revisión');
       }catch(err){

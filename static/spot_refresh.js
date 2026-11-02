@@ -28,8 +28,6 @@
    retryAt=0;
    if(raw){const parsed=Date.parse(raw);if(Number.isFinite(parsed))retryAt=parsed;}
    updatePause();
-   const historyLabel=document.getElementById('history-observed');
-   if(historyLabel)historyLabel.textContent=data?.history_current?'Históricos al último cierre UTC':'Históricos pendientes de actualización';
    const at=data?.last_valid_observed_at||data?.observed_at;
    const formatted=globalThis.KairosSpotTime.formatSpotTime(at);
    label.textContent=(formatted?formatted.label:'Spot: sin observación')+(data?.fallback_active?' · KuCoin (respaldo)':'');
@@ -38,25 +36,37 @@
  }
  fetch('/api/market-status',{credentials:'same-origin',cache:'no-store'}).then(r=>r.json()).then(show).catch(()=>{label.textContent='Spot: estado N/D'});
  updatePause();setInterval(updatePause,1000);
- const historyButton=document.getElementById('history-refresh');
- if(historyButton)historyButton.addEventListener('click',async()=>{
-   historyButton.disabled=true;
-   const status=document.getElementById('history-observed');
-   status.textContent='Actualizando históricos…';
-   try{
-     const response=await fetch('/api/history/refresh',{method:'POST',credentials:'same-origin',headers:{'X-Kairos-Csrf':btn.dataset.csrf,'Content-Type':'application/json'},body:'{}'});
-     const data=await response.json();
-     if(!response.ok||data.status!=='OK')throw new Error(data.diagnostic?.code||data.status);
-     status.textContent='Históricos al último cierre UTC';
-     window.location.reload();
-   }catch(error){status.textContent='Históricos no actualizados · '+error.message;}
-   finally{historyButton.disabled=false;}
- });
  btn.addEventListener('click',async()=>{if(busy||retryAt>Date.now())return;busy=true;btn.disabled=true;btn.textContent='Actualizando…';
    try{const r=await fetch('/api/spot/refresh',{method:'POST',credentials:'same-origin',headers:{'X-Kairos-Csrf':btn.dataset.csrf,'Content-Type':'application/json'},body:'{}'});
      const data=await r.json();show(data);if(!r.ok||data.status!=='OK'){if(retryAt<=Date.now())label.textContent='Actualización fallida · '+(data.diagnostic?.code||data.status);return;}
      window.location.reload();
    }catch(_){label.textContent='Actualización fallida · red';}
    finally{busy=false;updatePause();}
+ });
+})();
+
+/* Configuration owns historical maintenance; independent of the global Spot button. */
+(()=>{'use strict';
+ if(typeof document==='undefined')return;
+ const button=document.getElementById('history-refresh'),status=document.getElementById('history-observed');
+ if(!button||!status)return;
+ const format=new Intl.DateTimeFormat('es-PE',{timeZone:'America/Lima',dateStyle:'short',timeStyle:'short'});
+ function show(data){
+   const day=data.history_day_utc;
+   status.textContent=(data.history_current?'Al último cierre UTC':'Pendiente de actualización')+
+     (day?' · Cierre: '+format.format(new Date(day+'T00:00:00Z'))+' (Lima)':' · Sin carga histórica')+
+     (data.history_source?' · '+data.history_source:'');
+ }
+ async function load(){const r=await fetch('/api/market-status',{credentials:'same-origin',cache:'no-store'});if(!r.ok)throw Error('Estado no disponible');show(await r.json());}
+ load().catch(()=>{status.textContent='Estado de históricos N/D';});
+ button.addEventListener('click',async()=>{
+   button.disabled=true;status.textContent='Actualizando históricos…';
+   try{
+     const response=await fetch('/api/history/refresh',{method:'POST',credentials:'same-origin',headers:{'X-Kairos-Csrf':button.dataset.csrf,'Content-Type':'application/json'},body:'{}'});
+     const data=await response.json();
+     if(!response.ok||data.status!=='OK')throw Error(data.diagnostic?.code||data.status);
+     await load();
+   }catch(error){status.textContent='Históricos no actualizados · '+error.message;}
+   finally{button.disabled=false;}
  });
 })();

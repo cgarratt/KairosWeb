@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.34'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.36'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1175,6 +1175,10 @@ def build_mode_payload(slug, d, observed):
         pub=g.kairos_state['wave_pivots']
         def weekly_reference(row):
             token=row['token']; source_token='PUMPFUN' if token=='PUMP' else token
+            if slug=='forecast':
+                from wave_macro_context import published_forecast_context
+                context=published_forecast_context(source_token,pub.get(token,{}))
+                if context is not None:return token,context
             if slug=='compras':
                 from buy_weekly_policy import published_buy_impulse
                 if published_buy_impulse(pub.get(token,{})) is not None:
@@ -2424,8 +2428,10 @@ def _deployed_asset_status():
         'orders_simple_filters': ('templates/ordenes.html', ('Órdenes recomendadas','id="orders-venue"','id="orders-tier"','id="orders-side"','id="orders-token"')),
         'forecast_master_pivots': ('app.py', ("'published_cl':w.get('cycle_low')", "'cl_status':w.get('cl_status','PROPUESTO')", "'waves':w.get('waves',{})")),
     }
+    critical['forecast_master_v3035']=('wave_macro_context.py', ('def published_forecast_context(', "'simulation_only':True", "'O1_source':'07_PIVOTES_PUBLICADO'"))
     critical['fast_spot_v3034']=('app.py', ('KAIROS_PRIMARY_SPOT_TIMEOUT_SECONDS', "'SEPARATE_EXPLICIT_ACTION'", 'def _refresh_history_snapshot():'))
-    critical['history_control_v3034']=('templates/base.html', ('id="history-refresh"','id="history-observed"'))
+    critical['kucoin_diagnostics_v3036']=('templates/settings.html', ('data-provider="kucoin"', 'id="settings-history-panel"'))
+    critical['history_control_v3034']=('templates/settings.html', ('id="history-refresh"','id="history-observed"'))
     files = {}
     for key, (filename, markers) in critical.items():
         try:
@@ -2454,25 +2460,8 @@ def _live_provider_probe(provider):
                     'homologation':state.get('homologation',{}).get('status','NOT_VERIFIED')}
         except Exception as exc:
             return {'status':'DATA_ERROR','category':public_failure_code(exc)}
-    spec={'binance':('BINANCE_MCP_URL','get_kairos_spot_prices'),
-          'hyperliquid':('HYPERLIQUID_MCP_URL','get_hype_spot_market')}
-    env,tool=spec[provider]
-    if not os.getenv(env,'').strip():
-        return {'status':'NOT_CONFIGURED','category':'MCP_URL_MISSING'}
-    try:
-        # One direct request (no cascading gateway retries); no remote order/fill access.
-        data=call_mcp_resilient(env,tool,{})
-        if data.get('status')!='OK':raise RuntimeError('non-OK MCP response')
-        if provider=='binance':
-            rows=data.get('records') or []
-            symbols={str(x.get('symbol')) for x in rows if isinstance(x,dict)}
-            expected={('PUMP' if t=='PUMPFUN' else t)+'USDT' for t in (
-                'BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMPFUN','PLUME','VIRTUAL','PEPE')}
-            if len(rows)!=12 or symbols!=expected:raise RuntimeError('incomplete MCP coverage')
-        return {'status':'OK','source':provider,'checked_utc':datetime.now(timezone.utc).isoformat()}
-    except Exception as exc:
-        diag=diagnostic_error(exc,provider)
-        return {'status':'DATA_ERROR','category':diag['code'],'error_id':diag['error_id']}
+    result=_check_provider(provider)
+    return {**result,'category':result.get('diagnostic',{}).get('code')}
 
 
 def _module_dependency_states(providers):
@@ -2486,17 +2475,24 @@ def _module_dependency_states(providers):
         'tradingbot':('sheets','binance'),
         'configuracion':('sheets',),
     }
-    return {name:{'status':'DEPENDENCIES_OK' if all(providers.get(d,{}).get('status')=='OK' for d in deps)
-                  else 'BLOCKED_OR_PARTIAL','dependencies':list(deps),
-                  'scope':'DEPENDENCY_READINESS_ONLY_NOT_END_TO_END'}
-            for name,deps in dependencies.items()}
+    result={}
+    for name,deps in dependencies.items():
+        valuation_only=name in ('portafolio','balancer','ventas')
+        required=tuple(d for d in deps if not(valuation_only and d=='binance'))
+        spot_ready=any(providers.get(d,{}).get('status')=='OK' for d in ('binance','kucoin'))
+        ready=all(providers.get(d,{}).get('status')=='OK' for d in required) and (spot_ready if valuation_only else True)
+        result[name]={'status':'DEPENDENCIES_OK' if ready else 'BLOCKED_OR_PARTIAL',
+                      'dependencies':list(required),'scope':'DEPENDENCY_READINESS_ONLY_NOT_END_TO_END'}
+        if valuation_only:result[name]['spot_any_of']=['binance','kucoin']
+    return result
+
 
 
 @app.route('/api/health/diagnostics')
 def health_diagnostics():
     checked=datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        futures={name:pool.submit(_live_provider_probe,name) for name in ('sheets','binance','hyperliquid')}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures={name:pool.submit(_live_provider_probe,name) for name in ('sheets','binance','kucoin','hyperliquid')}
         providers={name:future.result() for name,future in futures.items()}
     modules=_module_dependency_states(providers)
     assets=_deployed_asset_status()
@@ -2516,7 +2512,7 @@ def health():
     with _DEPENDENCY_LOCK:
         last=dict(_DEPENDENCY_LAST)
     response = {'status': 'UP' if assets['consistent'] else 'DEGRADED',
-                'service': 'KairosWeb', 'version': APP_VERSION, 'release_suite':'2026.11.02.1', 'component_versions':{'KairosWeb': '3.0.33', 'KairosGPT': '1.3.16', 'MCP_Binance': '5.4.1', 'MCP_KuCoin': '1.0.1', 'MCP_Hyperliquid': '1.0.1', 'MASTER_schema': '5.0.0'},
+                'service': 'KairosWeb', 'version': APP_VERSION, 'release_suite':'2026.11.02.4', 'component_versions':{'KairosWeb': '3.0.36', 'KairosGPT': '1.3.17', 'MCP_Binance': '5.4.1', 'MCP_KuCoin': '1.0.1', 'MCP_Hyperliquid': '1.0.1', 'MASTER_schema': '5.0.0'},
                 'server':{'status':'UP' if assets['consistent'] else 'DEGRADED'},
                 'operational_providers':{k:v.get('status','NOT_CHECKED') for k,v in last['providers'].items()},
                 'functional_modules':{k:v.get('status','NOT_CHECKED') for k,v in last['modules'].items()},
@@ -2551,7 +2547,7 @@ def mcp_status():
 @app.route('/api/mcp-config-check')
 def mcp_config_check():
     checks={}
-    for name, env in [('binance','BINANCE_MCP_URL'),('hyperliquid','HYPERLIQUID_MCP_URL')]:
+    for name, env in [('binance','BINANCE_MCP_URL'),('kucoin','KUCOIN_MCP_URL'),('hyperliquid','HYPERLIQUID_MCP_URL')]:
         endpoint=os.getenv(env,'').strip()
         parsed=urlsplit(endpoint) if endpoint else None
         checks[name]={
@@ -2571,6 +2567,7 @@ _MCP_LAST_LOCK = threading.Lock()
 def _check_provider(provider):
     checks={
         'binance':('BINANCE_MCP_URL','get_kairos_spot_prices',{}),
+        'kucoin':('KUCOIN_MCP_URL','get_kairos_kucoin_spot_prices',{}),
         'hyperliquid':('HYPERLIQUID_MCP_URL','get_hype_spot_market',{}),
     }
     if provider not in checks:
@@ -2578,14 +2575,20 @@ def _check_provider(provider):
     env,tool,args=checks[provider]
     if not os.getenv(env):return {'status':'NOT_CONFIGURED','category':'NOT_CONFIGURED','last_success_utc':None}
     try:
-        response=call_mcp_resilient(env,tool,args)
+        # Provider identity is tested directly, never through the valuation fallback.
+        pause=_active_mcp_pause(env)
+        if pause:raise pause
+        response=_accept_mcp_response(env,asyncio.run(call_mcp(env,tool,args)))
         if response.get('status')!='OK':raise RuntimeError('MCP status not OK')
-        if provider=='binance' and len(response.get('records') or [])!=12:
-            raise RuntimeError('MCP incomplete Binance token coverage')
+        if provider in ('binance','kucoin'):
+            expected_source={'binance':'Binance Spot','kucoin':'KuCoin Spot'}[provider]
+            if response.get('source')!=expected_source:raise ValueError('Unexpected diagnostic provider source')
+            _validate_spot_payload(response)
         now=datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
         with _MCP_LAST_LOCK:_MCP_LAST_OK[provider]=now
         return {'status':'OK','source':response.get('source'),
-                'records':len(response.get('records') or []) if provider=='binance' else None,
+                'records':len(response.get('records') or []) if provider in ('binance','kucoin') else None,
+                'observed_at':response.get('as_observed_utc'),
                 'checked_utc':now,'last_success_utc':now}
     except Exception as exc:
         diag=diagnostic_error(exc,provider)
@@ -2597,9 +2600,9 @@ def _check_provider(provider):
 @app.route('/api/mcp-diagnostics')
 def mcp_diagnostics():
     provider=request.args.get('provider','').strip().lower()
-    if provider and provider not in ('binance','hyperliquid'):
+    if provider and provider not in ('binance','kucoin','hyperliquid'):
         return jsonify({'status':'INVALID_PROVIDER'}),400
-    names=[provider] if provider else ['binance','hyperliquid']
+    names=[provider] if provider else ['binance','kucoin','hyperliquid']
     results={name:_check_provider(name) for name in names}
     return jsonify({'status':'OK' if all(x['status']=='OK' for x in results.values()) else 'CHECK_REQUIRED',
                     'providers':results,'refresh':'Consulta read-only; /health NO reinicia Render.'})
@@ -2650,14 +2653,8 @@ def mcp_refresh():
         return jsonify({'status':'ADMIN_AUTH_REQUIRED'}),403
     payload=request.get_json(silent=True) or {}
     provider=payload.get('provider')
-    if provider not in ('binance','hyperliquid'):
+    if provider not in ('binance','kucoin','hyperliquid'):
         return jsonify({'status':'INVALID_PROVIDER'}),400
-    if provider=='binance':
-        try:
-            observed, _ = load_live_dashboard(force=True)
-            return jsonify({'status':'OK','provider':'binance','observed_at':observed})
-        except Exception as exc:
-            return jsonify({'status':'DATA_ERROR','provider':'binance','diagnostic':diagnostic_error(exc,'admin:spot-refresh')}),503
     check=_check_provider(provider)
     return jsonify({'status':check['status'],'provider':provider,'result':check,
                     'note':'Consulta de diagnóstico sin cambios en el MASTER.'}), (200 if check['status']=='OK' else 503)

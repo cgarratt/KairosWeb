@@ -192,11 +192,11 @@ def test_history_button_uses_explicit_request_only():
  vm.runInNewContext(fs.readFileSync('static/spot_refresh.js','utf8'),context);
  (async()=>{
  await new Promise(setImmediate);
- assert.deepEqual(requests.map(r=>r.url),['/api/market-status']);
- timers.forEach(fn=>fn());assert.equal(requests.length,1);
- await history.click();assert.equal(requests[1].url,'/api/history/refresh');
- assert.equal(requests[1].opts.headers['X-Kairos-Csrf'],'secret');
- assert.equal(requests[1].opts.method,'POST');assert.equal(reloads,1);
+ assert.deepEqual(requests.map(r=>r.url),['/api/market-status','/api/market-status']);
+ timers.forEach(fn=>fn());assert.equal(requests.length,2);
+ await history.click();assert.equal(requests[2].url,'/api/history/refresh');
+ assert.equal(requests[2].opts.headers['X-Kairos-Csrf'],'secret');
+ assert.equal(requests[2].opts.method,'POST');assert.equal(reloads,0);
  assert(!history.disabled);
  })().catch(e=>{console.error(e);process.exitCode=1;});
  '''
@@ -209,3 +209,108 @@ def test_primary_deadline_covers_connection_and_invocation(monkeypatch):
  monkeypatch.setattr(a,'call_mcp',slow)
  monkeypatch.setattr(a,'_mcp_timeout',lambda env,tool:.001)
  with pytest.raises(TimeoutError):asyncio.run(a._spot_call('BINANCE_MCP_URL','get_kairos_spot_prices'))
+
+
+@pytest.mark.parametrize('provider,source,tool',[('binance','Binance Spot','get_kairos_spot_prices'),('kucoin','KuCoin Spot','get_kairos_kucoin_spot_prices')])
+def test_diagnostics_queries_own_provider_without_valuation(monkeypatch,provider,source,tool):
+ monkeypatch.setenv('BINANCE_MCP_URL','https://primary.example/mcp')
+ remote=AsyncMock(return_value=spot(source));monkeypatch.setattr(a,'call_mcp',remote)
+ fallback=Mock(side_effect=AssertionError('No valuation fallback in diagnostics'))
+ monkeypatch.setattr(a,'call_mcp_resilient',fallback)
+ before=copy.deepcopy(a._BINANCE_SNAPSHOT)
+ result=a._check_provider(provider)
+ assert result['status']=='OK' and result['source']==source and result['records']==12
+ assert remote.call_args.args[1]==tool and remote.call_count==1
+ assert a._BINANCE_SNAPSHOT==before
+
+@pytest.mark.parametrize('provider,source',[('binance','KuCoin Spot'),('kucoin','Binance Spot')])
+def test_diagnostics_rejects_other_provider(monkeypatch,provider,source):
+ monkeypatch.setenv('BINANCE_MCP_URL','https://primary.example/mcp')
+ monkeypatch.setattr(a,'call_mcp',AsyncMock(return_value=spot(source)))
+ assert a._check_provider(provider)['status']=='DATA_ERROR'
+
+@pytest.mark.parametrize('bad',['missing','duplicate','stale'])
+def test_kucoin_diagnostics_validates_coverage_and_age(monkeypatch,bad):
+ raw=spot('KuCoin Spot',age=181 if bad=='stale' else 0)
+ if bad=='missing':raw['records'].pop()
+ if bad=='duplicate':raw['records'][1]=raw['records'][0]
+ monkeypatch.setattr(a,'call_mcp',AsyncMock(return_value=raw))
+ assert a._check_provider('kucoin')['status']=='DATA_ERROR'
+
+
+def test_diagnostic_honors_primary_pause_while_backup_works(monkeypatch):
+ monkeypatch.setenv('BINANCE_MCP_URL','https://primary.example/mcp')
+ pause=a.MCPRateLimitError(418,datetime.now(timezone.utc)+timedelta(minutes=5))
+ monkeypatch.setattr(a,'_active_mcp_pause',lambda env:pause if env=='BINANCE_MCP_URL' else None)
+ remote=AsyncMock(return_value=spot('KuCoin Spot'));monkeypatch.setattr(a,'call_mcp',remote)
+ assert a._check_provider('binance')['status']=='DATA_ERROR'
+ assert remote.call_count==0
+ assert a._check_provider('kucoin')['status']=='OK'
+ assert remote.call_count==1
+
+
+def test_kucoin_not_configured_no_remote_call(monkeypatch):
+ monkeypatch.delenv('KUCOIN_MCP_URL')
+ remote=AsyncMock();monkeypatch.setattr(a,'call_mcp',remote)
+ assert a._check_provider('kucoin')['status']=='NOT_CONFIGURED'
+ assert remote.call_count==0
+
+
+def test_diagnostic_modules_allow_spot_backup_only():
+ providers={name:{'status':'OK'} for name in ('sheets','kucoin','hyperliquid')}
+ providers['binance']={'status':'DATA_ERROR'}
+ states=a._module_dependency_states(providers)
+ for name in ('portafolio','balancer','ventas'):assert states[name]['status']=='DEPENDENCIES_OK'
+ assert states['tradingbot']['status']=='BLOCKED_OR_PARTIAL'
+ assert states['compras']['status']=='BLOCKED_OR_PARTIAL'
+
+
+def test_kucoin_diagnostic_routes_and_refresh(monkeypatch):
+ monkeypatch.setattr(a,'_portfolio_authorized',lambda:True)
+ monkeypatch.setattr(a,'_admin_authorized',lambda:True)
+ monkeypatch.setattr(a,'_same_origin',lambda:True)
+ monkeypatch.setattr(a,'_csrf_ok',lambda:True)
+ remote=AsyncMock(return_value=spot('KuCoin Spot'));monkeypatch.setattr(a,'call_mcp',remote)
+ with a.app.test_client() as c:
+  check=c.get('/api/mcp-diagnostics?provider=kucoin').get_json()['providers']['kucoin']
+  assert check['status']=='OK' and check['source']=='KuCoin Spot'
+  result=c.post('/api/mcp-refresh',json={'provider':'kucoin'}).get_json()
+  assert result['result']['status']=='OK' and result['provider']=='kucoin'
+  assert c.get('/api/mcp-config-check').get_json()['checks']['kucoin']['configured']
+
+
+def test_history_control_only_in_settings():
+ from flask import render_template
+ with a.app.test_request_context('/settings'):
+  html=render_template('settings.html',master=a.APP_VERSION,portfolio_authenticated=True)
+  assert html.count('id="history-refresh"')==1 and 'data-provider="kucoin"' in html
+  assert html.index('id="settings-mcp-panel"')<html.index('id="history-refresh"')
+ with a.app.test_request_context('/'):
+  html=render_template('base.html',master=a.APP_VERSION,portfolio_authenticated=True)
+  assert 'id="history-refresh"' not in html and 'id="spot-refresh"' in html
+
+
+def test_integral_health_includes_kucoin(monkeypatch):
+ monkeypatch.setattr(a,'_portfolio_authorized',lambda:True)
+ probe=Mock(return_value={'status':'OK'});monkeypatch.setattr(a,'_live_provider_probe',probe)
+ monkeypatch.setattr(a,'_deployed_asset_status',lambda:{'consistent':True})
+ with a.app.test_client() as c:
+  r=c.get('/api/health/diagnostics')
+  assert r.status_code==200
+  assert set(r.get_json()['operational_providers'])=={'sheets','binance','kucoin','hyperliquid'}
+ assert probe.call_count==4
+
+
+def test_binance_refresh_cannot_mask_outage_with_backup(monkeypatch):
+ monkeypatch.setattr(a,'_portfolio_authorized',lambda:True)
+ monkeypatch.setattr(a,'_admin_authorized',lambda:True)
+ monkeypatch.setattr(a,'_same_origin',lambda:True)
+ monkeypatch.setattr(a,'_csrf_ok',lambda:True)
+ check=Mock(return_value={'status':'DATA_ERROR','diagnostic':{'code':'RATE_LIMIT'}})
+ monkeypatch.setattr(a,'_check_provider',check)
+ valuation=Mock(side_effect=AssertionError('Do not refresh valuation in provider diagnostics'))
+ monkeypatch.setattr(a,'load_live_dashboard',valuation)
+ with a.app.test_client() as c:
+  r=c.post('/api/mcp-refresh',json={'provider':'binance'})
+  assert r.status_code==503 and r.get_json()['result']['status']=='DATA_ERROR'
+ check.assert_called_once_with('binance');valuation.assert_not_called()

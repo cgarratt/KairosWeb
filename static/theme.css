@@ -196,7 +196,7 @@
 :root :is(button:disabled,[aria-disabled="true"]){cursor:not-allowed;opacity:.65}
 :root :is(button,a,[role="button"]):not(:disabled):hover{filter:brightness(1.10)}
 :root :is(button,a,select,[role="button"]):focus-visible{outline:3px solid #67b9ff;outline-offset:3px}
-.mcp-health-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px;margin:15px 0}
+.mcp-health-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:15px;margin:15px 0}
 .mcp-health-card{padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--soft);color:var(--text)}
 .mcp-health-card h4{font-size:18px;margin:0 0 9px}.mcp-health-card p{margin:8px 0;color:var(--muted)}
 .mcp-health-card .mcp-health-state{font-weight:800;color:var(--text)}

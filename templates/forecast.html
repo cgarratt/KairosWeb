@@ -108,7 +108,7 @@
 <script src="{{ url_for('static', filename='purchase_plan.js') }}"></script>
 <script src="{{ url_for('static', filename='forecast_balance.js') }}"></script>
 <script src="{{ url_for('static',filename='forecast_cycle.js') }}?v={{ master }}"></script>
-<script src="{{ url_for('static', filename='forecast_fibo_plan.js') }}"></script>
+<script src="{{ url_for('static', filename='forecast_fibo_plan.js', v='3.0.35') }}"></script>
 <script src="{{ url_for('static', filename='forecast_level_status.js') }}"></script>
 
 <input id="forecast-deploy" type="hidden" value="25">
@@ -160,7 +160,7 @@ function renderWaves(){
   const units=position ? Number(position.units) : 0;
   const spot=position ? Number(position.price) : NaN;
   const qty=Number.isFinite(units) ? units : 0;
-  const valuations=nums.map(v=>Number.isFinite(v)&&v>0 ? qty*v : (Number.isFinite(spot)&&spot>0 ? qty*spot : null));
+  const valuations=Fibo.holdValues(nums,qty);
   return `<tr><td>${logo(r.token)}<div class="fc-muted">${r.state==='CRONOLOGIA_INVALIDA'?'Cronología inválida · excluido':'Precio / pivote'}</div></td>${nums.map((n,i)=>{const key=i===0?'cl':'o'+i;const fixed=r.locked?.includes(key);return `<td>${price(n)}${fixed?`<div class="fc-fixed-pivot" title="Publicado en Configuración · ${r.dates?.[key]||'sin fecha'}">🔒 ${r.statuses[key]}</div>`:''}</td>`}).join('')}</tr>`+
   `<tr class="wave-value-row"><td><b>Unidades / Valor USDT</b><div class="fc-muted">HOLD, sin operaciones</div></td>${valuations.map(v=>`<td><span class="fc-muted">${new Intl.NumberFormat('en-US',{maximumFractionDigits:6}).format(qty)} u.</span><div><b>${v===null?'N/D':money(v)}</b></div></td>`).join('')}</tr>`;
  }).join('');
@@ -225,6 +225,8 @@ function drawCurve(waves){
 
 function runCycle(){
  const waveRows=calcWaves(),byToken=new Map(waveRows.map(w=>[w.token,w]));
+ const missing=waveRows.filter(w=>!w.values).map(w=>w.token);
+ if(missing.length)throw Error('Forecast incompleto: faltan anclas válidas para '+missing.join(', ')+'. Revisa Configuración / Pivotes; sin valoración de ciclo.');
  const P=Number(fc.current.P),cash0=Number(fc.cash_total),qf=Number(fc.trading_reserve);
  const invalidTiers=fc.tokens.filter(t=>!['T1','T2','T3'].includes(t.tier));
  if(invalidTiers.length)throw Error('Tier inválido: '+invalidTiers.map(t=>t.token).join(', '));
