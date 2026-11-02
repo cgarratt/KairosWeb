@@ -1,6 +1,10 @@
-# KairosWeb v3.0.33 · Suite2026.11.02.1
+# KairosWeb 3.0.34 · Release activo
 
-Compatible con GPT1.3.16, Binance5.4.1, KuCoin1.0.1 e Hyperliquid1.0.1. Conservar los tres endpoints independientes. La versión incluye los modos de Portafolio, Balancer, Compras, Ventas, Órdenes y Forecast, con sus restricciones vigentes. Leer RELEASE_NOTES_v3.0.33.md e INSTALACION_SUITE.md del paquete completo. Pendiente de despliegue.
+Ver RELEASE_NOTES_v3.0.34.md para el comportamiento vigente. Spot e históricos se actualizan por separado. Notas anteriores se conservan como historia; las de 3.0.1 y 3.0.33 se integraron en HISTORIAL_RELEASES_v2.md.
+
+# KairosWeb v3.0.34 · Suite2026.11.02.1
+
+Compatible con GPT1.3.17, Binance5.4.1, KuCoin1.0.1 e Hyperliquid1.0.1. Conservar los tres endpoints independientes. La versión incluye los modos de Portafolio, Balancer, Compras, Ventas, Órdenes y Forecast, con sus restricciones vigentes. Leer RELEASE_NOTES_v3.0.34.md e INSTALACION_SUITE.md del paquete completo. Pendiente de despliegue.
 
 # KairosWeb v3.0.32
 

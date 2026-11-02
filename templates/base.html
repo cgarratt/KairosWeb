@@ -128,7 +128,7 @@
       <a class="global-nav-link {{ 'active' if request.path == '/mode/' ~ mode.slug else '' }}" href="/mode/{{ mode.slug }}" title="{{ mode.description }}">{{ mode.name }}</a>
       {% endfor %}
     </nav>
-      {% if portfolio_authenticated %}<div class="spot-refresh-wrap"><button type="button" class="btn spot-refresh-btn" id="spot-refresh" data-csrf="{{ session.get('csrf_token','') }}" title="Consultar nuevamente precios Spot MCP">↻ Actualizar Spot</button><span id="spot-observed" class="spot-observed" aria-live="polite">Spot: consultando estado…</span></div>{% endif %}
+      {% if portfolio_authenticated %}<div class="spot-refresh-wrap"><button type="button" class="btn spot-refresh-btn" id="spot-refresh" data-csrf="{{ session.get('csrf_token','') }}" title="Consultar nuevamente precios Spot MCP">↻ Actualizar Spot</button><button type="button" class="btn" id="history-refresh" title="Actualizar series cerradas sin cambiar Spot">Actualizar históricos</button><span id="history-observed" class="spot-observed" aria-live="polite"></span><span id="spot-observed" class="spot-observed" aria-live="polite">Spot: consultando estado…</span></div>{% endif %}
     </div>
     {% block content %}{% endblock %}
   </div>

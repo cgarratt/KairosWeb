@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.33'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.34'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -274,11 +274,11 @@ def bind_published_sheet():
     # The health and diagnostics endpoints remain reachable during source outages.
     independent={'/health','/api/mcp-status','/api/mcp-config-check','/api/mcp-diagnostics',
                  '/api/alerts/unread','/api/alerts/read','/api/alerts/read-all',
-                 '/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status', '/api/mcp-refresh', '/api/health/diagnostics'}
+                 '/api/history/refresh','/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status', '/api/mcp-refresh', '/api/health/diagnostics'}
     if request.path in independent or request.path in ('/login','/logout','/admin/login','/api/admin/session') or request.path=='/settings' or request.path.startswith('/static/'):
         return None
     try:
-        g.kairos_state=get_state(force=True)
+        g.kairos_state=get_state(force=request.method != 'GET')
         return None
     except Exception as exc:
         incident=uuid.uuid4().hex[:10]
@@ -296,6 +296,14 @@ def headers(resp):
     resp.headers['Referrer-Policy'] = 'same-origin'
     return resp
 
+def _mcp_timeout(env_name, tool):
+    # Quotes should fail over promptly. History is an independent explicit action.
+    if tool == 'get_kairos_spot_prices':
+        return max(3, min(45, float(os.getenv('KAIROS_PRIMARY_SPOT_TIMEOUT_SECONDS', '10'))))
+    if tool == 'get_kairos_kucoin_spot_prices':
+        return max(3, min(90, float(os.getenv('KAIROS_BACKUP_SPOT_TIMEOUT_SECONDS', '45'))))
+    return MCP_TIMEOUT_SECONDS
+
 async def call_mcp(env_name, tool, args=None):
     endpoint = os.getenv(env_name, '').strip()
     if not endpoint:
@@ -306,7 +314,7 @@ async def call_mcp(env_name, tool, args=None):
     token = os.getenv(env_name.replace('_URL', '_TOKEN'), '').strip()
     from fastmcp.client.transports import StreamableHttpTransport
     transport = StreamableHttpTransport(endpoint, headers={'Authorization': f'Bearer {token}'} if token else None)
-    async with Client(transport, timeout=(45 if env_name in ('BINANCE_MCP_URL','KUCOIN_MCP_URL') and os.getenv('KUCOIN_MCP_URL') else MCP_TIMEOUT_SECONDS)) as client:
+    async with Client(transport, timeout=_mcp_timeout(env_name, tool)) as client:
         result = await client.call_tool(tool, args or {})
     if result.is_error:
         raise RuntimeError(f'{tool}: error remoto')
@@ -370,13 +378,17 @@ def _read_binance_snapshot():
                     _BINANCE_SNAPSHOT=candidate
             except (OSError,ValueError,AttributeError):pass
         if _BINANCE_SNAPSHOT is None:
-            raise SpotRefreshRequired('Pulsa Actualizar Spot para cargar los datos de Binance.')
+            raise SpotRefreshRequired('Pulsa Actualizar Spot para cargar precios; se usará KuCoin si Binance no está disponible.')
         return _BINANCE_SNAPSHOT
 
 def _snapshot_response(tool,args=None):
     snapshot=_read_binance_snapshot()
     args=args or {}
-    if tool=='get_kairos_spot_prices':return json.loads(json.dumps(snapshot['spot']))
+    if tool=='get_kairos_spot_prices':
+        if not snapshot.get('spot'):raise SpotRefreshRequired('Pulsa Actualizar Spot para cargar precios.')
+        return json.loads(json.dumps(snapshot['spot']))
+    if snapshot.get('history_day_utc') != datetime.now(timezone.utc).date().isoformat():
+        raise SpotRefreshRequired('Históricos pendientes del último cierre UTC. Pulsa Actualizar históricos.')
     symbol=args.get('symbol','BTCUSDT');interval=args.get('interval','4h')
     key=symbol+':'+interval
     if tool=='get_kairos_ohlcv':
@@ -387,7 +399,7 @@ def _snapshot_response(tool,args=None):
         if value.get('status')=='OK' and isinstance(limit,int) and 1<=limit<=999:
             if len(records)<limit:
                 return dict(value,status='DATA_ERROR',records=[],reason=f'Insufficient closed candles: {len(records)}/{limit}')
-            value.update(records=records[-limit:],count=limit,snapshot_observed_utc=snapshot['as_observed_utc'])
+            value.update(records=records[-limit:],count=limit,snapshot_observed_utc=snapshot.get('history_observed_utc'))
             return value
     elif tool=='get_kairos_indicators':
         value=snapshot.get('indicators',{}).get(key)
@@ -395,7 +407,7 @@ def _snapshot_response(tool,args=None):
     elif tool=='get_kairos_cycle_phase' and set(args)<= {'symbol'}:
         value=snapshot.get('cycles',{}).get(symbol)
         if value:return json.loads(json.dumps(value))
-    raise SpotRefreshRequired('Datos no disponibles en esta carga. Pulsa Actualizar Spot.')
+    raise SpotRefreshRequired('Series no disponibles en esta carga. Pulsa Actualizar históricos.')
 
 class PrimaryUnavailable(RuntimeError):
     def __init__(self,status):
@@ -426,59 +438,111 @@ def market_source():
     with _BINANCE_SNAPSHOT_LOCK:
         return (_BINANCE_SNAPSHOT or {}).get('spot',{}).get('source','Binance Spot')
 
-def _refresh_binance_snapshot():
+def _save_snapshot(result):
+    # Called under the snapshot lock; no remote requests while holding it.
     global _BINANCE_SNAPSHOT
+    target=_BINANCE_SNAPSHOT_PATH
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary=target.with_name(target.name+'.'+uuid.uuid4().hex+'.tmp')
+    try:
+        temporary.write_text(json.dumps(result))
+        os.chmod(temporary,0o600)
+        os.replace(temporary,target)
+    finally:
+        temporary.unlink(missing_ok=True)
+    _BINANCE_SNAPSHOT=result
+
+
+async def _spot_call(env_name, tool):
+    # Bound connection, MCP handshake and tool invocation together.
+    return await asyncio.wait_for(call_mcp(env_name, tool, {}), timeout=_mcp_timeout(env_name, tool))
+
+
+def _refresh_binance_snapshot():
+    # load_live_dashboard serializes callers. Preserve provider observation time.
+    try:
+        previous=_read_binance_snapshot()
+        cached=previous.get('spot',{})
+        observed,_=_validate_spot_payload(cached)
+        age=(datetime.now(timezone.utc)-datetime.fromisoformat(observed.replace('Z','+00:00'))).total_seconds()
+        if 0 <= age < 60:
+            return json.loads(json.dumps(cached))
+    except (RuntimeError, ValueError, KeyError, TypeError):
+        pass
+    fallback=None
     try:
         pause=_active_mcp_pause('BINANCE_MCP_URL')
         if pause:raise pause
-        result=_accept_mcp_response('BINANCE_MCP_URL',asyncio.run(call_mcp(
-            'BINANCE_MCP_URL','get_kairos_dashboard_snapshot',{})))
-        if result.get('status')=='DATA_ERROR':
-            if result.get('http_status') in (500,502,503,504):raise PrimaryUnavailable(result['http_status'])
-            reason=str(result.get('reason','')).lower()
+        spot=_accept_mcp_response('BINANCE_MCP_URL',asyncio.run(_spot_call(
+            'BINANCE_MCP_URL','get_kairos_spot_prices')))
+        if spot.get('status')=='DATA_ERROR':
+            if spot.get('http_status') in (500,502,503,504):raise PrimaryUnavailable(spot['http_status'])
+            reason=str(spot.get('reason','')).lower()
             if any(text in reason for text in ('timed out','timeout','connection refused','connection reset','network unavailable')):
                 raise TimeoutError('Binance market data unavailable')
-        if result.get('status')!='OK' or result.get('policy')!='MANUAL_SNAPSHOT':
-            raise RuntimeError('Invalid dashboard snapshot; update Binance MCP')
+        if spot.get('source')!='Binance Spot':raise RuntimeError('Unexpected primary source')
+        _validate_spot_payload(spot)
     except Exception as primary:
         if not os.getenv('KUCOIN_MCP_URL') or not _backup_allowed(primary):raise
         pause=_active_mcp_pause('KUCOIN_MCP_URL')
         if pause:raise pause
         try:
-            spot=_accept_mcp_response('KUCOIN_MCP_URL',asyncio.run(call_mcp(
-                'KUCOIN_MCP_URL','get_kairos_kucoin_spot_prices',{})))
+            spot=_accept_mcp_response('KUCOIN_MCP_URL',asyncio.run(_spot_call(
+                'KUCOIN_MCP_URL','get_kairos_kucoin_spot_prices')))
             if spot.get('source')!='KuCoin Spot' or spot.get('provider')!='KUCOIN':
                 raise ValueError('Unexpected backup source')
             _validate_spot_payload(spot)
         except MCPRateLimitError:raise
         except Exception as backup:
             raise BackupUnavailable('KuCoin no devolvió una valoración completa y vigente.') from backup
-        result={'status':'OK','policy':'MANUAL_SNAPSHOT','source':'KuCoin Spot',
-            'as_observed_utc':spot['as_observed_utc'],'spot':spot,
-            'histories':{},'indicators':{},'cycles':{},
-            'fallback':{'active':True,'primary':'Binance Spot',
-                        'reason':'RATE_LIMIT' if _http_status(primary) in (418,429) else 'UNAVAILABLE'}}
-    data=result.get('spot',{})
-    _validate_spot_payload(data)
+        fallback={'active':True,'primary':'Binance Spot',
+                  'reason':'RATE_LIMIT' if _http_status(primary) in (418,429) else 'UNAVAILABLE'}
     with _BINANCE_SNAPSHOT_LOCK:
-        # Atomic replacement keeps readers on the previous complete observation.
-        target=_BINANCE_SNAPSHOT_PATH
-        temporary=target.with_name(target.name+'.'+uuid.uuid4().hex+'.tmp')
-        try:
-            temporary.write_text(json.dumps(result))
-            os.chmod(temporary,0o600)
-            os.replace(temporary,target)
-        finally:
-            temporary.unlink(missing_ok=True)
-        _BINANCE_SNAPSHOT=result
-    _invalidate_historical_cache()
-    with _HIST_LOCK:
-        for key,value in result.get('histories',{}).items():
-            if key.endswith(':1d') and value.get('status')=='OK':
-                cachekey=_historical_key('BINANCE_MCP_URL','get_kairos_ohlcv',
-                    {'symbol':value['symbol'],'interval':'1d','limit':value['count']})
-                _HIST_CACHE[cachekey]=value
-    return data
+        try: result=json.loads(json.dumps(_read_binance_snapshot()))
+        except SpotRefreshRequired: result={}
+        result.update(status='OK',policy='MANUAL_SNAPSHOT',source=spot['source'],
+                      as_observed_utc=spot['as_observed_utc'],spot=spot, fallback=fallback)
+        _save_snapshot(result)
+    return spot
+
+
+_HISTORY_FETCH_LOCK=threading.Lock()
+
+def _refresh_history_snapshot():
+    # Explicit action only. Never replace Spot or fetch on navigation.
+    with _HISTORY_FETCH_LOCK:
+        day=datetime.now(timezone.utc).date().isoformat()
+        try: previous=_read_binance_snapshot()
+        except SpotRefreshRequired: previous={}
+        if previous.get('history_day_utc')==day:
+            return {'status':'OK','cached':True,'source':'Binance Spot','day_utc':day}
+        pause=_active_mcp_pause('BINANCE_MCP_URL')
+        if pause:raise pause
+        result=_accept_mcp_response('BINANCE_MCP_URL',asyncio.run(call_mcp(
+            'BINANCE_MCP_URL','get_kairos_dashboard_snapshot',{})))
+        if result.get('status')!='OK' or result.get('policy')!='MANUAL_SNAPSHOT' or result.get('source')!='Binance Spot':
+            raise RuntimeError('Carga de históricos Binance no disponible')
+        histories=result.get('histories',{})
+        expected={t+'USDT:1d' for t in ('BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMP','PLUME','PEPE','VIRTUAL')}
+        if set(histories)!=expected or any(v.get('status')!='OK' or v.get('source')!='Binance Spot' or not v.get('records') for v in histories.values()):
+            raise RuntimeError('Históricos incompletos; se conserva la carga anterior')
+        for key,value in histories.items():
+            last=value['records'][-1]
+            if value.get('symbol')+':1d'!=key or value.get('interval')!='1d' or not value.get('closed_only'):
+                raise ValueError('Identidad de serie histórica inválida')
+            if datetime.fromisoformat(last['close_utc'].replace('Z','+00:00')) != datetime.fromisoformat(day+'T00:00:00+00:00'):
+                raise ValueError('Históricos no incluyen el último cierre UTC')
+        if datetime.now(timezone.utc).date().isoformat()!=day:
+            raise RuntimeError('Cambió el cierre UTC durante la carga; actualizar históricos nuevamente')
+        with _BINANCE_SNAPSHOT_LOCK:
+            try: current=json.loads(json.dumps(_read_binance_snapshot()))
+            except SpotRefreshRequired: current={'status':'OK','policy':'MANUAL_SNAPSHOT'}
+            for key in ('histories','indicators','cycles'):current[key]=result.get(key,{})
+            current.update(history_day_utc=day,history_observed_utc=datetime.now(timezone.utc).isoformat())
+            _save_snapshot(current)
+        _invalidate_historical_cache()
+        return {'status':'OK','cached':False,'source':'Binance Spot','day_utc':day}
+
 
 def call_mcp_resilient(env_name, tool, args=None):
     """Fresh MCP sessions each attempt; retry only gateway errors/timeouts.
@@ -566,8 +630,14 @@ def market_cache_status():
         stored = _MARKET_CACHE['stored']
     age = round(max(0.0, time.monotonic() - stored), 1) if observed else None
     pause=_active_mcp_pause('KUCOIN_MCP_URL' if os.getenv('KUCOIN_MCP_URL') else 'BINANCE_MCP_URL')
+    try: history=_read_binance_snapshot()
+    except SpotRefreshRequired: history={}
+    history_day=history.get('history_day_utc')
     return {'source':market_source(),'fallback_active':market_source()=='KuCoin Spot',
             'backup_configured':bool(os.getenv('KUCOIN_MCP_URL')),
+            'history_day_utc':history_day,
+            'history_current':history_day==datetime.now(timezone.utc).date().isoformat(),
+            'history_source':'Binance Spot' if history_day else None,
             'retry_at_utc':pause.retry_at_utc if pause else None,
             'http_status':pause.http_status if pause else None,
             'last_valid_observed_at':observed, 'cache_age_seconds':age,
@@ -924,11 +994,16 @@ def _validate_spot_payload(data):
     records = data.get('records')
     if not isinstance(records, list):
         raise RuntimeError('Invalid records')
+    expected_source=data.get('source')
+    if expected_source not in ('Binance Spot','KuCoin Spot'):
+        raise ValueError('Unknown Spot source')
+    if len(records)!=12:raise ValueError('Expected exactly 12 prices')
     prices={}
     for record in records:
         s=record['symbol']
-        if not s.endswith('USDT'):
-            continue
+        if record.get('source',expected_source)!=expected_source:raise ValueError('Mixed Spot sources')
+        if not s.endswith('USDT') or s[:-4] in prices:raise ValueError('Duplicate or invalid Spot pair')
+        if isinstance(record['price'],bool):raise ValueError('Boolean Spot price')
         value=float(record['price'])
         if not (value > 0 and value < float('inf')):
             raise ValueError('Invalid price')
@@ -938,6 +1013,7 @@ def _validate_spot_payload(data):
         raise RuntimeError('Missing one or more Kairos assets')
     observed = data.get('as_observed_utc')
     timestamp=datetime.fromisoformat(observed.replace('Z','+00:00'))
+    if timestamp.tzinfo is None:raise ValueError('Spot timestamp must declare timezone')
     age=(datetime.now(timezone.utc)-timestamp.astimezone(timezone.utc)).total_seconds()
     if age < -30 or age > 180:
         raise SpotRefreshRequired('La observación Spot caducó. Pulsa Actualizar Spot.')
@@ -2348,6 +2424,8 @@ def _deployed_asset_status():
         'orders_simple_filters': ('templates/ordenes.html', ('Órdenes recomendadas','id="orders-venue"','id="orders-tier"','id="orders-side"','id="orders-token"')),
         'forecast_master_pivots': ('app.py', ("'published_cl':w.get('cycle_low')", "'cl_status':w.get('cl_status','PROPUESTO')", "'waves':w.get('waves',{})")),
     }
+    critical['fast_spot_v3034']=('app.py', ('KAIROS_PRIMARY_SPOT_TIMEOUT_SECONDS', "'SEPARATE_EXPLICIT_ACTION'", 'def _refresh_history_snapshot():'))
+    critical['history_control_v3034']=('templates/base.html', ('id="history-refresh"','id="history-observed"'))
     files = {}
     for key, (filename, markers) in critical.items():
         try:
@@ -2535,6 +2613,18 @@ def admin_session_state():
                     'csrf_token':session.get('csrf_token') if _admin_authorized() else None})
 
 
+@app.route('/api/history/refresh', methods=['POST'])
+def history_refresh():
+    if not _portfolio_authorized():
+        return jsonify({'status':'PORTFOLIO_AUTH_REQUIRED'}),401
+    if not _same_origin() or not _csrf_ok():
+        return jsonify({'status':'FORBIDDEN'}),403
+    try:
+        return jsonify(_refresh_history_snapshot())
+    except Exception as exc:
+        return jsonify({'status':'DATA_ERROR','diagnostic':diagnostic_error(exc,'history:manual-refresh')}),503
+
+
 @app.route('/api/spot/refresh', methods=['POST'])
 def spot_refresh():
     # User-level refresh only: never writes MASTER or touches orders.
@@ -2545,7 +2635,7 @@ def spot_refresh():
     try:
         observed, _ = load_live_dashboard(force=True)
         return jsonify({'status':'OK','observed_at':observed, **market_cache_status(),
-                        'history':'MANUAL_BUNDLED_SNAPSHOT'})
+                        'history':'SEPARATE_EXPLICIT_ACTION'})
     except Exception as exc:
         diag=diagnostic_error(exc,'spot:manual-refresh')
         # Previous snapshot stays labeled with its original observation time;

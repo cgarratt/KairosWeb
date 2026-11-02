@@ -239,7 +239,7 @@ def test_manual_spot_refresh_preserves_closed_history_cache():
   with app.app.test_request_context('/api/spot/refresh',method='POST'):
    with patch.object(app,'_portfolio_authorized',return_value=True),patch.object(app,'_same_origin',return_value=True),patch.object(app,'_csrf_ok',return_value=True),patch.object(app,'load_live_dashboard',return_value=('test',{})):
     response=app.spot_refresh()
-    assert response.json['history']=='MANUAL_BUNDLED_SNAPSHOT'
+    assert response.json['history']=='SEPARATE_EXPLICIT_ACTION'
     assert app._HIST_CACHE['test']=={'status':'OK'}
  finally:app._HIST_CACHE.pop('test',None)
 
@@ -252,7 +252,7 @@ def test_pause_ui_disables_then_expires_without_automatic_mcp_poll():
  const now=Date.now(),deadline=new Date(now+60000).toISOString();
  let clock=now;class TestDate extends Date{static now(){return clock;}}
  const context={Date:TestDate,Intl,console,setInterval:fn=>timer=fn,
- document:{getElementById:id=>id==='spot-refresh'?button:label,
+ document:{getElementById:id=>id==='spot-refresh'?button:(id==='spot-observed'?label:null),
  querySelectorAll:()=>[{getAttribute:()=>deadline}]},
  fetch:async(url)=>{requests.push(url);return {json:async()=>({retry_at_utc:deadline,http_status:418})}},window:{location:{reload:()=>assert.fail('No auto reload')}}};
  vm.runInNewContext(fs.readFileSync('static/spot_refresh.js','utf8'),context);
@@ -272,21 +272,21 @@ def test_binance_navigation_never_calls_transport(tmp_path):
   net.assert_not_called()
 
 def _manual_bundle():
- observed=app.datetime.now(app.timezone.utc).isoformat()
- spot={'status':'OK','as_observed_utc':observed,'records':[{'symbol':'BTCUSDT','price':'100'}]}
+ observed=(app.datetime.now(app.timezone.utc)-app.timedelta(seconds=100)).isoformat()
+ spot={'status':'OK','source':'Binance Spot','as_observed_utc':observed,'records':[{'symbol':t+'USDT','price':'100'} for t in ('BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMP','PLUME','PEPE','VIRTUAL')]}
  return {'status':'OK','policy':'MANUAL_SNAPSHOT','as_observed_utc':observed,'spot':spot,
          'histories':{'BTCUSDT:1d':{'status':'OK','symbol':'BTCUSDT','interval':'1d','source':'Binance Spot','closed_only':True,'count':3,'records':[{'close':'1'},{'close':'2'},{'close':'3'}]}}}
 
 def test_manual_refresh_is_one_tool_call_and_navigation_uses_local_bundle(tmp_path):
  from unittest.mock import AsyncMock,patch
  bundle=_manual_bundle()
- with patch.object(app,'_BINANCE_SNAPSHOT',None),patch.object(app,'_BINANCE_SNAPSHOT_PATH',tmp_path/'snapshot.json'),patch.object(app,'_active_mcp_pause',return_value=None),patch.object(app,'_validate_spot_payload',return_value=(bundle['as_observed_utc'],{'BTC':100})),patch.object(app,'call_mcp',new_callable=AsyncMock,return_value=bundle) as net:
+ with patch.object(app,'_BINANCE_SNAPSHOT',None),patch.object(app,'_BINANCE_SNAPSHOT_PATH',tmp_path/'snapshot.json'),patch.object(app,'_active_mcp_pause',return_value=None),patch.object(app,'_validate_spot_payload',return_value=(bundle['as_observed_utc'],{'BTC':100})),patch.object(app,'call_mcp',new_callable=AsyncMock,return_value=bundle['spot']) as net:
   app._refresh_binance_snapshot()
   for _ in range(3):
    assert app.call_mcp_resilient('BINANCE_MCP_URL','get_kairos_spot_prices')['as_observed_utc']==bundle['as_observed_utc']
-   result=app.call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',{'symbol':'BTCUSDT','interval':'1d','limit':2})
-   assert result['records']==[{'close':'2'},{'close':'3'}]
-  net.assert_awaited_once_with('BINANCE_MCP_URL','get_kairos_dashboard_snapshot',{})
+   with pytest.raises(app.SpotRefreshRequired):
+    app.call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',{'symbol':'BTCUSDT','interval':'1d','limit':2})
+  net.assert_awaited_once_with('BINANCE_MCP_URL','get_kairos_spot_prices',{})
   # A worker restart loads the saved observation, without opening MCP.
   app._BINANCE_SNAPSHOT=None
   assert app._snapshot_response('get_kairos_spot_prices')['as_observed_utc']==bundle['as_observed_utc']
@@ -317,7 +317,7 @@ def test_timeout_uses_one_complete_kucoin_snapshot(tmp_path,monkeypatch):
  with patch.object(app,'_BINANCE_SNAPSHOT',None),patch.object(app,'TOKENS',['BTC']),patch.object(app,'_BINANCE_SNAPSHOT_PATH',tmp_path/'snapshot'),patch.object(app,'_active_mcp_pause',return_value=None),patch.object(app,'call_mcp',net):
   result=app._refresh_binance_snapshot()
   assert result['source']=='KuCoin Spot'
-  assert app._BINANCE_SNAPSHOT['histories']=={}
+  assert app._BINANCE_SNAPSHOT.get('histories',{})=={}
   assert app._snapshot_response('get_kairos_spot_prices')['provider']=='KUCOIN'
   assert net.await_count==2
   assert net.await_args_list[1].args==('KUCOIN_MCP_URL','get_kairos_kucoin_spot_prices',{})
@@ -336,7 +336,7 @@ def test_active_binance_pause_skips_primary_and_calls_backup(tmp_path,monkeypatc
 def test_primary_success_never_calls_backup(tmp_path,monkeypatch):
  from unittest.mock import AsyncMock
  monkeypatch.setenv('KUCOIN_MCP_URL','https://backup.example/mcp')
- net=AsyncMock(return_value=_manual_bundle())
+ net=AsyncMock(return_value=_manual_bundle()['spot'])
  with patch.object(app,'TOKENS',['BTC']),patch.object(app,'_BINANCE_SNAPSHOT',None),patch.object(app,'_BINANCE_SNAPSHOT_PATH',tmp_path/'snapshot'),patch.object(app,'_active_mcp_pause',return_value=None),patch.object(app,'call_mcp',net):
   app._refresh_binance_snapshot();net.assert_awaited_once()
 
