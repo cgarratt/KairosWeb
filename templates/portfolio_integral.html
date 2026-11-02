@@ -191,11 +191,11 @@
    <div id="btc-trend-display" class="ki-trend" data-regime="{{ market_trend.regime }}">
     <div id="btc-trend-icon" class="ki-trend-icon" aria-hidden="true">{{ '↗' if market_trend.regime=='ALCISTA' else '↘' if market_trend.regime=='BAJISTA' else '→' if market_trend.regime=='LATERAL' else '—' }}</div>
     <div id="btc-trend-label" class="ki-trend-label" role="status" aria-live="polite">{{ market_trend.regime }}</div>
-    <div id="btc-trend-week" class="ki-trend-week">{{ 'Cierre UTC ' ~ market_trend.week if market_trend.week else 'Consultando BTC semanal…' }}</div>
+    <div id="btc-trend-week" class="ki-trend-week">{{ 'Cierre UTC ' ~ market_trend.week if market_trend.week else (market_trend.reason or 'Históricos BTC pendientes') }}</div>
    </div>
    <div class="ki-chart-wrap" id="btc-weekly-pivot-chart" role="img" aria-label="Velas japonesas BTC 1W desde Cycle Low publicado y últimos tres pivotes confirmados">
-    <div class="ki-chart-empty">Esperando pivotes semanales verificados…</div>
-    <div class="ki-chart-note">1W UTC · velas OHLC desde CL · pivotes 5L/5R</div>
+    <div class="ki-chart-empty">{{ market_trend.reason or 'Cargando gráfico desde los históricos guardados…' }}</div>
+    <div class="ki-chart-note">1W UTC · Binance Spot · velas OHLC desde CL · pivotes 5L/5R</div><a class="tiny-control" href="{{ url_for('settings_page', tab='mcp') }}">Gestionar históricos</a>
    </div>
   </div>
   <details class="ki-details"><summary>Metodología</summary><p>Cierres semanales completos UTC, SMA20 y pendiente. Informativo; no sustituye BSI ni habilita órdenes.</p></details>
@@ -251,24 +251,33 @@
     chart.insertBefore(svg,chart.firstChild);
     const note=chart.querySelector('.ki-chart-note');if(note)note.textContent='1W UTC · velas OHLC desde CL · pivotes 5L/5R'+(ps.length<3?' · '+ps.length+'/3 confirmados':'');
   }
-  let attempts=0;
+  function showUnavailable(reason){
+    panel.dataset.regime='N/D';
+    document.getElementById('btc-trend-label').textContent='N/D';
+    document.getElementById('btc-trend-icon').textContent='—';
+    document.getElementById('btc-trend-week').textContent=reason;
+    let empty=chart?.querySelector('.ki-chart-empty');
+    if(empty)empty.textContent=reason;
+  }
   async function refresh(){
-    if(document.hidden)return;
-    attempts++;
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),15000);
     try{
-      const res=await fetch('{{ url_for("portfolio_btc_trend_status") }}',{credentials:'same-origin',cache:'no-store'});
-      if(!res.ok)return;
+      const res=await fetch('{{ url_for("portfolio_btc_trend_status") }}',{credentials:'same-origin',cache:'no-store',signal:controller.signal});
+      if(!res.ok){showUnavailable('No se pudo leer la tendencia BTC. Revisa sesión, MASTER e históricos en Configuración.');return;}
       const data=await res.json();
-      if(!['ALCISTA','BAJISTA','LATERAL'].includes(data.regime))return;
+      if(!['ALCISTA','BAJISTA','LATERAL'].includes(data.regime)){
+        showUnavailable(data.reason||'Históricos BTC no disponibles. Revisa Configuración.');return;
+      }
       panel.dataset.regime=data.regime;
       document.getElementById('btc-trend-label').textContent=data.regime;
       document.getElementById('btc-trend-icon').textContent=({'ALCISTA':'↗','BAJISTA':'↘','LATERAL':'→'})[data.regime];
-      document.getElementById('btc-trend-week').textContent='Cierre UTC '+data.week;
+      document.getElementById('btc-trend-week').textContent='Cierre UTC '+data.week+' · '+data.source;
       draw(data);
-    }catch(e){ /* N/D remains; no invented trend or pivots */ }
+    }catch(e){showUnavailable('No se pudo cargar la tendencia BTC. Revisa la conexión y los históricos en Configuración.');}
+    finally{clearTimeout(timeout);}
   }
   refresh();
-  const timer=setInterval(()=>{if(attempts>=12||(panel.dataset.regime!=='N/D'&&chart.querySelector('svg'))){clearInterval(timer);return;}refresh();},5000);
 })();
 </script>
 <!-- Fila 1: current capital by custody, current allocation 12 tokens + USDT -->

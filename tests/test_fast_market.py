@@ -314,3 +314,26 @@ def test_binance_refresh_cannot_mask_outage_with_backup(monkeypatch):
   r=c.post('/api/mcp-refresh',json={'provider':'binance'})
   assert r.status_code==503 and r.get_json()['result']['status']=='DATA_ERROR'
  check.assert_called_once_with('binance');valuation.assert_not_called()
+
+
+@pytest.mark.parametrize('provider,source',[('kucoin','KuCoin Spot'),('binance','Binance Spot')])
+@pytest.mark.parametrize('route',['check','refresh','deep_worker'])
+def test_provider_validation_without_bound_master(monkeypatch,provider,source,route):
+ # Use the production LocalProxy: diagnostics deliberately do not bind the Master.
+ from werkzeug.local import LocalProxy
+ monkeypatch.setattr(a,'TOKENS',LocalProxy(lambda:a.g.kairos_state['tokens']))
+ monkeypatch.setattr(a,'get_state',Mock(side_effect=AssertionError('Diagnostics must not read the Master')))
+ monkeypatch.setattr(a,'_portfolio_authorized',lambda:True)
+ monkeypatch.setattr(a,'_admin_authorized',lambda:True)
+ monkeypatch.setattr(a,'_same_origin',lambda:True)
+ monkeypatch.setattr(a,'_csrf_ok',lambda:True)
+ monkeypatch.setenv('BINANCE_MCP_URL','https://primary.example/mcp')
+ monkeypatch.setattr(a,'call_mcp',AsyncMock(return_value=spot(source)))
+ if route=='deep_worker':
+  with ThreadPoolExecutor(max_workers=1) as pool:result=pool.submit(a._live_provider_probe,provider).result()
+ else:
+  with a.app.test_client() as c:
+   if route=='check':result=c.get('/api/mcp-diagnostics?provider='+provider).get_json()['providers'][provider]
+   else:result=c.post('/api/mcp-refresh',json={'provider':provider}).get_json()['result']
+ assert result['status']=='OK',result
+ assert result['source']==source and result['records']==12

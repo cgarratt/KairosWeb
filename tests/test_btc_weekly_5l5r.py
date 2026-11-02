@@ -68,3 +68,89 @@ if __name__=='__main__':
  suite=unittest.TestSuite(unittest.FunctionTestCase(fn) for name,fn in list(globals().items()) if name.startswith('test_') and callable(fn))
  result=unittest.TextTestRunner(verbosity=2).run(suite)
  if not result.wasSuccessful():raise SystemExit(1)
+
+# Integration with the explicit historical snapshot (not the retired prefetch cache).
+import sys,copy,json,subprocess,pytest
+sys.path.insert(0,str(source.parent))
+import app as web
+from unittest.mock import Mock
+
+@pytest.fixture
+def historical_snapshot(monkeypatch,tmp_path):
+ today=datetime.now(timezone.utc).date()
+ records=[]
+ for i in range(450):
+  day=today-timedelta(days=450-i);price=100+i
+  records.append({'open_utc':day.isoformat()+'T00:00:00Z',
+    'close_utc':(day+timedelta(days=1)).isoformat()+'T00:00:00Z',
+    'open':str(price),'high':str(price+3),'low':str(price-3),'close':str(price+1)})
+ data={'status':'OK','source':'Binance Spot','symbol':'BTCUSDT','interval':'1d','closed_only':True,'records':records}
+ snapshot={'status':'OK','policy':'MANUAL_SNAPSHOT','history_day_utc':today.isoformat(),'histories':{'BTCUSDT:1d':data}}
+ monkeypatch.setattr(web,'_BINANCE_SNAPSHOT',snapshot)
+ monkeypatch.setattr(web,'_BINANCE_SNAPSHOT_PATH',tmp_path/'absent.json')
+ monkeypatch.setattr(web,'call_mcp',Mock(side_effect=AssertionError('Trend must not fetch market data')))
+ monkeypatch.setattr(web,'call_mcp_resilient',Mock(side_effect=AssertionError('Trend must not fetch market data')))
+ return snapshot
+
+
+def test_chart_uses_full_loaded_history_from_cl(historical_snapshot):
+ from wave_structure import full_utc_weeks
+ data=historical_snapshot['histories']['BTCUSDT:1d'];weeks=full_utc_weeks(data['records'])
+ cl=weeks[3]['week_start']
+ result=web.cached_btc_weekly_regime(cl)
+ assert result['status']=='OK' and result['source']=='Binance Spot'
+ assert result['candles'][0]['week_start']==cl
+ assert len(result['candles'])>30 # the old210-day window could not cover thisCL
+ assert result['week']==weeks[-1]['week_end']
+ assert result['pivot_rule'].startswith('5L/5R')
+
+
+@pytest.mark.parametrize('bad',['stale','missing','wrong_source','gap','incomplete_week'])
+def test_trend_explains_unavailable_history(historical_snapshot,bad):
+ snapshot=historical_snapshot;data=snapshot['histories']['BTCUSDT:1d']
+ if bad=='stale':snapshot['history_day_utc']='2020-01-01'
+ if bad=='missing':snapshot['histories']={}
+ if bad=='wrong_source':data['source']='KuCoin Spot'
+ if bad=='gap':data['records'].pop(-50)
+ if bad=='incomplete_week':
+  today=datetime.now(timezone.utc).date();day=today-timedelta(days=today.weekday()+4)
+  data['records'][:]=[r for r in data['records'] if not r['open_utc'].startswith(day.isoformat())]
+ result=web.cached_btc_weekly_regime('2025-01-06')
+ assert result['regime']=='N/D' and result['reason'] and not result['candles']
+
+
+def test_no_history_is_terminal_not_loading(historical_snapshot,monkeypatch):
+ monkeypatch.setattr(web,'_BINANCE_SNAPSHOT',None)
+ result=web.cached_btc_weekly_regime('2025-01-06')
+ assert result['status']=='HISTORY_REQUIRED' and 'Configuración' in result['reason']
+
+
+def test_missing_cl_keeps_regime_but_explains_chart(historical_snapshot):
+ result=web.cached_btc_weekly_regime()
+ assert result['status']=='OK' and not result['candles']
+ assert result['reason']=='BTC CL publicado no disponible'
+
+
+def test_frontend_reports_missing_history_and_http_errors():
+ html=(source.parent/'templates/portfolio_integral.html').read_text()
+ pos=html.index("const panel=document.getElementById('btc-trend-display');")
+ script=html[html.rfind('<script>',0,pos)+len('<script>'):html.index('</script>',pos)]
+ script=script.replace('{{ url_for("portfolio_btc_trend_status") }}','/api/portfolio/btc-trend')
+ driver=r'''
+ const vm=require('vm'),assert=require('assert');
+ const script=SCRIPT;
+ (async()=>{
+ for(const mode of ['missing','http','network']){
+ const panel={dataset:{regime:'N/D'}},empty={},week={},label={},icon={};let requests=0;
+ const chart={querySelector:()=>empty};
+ const nodes={'btc-trend-display':panel,'btc-weekly-pivot-chart':chart,'btc-trend-week':week,'btc-trend-label':label,'btc-trend-icon':icon};
+ const ctx={AbortController,setTimeout:()=>1,clearTimeout:()=>{},
+  document:{getElementById:id=>nodes[id]},
+  fetch:async()=>{requests++;if(mode==='network')throw Error('network');return {ok:mode!=='http',json:async()=>({regime:'N/D',reason:'Actualizar históricos en Configuración'})};}};
+ vm.runInNewContext(script,ctx);await new Promise(setImmediate);
+ assert.equal(requests,1);assert.equal(label.textContent,'N/D');
+ assert(week.textContent.includes('Configuración'));assert.equal(empty.textContent,week.textContent);
+ }
+ })().catch(e=>{console.error(e);process.exitCode=1;});
+ '''.replace('SCRIPT',json.dumps(script))
+ subprocess.run(['node','-e',driver],check=True)

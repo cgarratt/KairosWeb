@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.36'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.38'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -49,6 +49,8 @@ SNAPSHOT=LocalProxy(lambda:g.kairos_state['snapshot'])
 COST_BASIS=LocalProxy(lambda:g.kairos_state['cost_basis'])
 O2_LEVELS=LocalProxy(lambda:g.kairos_state['o2_levels'])
 TOKENS=LocalProxy(lambda:g.kairos_state['tokens'])
+# Protocol coverage only: no balances, policy, targets or portfolio state.
+MCP_MARKET_TOKENS=('BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMP','PLUME','PEPE','VIRTUAL')
 TARGETS=LocalProxy(lambda:g.kairos_state['targets'])
 TIERS=LocalProxy(lambda:g.kairos_state['tiers'])
 PARAMETERS=LocalProxy(lambda:g.kairos_state['parameters'])
@@ -354,11 +356,8 @@ def historical_cache_status():
                 'policy':'UTC_DAY_CLOSED_HISTORY', 'is_spot':False}
 
 def _invalidate_historical_cache():
-    global _BTC_TREND_FETCH_DAY
     with _HIST_LOCK:
         _HIST_CACHE.clear()
-    with _BTC_TREND_LOCK:
-        _BTC_TREND_FETCH_DAY=None
 
 # Binance is read exclusively from the last explicit dashboard load.
 _BINANCE_SNAPSHOT = None
@@ -777,40 +776,6 @@ def executive_risk_index(rows, physical_usdt):
             'model':'PRI v1 · proxy exposición 35% + concentración 35% + drift 30%; no VaR'}
 
 
-# BTC-only prefetch runs asynchronously: Portafolio must never wait for MCP.
-_BTC_TREND_LOCK = threading.Lock()
-_BTC_TREND_FETCH_DAY = None
-_BTC_TREND_ERROR = None
-
-def _btc_weekly_prefetch():
-    global _BTC_TREND_ERROR
-    try:
-        result=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
-            {'symbol':'BTCUSDT','interval':'1d','limit':210})
-        with _HIST_LOCK:
-            _HIST_CACHE[_historical_key('BINANCE_MCP_URL','get_kairos_ohlcv',{'symbol':'BTCUSDT','interval':'1d','limit':210})]=result
-        if not isinstance(result,dict) or result.get('status')=='DATA_ERROR':
-            raise ValueError('BTC daily history unavailable')
-        # Validate the source contract; do not silently accept other markets.
-        if result.get('source')!='Binance Spot' or result.get('interval')!='1d' or result.get('closed_only') is not True:
-            raise ValueError('BTC historical source not certified')
-        from wave_structure import full_utc_weeks
-        if len(full_utc_weeks(result.get('records') or []))<21:
-            raise ValueError('Fewer than 21 complete BTC UTC weeks')
-        _BTC_TREND_ERROR=None
-    except Exception as exc:
-        _BTC_TREND_ERROR=type(exc).__name__
-        app.logger.warning('BTC weekly prefetch unavailable: %s',type(exc).__name__)
-
-def start_btc_weekly_prefetch():
-    global _BTC_TREND_FETCH_DAY
-    today=datetime.now(timezone.utc).date().isoformat()
-    if _BTC_TREND_FETCH_DAY==today:return
-    with _BTC_TREND_LOCK:
-        if _BTC_TREND_FETCH_DAY==today:return
-        _BTC_TREND_FETCH_DAY=today
-        threading.Thread(target=_btc_weekly_prefetch,daemon=True,name='btc-weekly-prefetch').start()
-
 def _btc_weekly_chart(weeks, daily_records, published_cl_date):
     """Chart from published BTC CL to last closed UTC week, with confirmed 5L/5R pivots.
 
@@ -868,27 +833,46 @@ def _btc_weekly_chart(weeks, daily_records, published_cl_date):
             'reason':None if len(chosen)==3 else 'Menos de tres pivotes 5L/5R confirmados desde CL'}
 
 def cached_btc_weekly_regime(published_cl_date=None):
-    """BTC trend only from Binance Spot complete UTC weeks in the daily cache."""
+    """Read the explicit full historical snapshot; never request market data here."""
     from wave_structure import full_utc_weeks
-    with _HIST_LOCK:
-        series=[v for k,v in _HIST_CACHE.items() if 'BTCUSDT' in str(k) and isinstance(v,dict)
-                and v.get('source')=='Binance Spot' and v.get('interval')=='1d'
-                and v.get('closed_only') is True and v.get('status')=='OK']
-    for data in series:
-        weeks=full_utc_weeks(data.get('records') or [])
-        if len(weeks)<21:continue
-        closes=[float(w['close']) for w in weeks]
-        last=closes[-1]; sma20=sum(closes[-20:])/20
-        prev=sum(closes[-21:-1])/20
-        if last>sma20*1.02 and sma20>prev:regime='ALCISTA'
-        elif last<sma20*.98 and sma20<prev:regime='BAJISTA'
-        else:regime='LATERAL'
-        return {'regime':regime,'btc_close':last,'sma20':sma20,'week':weeks[-1]['week_end'],**_btc_weekly_chart(weeks,data.get('records') or [],published_cl_date)}
-    return {'regime':'N/D','reason':'Histórico BTC 1W pendiente o insuficiente'}
+    from datetime import date, timedelta
+    def unavailable(code,reason):
+        return {'status':code,'regime':'N/D','source':'Binance Spot','reason':reason,
+                'candles':[],'pivots':[]}
+    try:snapshot=_read_binance_snapshot()
+    except SpotRefreshRequired:
+        return unavailable('HISTORY_REQUIRED','Sin históricos BTC. Actualiza históricos en Configuración → Estado de conexiones MCP.')
+    today=datetime.now(timezone.utc).date()
+    if snapshot.get('history_day_utc')!=today.isoformat():
+        return unavailable('HISTORY_REQUIRED','Históricos pendientes del último cierre UTC. Actualiza históricos en Configuración → Estado de conexiones MCP.')
+    data=(snapshot.get('histories') or {}).get('BTCUSDT:1d') or {}
+    if not(data.get('status')=='OK' and data.get('source')=='Binance Spot' and
+           data.get('symbol')=='BTCUSDT' and data.get('interval')=='1d' and data.get('closed_only') is True):
+        return unavailable('DATA_ERROR','Serie BTC diaria de Binance no disponible o inválida. Revisa los históricos en Configuración.')
+    records=data.get('records') or []
+    try:
+        last_close=datetime.fromisoformat(records[-1]['close_utc'].replace('Z','+00:00'))
+        if last_close!=datetime.combine(today,datetime.min.time(),timezone.utc):raise ValueError('Stale daily history')
+        weeks=[w for w in full_utc_weeks(records) if date.fromisoformat(w['week_end'])<today]
+    except (ValueError,KeyError,TypeError,IndexError):
+        return unavailable('DATA_ERROR','Histórico BTC incompleto o sin el último cierre diario UTC.')
+    if len(weeks)<21:
+        return unavailable('INSUFFICIENT_HISTORY','Se requieren al menos 21 semanas BTC completas para calcular SMA20 y pendiente.')
+    latest_sunday=today-timedelta(days=today.weekday()+1)
+    dates=[date.fromisoformat(w['week_start']) for w in weeks[-21:]]
+    if weeks[-1]['week_end']!=latest_sunday.isoformat() or any(b-a!=timedelta(days=7) for a,b in zip(dates,dates[1:])):
+        return unavailable('INSUFFICIENT_HISTORY','Faltan semanas BTC consecutivas o el último cierre semanal UTC.')
+    closes=[float(w['close']) for w in weeks]
+    last=closes[-1];sma20=sum(closes[-20:])/20;prev=sum(closes[-21:-1])/20
+    if last>sma20*1.02 and sma20>prev:regime='ALCISTA'
+    elif last<sma20*.98 and sma20<prev:regime='BAJISTA'
+    else:regime='LATERAL'
+    return {'status':'OK','source':'Binance Spot','regime':regime,'btc_close':last,
+            'sma20':sma20,'week':weeks[-1]['week_end'],
+            **_btc_weekly_chart(weeks,records,published_cl_date)}
 
 @app.route('/api/portfolio/btc-trend')
 def portfolio_btc_trend_status():
-    start_btc_weekly_prefetch()
     return jsonify(cached_btc_weekly_regime((g.kairos_state.get('wave_pivots',{}).get('BTC') or {}).get('cl_date')))
 
 
@@ -988,7 +972,7 @@ def core_dashboard(prices):
         'forecast_sensitivity':forecast_sensitivity(rows,liquidity)
     }
 
-def _validate_spot_payload(data):
+def _validate_spot_payload(data, *, required_tokens=None):
     if data.get('status') != 'OK':
         raise RuntimeError('Binance MCP DATA_ERROR')
     records = data.get('records')
@@ -1008,7 +992,7 @@ def _validate_spot_payload(data):
         if not (value > 0 and value < float('inf')):
             raise ValueError('Invalid price')
         prices[s[:-4]]=value
-    required = set(('PUMP' if t == 'PUMPFUN' else t) for t in TOKENS)
+    required = set(('PUMP' if t == 'PUMPFUN' else t) for t in (TOKENS if required_tokens is None else required_tokens))
     if not required.issubset(prices):
         raise RuntimeError('Missing one or more Kairos assets')
     observed = data.get('as_observed_utc')
@@ -1664,7 +1648,6 @@ def integral_portfolio_page():
         btc_reference_price,btc_total=live['btc_usdt_spot'],live['total_btc_equivalent']
         bsi_archive=live['bsi_historical']
         pri=executive_risk_index(candidate_rows,live['usdt_total'])
-        start_btc_weekly_prefetch()
         market_trend=cached_btc_weekly_regime((g.kairos_state.get('wave_pivots',{}).get('BTC') or {}).get('cl_date'))
     except Exception as exc:
         origin='BINANCE_SPOT_MCP' if stage=='BINANCE_SPOT_MCP' else 'PORTFOLIO_CALCULATION'
@@ -2431,6 +2414,7 @@ def _deployed_asset_status():
     critical['forecast_master_v3035']=('wave_macro_context.py', ('def published_forecast_context(', "'simulation_only':True", "'O1_source':'07_PIVOTES_PUBLICADO'"))
     critical['fast_spot_v3034']=('app.py', ('KAIROS_PRIMARY_SPOT_TIMEOUT_SECONDS', "'SEPARATE_EXPLICIT_ACTION'", 'def _refresh_history_snapshot():'))
     critical['kucoin_diagnostics_v3036']=('templates/settings.html', ('data-provider="kucoin"', 'id="settings-history-panel"'))
+    critical['btc_trend_v3038']=('app.py', ('def cached_btc_weekly_regime(', "snapshot.get('history_day_utc')", "latest_sunday=today"))
     critical['history_control_v3034']=('templates/settings.html', ('id="history-refresh"','id="history-observed"'))
     files = {}
     for key, (filename, markers) in critical.items():
@@ -2512,7 +2496,7 @@ def health():
     with _DEPENDENCY_LOCK:
         last=dict(_DEPENDENCY_LAST)
     response = {'status': 'UP' if assets['consistent'] else 'DEGRADED',
-                'service': 'KairosWeb', 'version': APP_VERSION, 'release_suite':'2026.11.02.4', 'component_versions':{'KairosWeb': '3.0.36', 'KairosGPT': '1.3.17', 'MCP_Binance': '5.4.1', 'MCP_KuCoin': '1.0.1', 'MCP_Hyperliquid': '1.0.1', 'MASTER_schema': '5.0.0'},
+                'service': 'KairosWeb', 'version': APP_VERSION, 'release_suite':'2026.11.02.6', 'component_versions':{'KairosWeb': '3.0.38', 'KairosGPT': '1.3.17', 'MCP_Binance': '5.4.1', 'MCP_KuCoin': '1.0.1', 'MCP_Hyperliquid': '1.0.1', 'MASTER_schema': '5.0.0'},
                 'server':{'status':'UP' if assets['consistent'] else 'DEGRADED'},
                 'operational_providers':{k:v.get('status','NOT_CHECKED') for k,v in last['providers'].items()},
                 'functional_modules':{k:v.get('status','NOT_CHECKED') for k,v in last['modules'].items()},
@@ -2583,7 +2567,7 @@ def _check_provider(provider):
         if provider in ('binance','kucoin'):
             expected_source={'binance':'Binance Spot','kucoin':'KuCoin Spot'}[provider]
             if response.get('source')!=expected_source:raise ValueError('Unexpected diagnostic provider source')
-            _validate_spot_payload(response)
+            _validate_spot_payload(response, required_tokens=MCP_MARKET_TOKENS)
         now=datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
         with _MCP_LAST_LOCK:_MCP_LAST_OK[provider]=now
         return {'status':'OK','source':response.get('source'),

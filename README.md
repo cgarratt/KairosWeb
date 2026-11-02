@@ -1,29 +1,30 @@
-# KairosWeb 3.0.36 · Configuración y diagnóstico MCP
+# KairosWeb 3.0.38 · Tendencia BTC con históricos explícitos
 
 ## Instalación
 
-Extraer el ZIP y reemplazar el contenido descomprimido del repositorio Web existente. Mantener las variables y secretos actuales. Desplegar en Render y recargar el navegador. /health debe informar version=3.0.36, component_versions.KairosWeb=3.0.36 y release_assets.consistent=true. Contiene 99 archivos.
+Extraer el ZIP y reemplazar el contenido del repositorio Web existente. Mantener variables y secretos, desplegar en Render y recargar. /health debe indicar version=3.0.38, component_versions.KairosWeb=3.0.38 y release_assets.consistent=true. Contiene 99 archivos. Compatible con GPT1.3.17 y MCP Binance5.4.1, KuCoin1.0.1 e Hyperliquid1.0.1; no reinstalarlos.
 
-Compatible con GPT1.3.17, Binance5.4.1, KuCoin1.0.1 e Hyperliquid1.0.1. No reinstalar GPT ni MCP para este cambio. Mantener KUCOIN_MCP_URL configurada en la Web.
+## Problema y corrección
 
-## Cambios
+Tendencia BTC todavía dependía de una precarga antigua de 210 velas y de una caché distinta del snapshot histórico explícito. Esa ventana podía no cubrir el CL publicado. Cuando la API devolvía N/D o fallaba, la interfaz ignoraba la respuesta y mantenía Consultando BTC semanal / Esperando pivotes.
 
-- Actualizar históricos se encuentra en Configuración → Estado de conexiones MCP → Históricos de mercado. Muestra la fuente y fecha del cierre cargado, con horario de Lima. Ya no aparece en la cabecera global; Actualizar Spot permanece en la cabecera.
-- La carga histórica sigue siendo una acción manual e independiente de Spot: velas 1D cerradas Binance, reutilizadas durante el mismo día UTC. Frecuencia sugerida: una vez al día después de las 19:00 de Lima. No actualiza pivotes publicados ni saldos u órdenes.
-- La tarjeta KuCoin muestra su configuración, cobertura de 12 tokens, fuente, observación de mercado y última comprobación exitosa. Su MCP actual sólo ofrece Spot: esta entrega no incorpora históricos KuCoin.
-- Cada tarjeta consulta exclusivamente su MCP y respeta las pausas. Binance no puede aparecer conectado por reutilizar un snapshot KuCoin. Las respuestas Spot requieren identidad de fuente, cobertura completa y frescura válida.
-- Refrescar conexión sólo comprueba al proveedor indicado; no inicia una valoración ni cambia el snapshot del portafolio.
-- El diagnóstico integral incluye Google Sheets, Binance, KuCoin e Hyperliquid. Para Portafolio, Balancer y Ventas acepta Binance o KuCoin como dependencia Spot. No sustituye Binance por KuCoin para indicadores, BSI o análisis histórico. Es evaluación de dependencias, no certificación funcional de cada módulo.
-- Conserva Forecast3.0.35 con anclas CL/O1 publicadas y pivotes protegidos, Spot rápido e históricos separados.
+Ahora el régimen y las velas usan el historial completo BTCUSDT:1d del snapshot cargado mediante Actualizar históricos. No se consulta mercado al navegar ni en un hilo de precarga. Se utilizan sólo semanas lunes-domingo UTC cerradas y al menos 21 consecutivas, incluido el último cierre semanal. La gráfica sigue iniciando en la semana del CL publicado y conserva los pivotes estrictos 5L/5R; no se generan pivotes por falta de datos.
 
-## Validación y límites
+La interfaz realiza una lectura de estado, con timeout 15s y sin sondeo repetitivo. Ante N/D, error HTTP o red, muestra el motivo y ofrece Gestionar históricos hacia Configuración → Estado de conexiones MCP. Si hay régimen calculable pero falta CL, muestra el régimen y explica por qué no puede dibujar la gráfica.
 
-219 pruebas Web aprobadas, incluyendo diagnóstico KuCoin, cobertura/frescura, rechazo de fuente incorrecta, pausa Binance con respaldo disponible, rutas GET/POST, independencia del snapshot y ubicación del botón. Sintaxis JavaScript, plantillas Jinja y /health verificados localmente. No se completó prueba visual en navegador porque el entorno no tiene un ejecutable Chromium instalado. Despliegue y consultas reales a los proveedores no verificados en esta entrega. MASTER y automatizaciones sin cambios; sin órdenes enviadas.
+## Requisito operativo
 
-## Comprobación tras desplegar
+Actualizar Spot no descarga velas. El gráfico requiere una carga histórica Binance válida al último cierre diario UTC. Si Binance sigue bloqueado y no hay esa carga, no se dibujará: se mostrará la causa. KuCoin todavía respalda únicamente Spot; esta entrega no cambia la fuente histórica ni implementa históricos KuCoin. No reintentar repetidamente durante RATE_LIMIT.
 
-1. Confirmar /health3.0.36 y consistencia de assets.
-2. Abrir Configuración → Estado de conexiones MCP; deben aparecer las tres tarjetas y la sección Históricos de mercado.
-3. Verificar KuCoin: debe mostrar su propia fuente y 12/12 precios vigentes. Una pausa de Binance debe aparecer en Binance aunque KuCoin funcione.
-4. Usar Actualizar históricos sólo cuando se necesite el nuevo cierre UTC. El botón no mueve el Spot ni publica pivotes. Ante RATE_LIMIT, respetar la pausa del proveedor; no repetir intentos continuos.
-5. La barra global debe conservar Actualizar Spot sin Actualizar históricos.
+## Validación
+
+234 pruebas Web aprobadas. Incluyen serie desde CL anterior a 210 días, falta de carga, datos vencidos, fuente incorrecta, semanas con huecos, ausencia deCL, respuesta N/D y fallos HTTP/red del navegador simulado. Conserva las pruebas de pivotes BTC 5L/5R y diagnóstico MCP independiente del MASTER. /health y todas las plantillas Jinja verificados localmente. Sin prueba visual en navegador ni validación del despliegue remoto. No se consultó mercado para estas pruebas.
+
+No modifica MASTER, saldos, órdenes, custodia ni automatizaciones. Conserva todas las correcciones de 3.0.37 y anteriores.
+
+## Comprobación después de desplegar
+
+1. Confirmar /health 3.0.38 y consistencia de archivos.
+2. Si falta histórico vigente: esperar a que Binance permita consultas y usar Configuración → Estado de conexiones MCP → Actualizar históricos.
+3. Volver a Portafolio. Con CL e históricos suficientes, se muestran velas desde CL, régimen y los pivotes 5L/5R disponibles. Menos de tres pivotes no impide dibujar las velas.
+4. Sin histórico vigente debe aparecer una explicación y Gestionar históricos, sin quedarse Consultando indefinidamente.
