@@ -29,7 +29,7 @@
    updatePause();
    const at=data?.last_valid_observed_at||data?.observed_at;
    const formatted=globalThis.KairosSpotTime.formatSpotTime(at);
-   label.textContent=formatted?formatted.label:'Spot: sin observación';
+   label.textContent=(formatted?formatted.label:'Spot: sin observación')+(data?.fallback_active?' · KuCoin (respaldo)':'');
    label.title=formatted?formatted.title:'Fecha de observación no disponible o sin zona horaria.';
    if(retryAt>Date.now())label.textContent='Binance en pausa hasta '+new Intl.DateTimeFormat('es-PE',{timeZone:'America/Lima',dateStyle:'short',timeStyle:'medium'}).format(new Date(retryAt))+' · Lima';
  }

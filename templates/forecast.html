@@ -173,7 +173,7 @@ function renderWaves(){
 function drawCurve(waves){
  const choice=waves.find(w=>w.token===$('chart-token').value&&w.values),svg=$('waves-chart');
  if(!choice){svg.replaceChildren();$('chart-info').textContent='No hay referencias suficientes para proyectar ondas.';return;}
- // Same Binance Spot MCP observation used by this Forecast; never infer a price
+ // Same explicitly identified Spot MCP observation used by this Forecast; never infer a price
  // from Fibo, archived pivots or another source. A missing quote is N/D.
  const position=fc.tokens.find(t=>t.token===choice.token);
  const spot=position?Number(position.price):NaN;
@@ -199,9 +199,10 @@ function drawCurve(waves){
  }
  if(validSpot){
   const ySpot=yy(spot);
-  const line=node('line',{x1:110,y1:ySpot,x2:710,y2:ySpot,class:'fc-spot-line','data-spot-reference':'binance-mcp',
+  const spotSource={{ spot_source|tojson }};
+  const line=node('line',{x1:110,y1:ySpot,x2:710,y2:ySpot,class:'fc-spot-line','data-spot-reference':spotSource,
     'aria-label':`Spot actual ${choice.token} ${price(spot)} observado ${fc.generated_at||'N/D'}`});
-  const tooltip=document.createElementNS(ns,'title');tooltip.textContent=`Spot Binance MCP: ${price(spot)} · Observado: ${fc.generated_at||'N/D'} · Referencia informativa; no modifica ondas.`;line.appendChild(tooltip);
+  const tooltip=document.createElementNS(ns,'title');tooltip.textContent=`Spot ${spotSource} MCP: ${price(spot)} · Observado: ${fc.generated_at||'N/D'} · Referencia informativa; no modifica ondas.`;line.appendChild(tooltip);
   const labelY=ySpot>390?ySpot-10:ySpot+17;
   node('text',{x:701,y:labelY,'text-anchor':'end',class:'fc-spot-label'},`Spot ${price(spot)}`);
  }

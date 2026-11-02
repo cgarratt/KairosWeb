@@ -306,3 +306,75 @@ def test_failed_refresh_keeps_original_bundle_and_does_not_retry(tmp_path):
   with pytest.raises(TimeoutError):app._refresh_binance_snapshot()
   assert app._BINANCE_SNAPSHOT is previous
   assert net.await_count==1
+
+def _kucoin_spot():
+ data=_manual_bundle()['spot'];data.update(source='KuCoin Spot',provider='KUCOIN');return data
+
+def test_timeout_uses_one_complete_kucoin_snapshot(tmp_path,monkeypatch):
+ from unittest.mock import AsyncMock
+ monkeypatch.setenv('KUCOIN_MCP_URL','https://backup.example/mcp')
+ net=AsyncMock(side_effect=[TimeoutError(),_kucoin_spot()])
+ with patch.object(app,'_BINANCE_SNAPSHOT',None),patch.object(app,'TOKENS',['BTC']),patch.object(app,'_BINANCE_SNAPSHOT_PATH',tmp_path/'snapshot'),patch.object(app,'_active_mcp_pause',return_value=None),patch.object(app,'call_mcp',net):
+  result=app._refresh_binance_snapshot()
+  assert result['source']=='KuCoin Spot'
+  assert app._BINANCE_SNAPSHOT['histories']=={}
+  assert app._snapshot_response('get_kairos_spot_prices')['provider']=='KUCOIN'
+  assert net.await_count==2
+  assert net.await_args_list[1].args==('KUCOIN_MCP_URL','get_kairos_kucoin_spot_prices',{})
+  app._snapshot_response('get_kairos_spot_prices')
+  assert net.await_count==2
+
+def test_active_binance_pause_skips_primary_and_calls_backup(tmp_path,monkeypatch):
+ from unittest.mock import AsyncMock
+ monkeypatch.setenv('KUCOIN_MCP_URL','https://backup.example/mcp')
+ pause=app.MCPRateLimitError(418,app.datetime.now(app.timezone.utc)+app.timedelta(minutes=10))
+ net=AsyncMock(return_value=_kucoin_spot())
+ with patch.object(app,'TOKENS',['BTC']),patch.object(app,'_BINANCE_SNAPSHOT',None),patch.object(app,'_BINANCE_SNAPSHOT_PATH',tmp_path/'snapshot'),patch.object(app,'_active_mcp_pause',side_effect=lambda env:pause if env=='BINANCE_MCP_URL' else None),patch.object(app,'call_mcp',net):
+  app._refresh_binance_snapshot()
+  net.assert_awaited_once_with('KUCOIN_MCP_URL','get_kairos_kucoin_spot_prices',{})
+
+def test_primary_success_never_calls_backup(tmp_path,monkeypatch):
+ from unittest.mock import AsyncMock
+ monkeypatch.setenv('KUCOIN_MCP_URL','https://backup.example/mcp')
+ net=AsyncMock(return_value=_manual_bundle())
+ with patch.object(app,'TOKENS',['BTC']),patch.object(app,'_BINANCE_SNAPSHOT',None),patch.object(app,'_BINANCE_SNAPSHOT_PATH',tmp_path/'snapshot'),patch.object(app,'_active_mcp_pause',return_value=None),patch.object(app,'call_mcp',net):
+  app._refresh_binance_snapshot();net.assert_awaited_once()
+
+def test_incomplete_backup_never_replaces_previous_snapshot(tmp_path,monkeypatch):
+ from unittest.mock import AsyncMock
+ monkeypatch.setenv('KUCOIN_MCP_URL','https://backup.example/mcp')
+ old=_manual_bundle();bad=_kucoin_spot();bad['records']=[]
+ net=AsyncMock(side_effect=[TimeoutError(),bad])
+ with patch.object(app,'TOKENS',['BTC']),patch.object(app,'_BINANCE_SNAPSHOT',old),patch.object(app,'_BINANCE_SNAPSHOT_PATH',tmp_path/'snapshot'),patch.object(app,'_active_mcp_pause',return_value=None),patch.object(app,'call_mcp',net):
+  with pytest.raises(app.BackupUnavailable):app._refresh_binance_snapshot()
+  assert app._BINANCE_SNAPSHOT is old
+
+def test_schema_failure_does_not_trigger_backup(monkeypatch):
+ from unittest.mock import AsyncMock
+ monkeypatch.setenv('KUCOIN_MCP_URL','https://backup.example/mcp')
+ net=AsyncMock(return_value={'status':'DATA_ERROR','reason':'Malformed candles'})
+ with patch.object(app,'_active_mcp_pause',return_value=None),patch.object(app,'call_mcp',net):
+  with pytest.raises(RuntimeError):app._refresh_binance_snapshot()
+  net.assert_awaited_once()
+
+def test_backup_button_available_during_primary_pause(monkeypatch):
+ monkeypatch.setenv('KUCOIN_MCP_URL','https://backup.example/mcp')
+ pause=app.MCPRateLimitError(418,app.datetime.now(app.timezone.utc)+app.timedelta(minutes=10))
+ with patch.object(app,'_active_mcp_pause',side_effect=lambda env:pause if env=='BINANCE_MCP_URL' else None):
+  assert app.market_cache_status()['retry_at_utc'] is None
+  assert app.market_cache_status()['backup_configured'] is True
+
+def test_stale_backup_does_not_refresh_observation(tmp_path,monkeypatch):
+ from unittest.mock import AsyncMock
+ monkeypatch.setenv('KUCOIN_MCP_URL','https://backup.example/mcp')
+ old=_manual_bundle();bad=_kucoin_spot();bad['as_observed_utc']=(app.datetime.now(app.timezone.utc)-app.timedelta(seconds=181)).isoformat()
+ with patch.object(app,'TOKENS',['BTC']),patch.object(app,'_BINANCE_SNAPSHOT',old),patch.object(app,'_active_mcp_pause',return_value=None),patch.object(app,'call_mcp',AsyncMock(side_effect=[TimeoutError(),bad])):
+  with pytest.raises(app.BackupUnavailable):app._refresh_binance_snapshot()
+  assert app._BINANCE_SNAPSHOT is old
+
+def test_primary_network_failure_can_use_backup_but_not_auth():
+ assert app._backup_allowed(TimeoutError('Binance API timeout')) is True
+ assert app._backup_allowed(app.PrimaryUnavailable(503)) is True
+ import httpx
+ e=httpx.HTTPStatusError('unauthorized',request=httpx.Request('GET','https://example.test'),response=httpx.Response(401))
+ assert app._backup_allowed(e) is False

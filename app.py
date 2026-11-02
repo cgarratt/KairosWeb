@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.31'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '3.0.33'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -306,7 +306,7 @@ async def call_mcp(env_name, tool, args=None):
     token = os.getenv(env_name.replace('_URL', '_TOKEN'), '').strip()
     from fastmcp.client.transports import StreamableHttpTransport
     transport = StreamableHttpTransport(endpoint, headers={'Authorization': f'Bearer {token}'} if token else None)
-    async with Client(transport, timeout=MCP_TIMEOUT_SECONDS) as client:
+    async with Client(transport, timeout=(45 if env_name in ('BINANCE_MCP_URL','KUCOIN_MCP_URL') and os.getenv('KUCOIN_MCP_URL') else MCP_TIMEOUT_SECONDS)) as client:
         result = await client.call_tool(tool, args or {})
     if result.is_error:
         raise RuntimeError(f'{tool}: error remoto')
@@ -397,15 +397,67 @@ def _snapshot_response(tool,args=None):
         if value:return json.loads(json.dumps(value))
     raise SpotRefreshRequired('Datos no disponibles en esta carga. Pulsa Actualizar Spot.')
 
+class PrimaryUnavailable(RuntimeError):
+    def __init__(self,status):
+        self.http_status=status
+        super().__init__('Binance market service unavailable')
+
+class BackupUnavailable(RuntimeError):
+    pass
+
+def _backup_allowed(exc):
+    status=_http_status(exc)
+    if status is not None:return status in (418,429,500,502,503,504)
+    pending=[exc];seen=set()
+    while pending:
+        current=pending.pop()
+        if id(current) in seen:continue
+        seen.add(id(current))
+        if isinstance(current,(TimeoutError,httpx.TimeoutException,httpx.NetworkError,ConnectionError)):return True
+        # MCP transports may wrap timeout/connection failures in exception groups.
+        name=type(current).__name__.lower()
+        msg=str(current).lower()
+        if 'timeout' in name or 'timed out' in msg or 'connection refused' in msg or 'connection reset' in msg or 'all connection attempts failed' in msg or 'failed to connect' in msg:return True
+        pending.extend(getattr(current,'exceptions',()) or ())
+        pending.extend(e for e in (getattr(current,'__cause__',None),getattr(current,'__context__',None)) if e)
+    return False
+
+def market_source():
+    with _BINANCE_SNAPSHOT_LOCK:
+        return (_BINANCE_SNAPSHOT or {}).get('spot',{}).get('source','Binance Spot')
+
 def _refresh_binance_snapshot():
     global _BINANCE_SNAPSHOT
-    pause=_active_mcp_pause('BINANCE_MCP_URL')
-    if pause:raise pause
-    # Exactly one tool call, no automatic transport retry or legacy fallback.
-    result=_accept_mcp_response('BINANCE_MCP_URL',asyncio.run(call_mcp(
-        'BINANCE_MCP_URL','get_kairos_dashboard_snapshot',{})))
-    if result.get('status')!='OK' or result.get('policy')!='MANUAL_SNAPSHOT':
-        raise RuntimeError('Invalid dashboard snapshot; update Binance MCP')
+    try:
+        pause=_active_mcp_pause('BINANCE_MCP_URL')
+        if pause:raise pause
+        result=_accept_mcp_response('BINANCE_MCP_URL',asyncio.run(call_mcp(
+            'BINANCE_MCP_URL','get_kairos_dashboard_snapshot',{})))
+        if result.get('status')=='DATA_ERROR':
+            if result.get('http_status') in (500,502,503,504):raise PrimaryUnavailable(result['http_status'])
+            reason=str(result.get('reason','')).lower()
+            if any(text in reason for text in ('timed out','timeout','connection refused','connection reset','network unavailable')):
+                raise TimeoutError('Binance market data unavailable')
+        if result.get('status')!='OK' or result.get('policy')!='MANUAL_SNAPSHOT':
+            raise RuntimeError('Invalid dashboard snapshot; update Binance MCP')
+    except Exception as primary:
+        if not os.getenv('KUCOIN_MCP_URL') or not _backup_allowed(primary):raise
+        pause=_active_mcp_pause('KUCOIN_MCP_URL')
+        if pause:raise pause
+        try:
+            spot=_accept_mcp_response('KUCOIN_MCP_URL',asyncio.run(call_mcp(
+                'KUCOIN_MCP_URL','get_kairos_kucoin_spot_prices',{})))
+            if spot.get('source')!='KuCoin Spot' or spot.get('provider')!='KUCOIN':
+                raise ValueError('Unexpected backup source')
+            _validate_spot_payload(spot)
+        except MCPRateLimitError:raise
+        except Exception as backup:
+            raise BackupUnavailable('KuCoin no devolvió una valoración completa y vigente.') from backup
+        result={'status':'OK','policy':'MANUAL_SNAPSHOT','source':'KuCoin Spot',
+            'as_observed_utc':spot['as_observed_utc'],'spot':spot,
+            'histories':{},'indicators':{},'cycles':{},
+            'fallback':{'active':True,'primary':'Binance Spot',
+                        'reason':'RATE_LIMIT' if _http_status(primary) in (418,429) else 'UNAVAILABLE'}}
     data=result.get('spot',{})
     _validate_spot_payload(data)
     with _BINANCE_SNAPSHOT_LOCK:
@@ -468,11 +520,14 @@ class MCPRateLimitError(RuntimeError):
 
 def _active_mcp_pause(env_name):
     with _MCP_PAUSE_LOCK:pause=_MCP_PAUSES.get(env_name)
-    if pause and pause[1]>datetime.now(timezone.utc):return MCPRateLimitError(*pause)
+    if pause and pause[1]>datetime.now(timezone.utc):
+        error=MCPRateLimitError(*pause)
+        error.provider='KUCOIN' if env_name=='KUCOIN_MCP_URL' else 'BINANCE'
+        return error
     return None
 
 def _accept_mcp_response(env_name,data):
-    if env_name!='BINANCE_MCP_URL' or not isinstance(data,dict) or data.get('http_status') not in (418,429):return data
+    if env_name not in ('BINANCE_MCP_URL','KUCOIN_MCP_URL') or not isinstance(data,dict) or data.get('http_status') not in (418,429):return data
     now=datetime.now(timezone.utc)
     try:
         raw=data.get('retry_at_utc','')
@@ -482,7 +537,9 @@ def _accept_mcp_response(env_name,data):
         from datetime import timedelta
         until=now+timedelta(seconds=900 if data['http_status']==418 else 60)
     with _MCP_PAUSE_LOCK:_MCP_PAUSES[env_name]=(data['http_status'],until)
-    raise MCPRateLimitError(data['http_status'],until)
+    error=MCPRateLimitError(data['http_status'],until)
+    error.provider='KUCOIN' if env_name=='KUCOIN_MCP_URL' else 'BINANCE'
+    raise error
 
 def _call_mcp_with_retries(env_name, tool, args):
     pause=_active_mcp_pause(env_name)
@@ -508,8 +565,10 @@ def market_cache_status():
         observed = _MARKET_CACHE['observed']
         stored = _MARKET_CACHE['stored']
     age = round(max(0.0, time.monotonic() - stored), 1) if observed else None
-    pause=_active_mcp_pause('BINANCE_MCP_URL')
-    return {'retry_at_utc':pause.retry_at_utc if pause else None,
+    pause=_active_mcp_pause('KUCOIN_MCP_URL' if os.getenv('KUCOIN_MCP_URL') else 'BINANCE_MCP_URL')
+    return {'source':market_source(),'fallback_active':market_source()=='KuCoin Spot',
+            'backup_configured':bool(os.getenv('KUCOIN_MCP_URL')),
+            'retry_at_utc':pause.retry_at_utc if pause else None,
             'http_status':pause.http_status if pause else None,
             'last_valid_observed_at':observed, 'cache_age_seconds':age,
             'cache_state':'SNAPSHOT' if observed else 'EMPTY', 'refresh_policy':'MANUAL', 'spot_is_live':False}
@@ -524,7 +583,7 @@ def _http_status(exc):
         if id(current) in seen:
             continue
         seen.add(id(current))
-        if isinstance(current,MCPRateLimitError):return current.http_status
+        if isinstance(current,(MCPRateLimitError,PrimaryUnavailable)):return current.http_status
         if isinstance(current, httpx.HTTPStatusError):
             return current.response.status_code
         for nxt in (getattr(current, '__cause__', None), getattr(current,'__context__',None)):
@@ -543,7 +602,11 @@ def diagnostic_error(exc, scope):
     # Safe structured logging: never log exception text, headers, URLs or tokens.
     app.logger.error('Kairos MCP failure ID=%s scope=%s exception=%s http_status=%s',
                      error_id,scope,etype,http_status if http_status is not None else 'n/a')
-    if isinstance(exc,SpotRefreshRequired):
+    if isinstance(exc,BackupUnavailable):
+        category='BACKUP_UNAVAILABLE';hint=str(exc)
+    elif getattr(exc,'provider',None)=='KUCOIN':
+        category='KUCOIN_RATE_LIMIT';hint='KuCoin está temporalmente en pausa. Respeta el próximo intento permitido.'
+    elif isinstance(exc,SpotRefreshRequired):
         category='REFRESH_REQUIRED';hint=str(exc)
     elif http_status==418:
         category='BINANCE_IP_BLOCKED';hint='Binance bloqueó temporalmente la IP del servidor. Consultas en pausa.'
@@ -928,7 +991,7 @@ def build_mode_payload(slug, d, observed):
     common = {
         'generated_at': observed,
         'read_only': True,
-        'status_badge': 'LIVE MCP',
+        'status_badge': market_source()+' MCP',
         'snapshot_note': d['note'],
         'callouts': []
     }
@@ -1079,7 +1142,7 @@ def build_mode_payload(slug, d, observed):
                 target=(weekly_levels.get(token) or {}).get(key),stage_pct=stage_weights[j],
                 state=order_states.get(token,{}).get(prefix+'C'+str(j+1),'PROPUESTA'))
                 for j,key in enumerate(('ref382','c1','c2','ref786'))}
-        return {'buy_order_classifications':classes,'buy_order_states':order_states,'o2_histories':weekly_histories,'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
+        return {'buy_order_classifications':classes,'buy_order_states':order_states,'o2_histories':weekly_histories,'generated_at':observed,'status_badge':market_source()+' MCP · SIMULACIÓN','snapshot_note':d['note'],
             'kind':'compras', 'current':purchase_current, 'tokens':purchase_tokens,
             'o2_level_reference':'MCP_WEEKLY_PROPOSED_OR_VALIDATED_SIMULATION_ONLY',
             'forecast_o2_allocation':o2_weights, 'o2_levels':weekly_levels,
@@ -1143,7 +1206,7 @@ def build_mode_payload(slug, d, observed):
                                 'units':r['units'],'tier':r['tier'],'reserved_sell_units':float(r.get('reserved_sell_units',0)),
                                 'max_usdt':min(excess,value), 'free_exchange_usdt':value,
                                 'overweight':r['drift_pp']>band})
-        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],'kind':'ventas','current':{'P':p,'cash':cash,'cash_pct':d['usdt_pct']*100,'floor':approved_numeric('STRUCTURAL_USDT_TARGET')*p,'max_percent':max(100*policy_numeric('SLIDER_MAX_SIMULATED_USDT_TARGET',{'APROBADO_SIMULACION'}),d['usdt_pct']*100),'default_percent':100*approved_numeric('ORDINARY_DEFAULT_USDT_TARGET'),'trading':d['trading_reserve'],'band_pp':band},'tokens':sell_tokens, 'notes':['Solo SELL; BTC NEVER SELL. No se altera Core/HODL.','Slider hasta la meta simulada configurada en Google Sheets; 40% no es límite del simulador.','Inventario referencial de Exchange; usuario declara 0 órdenes y 0 fills pendientes, sin certificación remota del exchange.']}
+        return {'generated_at':observed,'status_badge':market_source()+' MCP · SIMULACIÓN','snapshot_note':d['note'],'kind':'ventas','current':{'P':p,'cash':cash,'cash_pct':d['usdt_pct']*100,'floor':approved_numeric('STRUCTURAL_USDT_TARGET')*p,'max_percent':max(100*policy_numeric('SLIDER_MAX_SIMULATED_USDT_TARGET',{'APROBADO_SIMULACION'}),d['usdt_pct']*100),'default_percent':100*approved_numeric('ORDINARY_DEFAULT_USDT_TARGET'),'trading':d['trading_reserve'],'band_pp':band},'tokens':sell_tokens, 'notes':['Solo SELL; BTC NEVER SELL. No se altera Core/HODL.','Slider hasta la meta simulada configurada en Google Sheets; 40% no es límite del simulador.','Inventario referencial de Exchange; usuario declara 0 órdenes y 0 fills pendientes, sin certificación remota del exchange.']}
         needed = max(0.0, usdt_gap)
         sell_rows=[]
         for r in sellable_over:
@@ -1268,7 +1331,7 @@ def build_mode_payload(slug, d, observed):
         split_o5=(approved_numeric('O5_BTC_PROCEEDS_FRACTION'),approved_numeric('O5_USDT_PROCEEDS_FRACTION'))
         if any(x < 0 or x > 1 or not math.isfinite(x) for x in (*split_o3,*split_o5)) or any(abs(sum(pair)-1)>1e-8 for pair in (split_o3,split_o5)):
             raise SheetDataError('12_PARAMETROS_KAIROS: reparto BTC/USDT O3/O5 debe sumar 100% en cada onda')
-        return {'generated_at':observed,'status_badge':'LIVE MCP · SIMULACIÓN','snapshot_note':d['note'],
+        return {'generated_at':observed,'status_badge':market_source()+' MCP · SIMULACIÓN','snapshot_note':d['note'],
             'kind':'forecast', 'current':purchase_current,'tokens':purchase_tokens, 'custody':{('PUMP' if k=='PUMPFUN' else k):v for k,v in SNAPSHOT['custody_core_blocked__core_strategic__exchange'].items()}, 'cash_total':d['usdt_total'], 'trading_reserve':d['trading_reserve'],
             'pivot_rows':pivot_rows, 'o2_source':'WEEKLY_STRUCTURAL_CANDIDATE',
             'custody_policy':g.kairos_state['custody_policy'],
@@ -1451,7 +1514,7 @@ def balancer_report(d, observed):
     bought={x['token']:x['value'] for x in buy_preview}
     buy_weights={r['token']:(r['value']+bought.get(r['token'],0.))/after_buy_crypto if after_buy_crypto else 0 for r in rows}
     sell_weights={r['token']:(r['value']-sold_by_token.get(r['token'],0.))/after_sell_crypto if after_sell_crypto else 0 for r in rows}
-    return {'generated_at':observed,'snapshot_note':d['note'],'status_badge':'MCP Spot + Sheets PUBLICADO',
+    return {'generated_at':observed,'snapshot_note':d['note'],'status_badge':market_source()+' MCP + Sheets PUBLICADO',
       'current':{'P':p,'cash':cash,'crypto':crypto,'floor':floor,'gap':gap,'excess':excess,
                  'liquidity_venues':liquidity_by_venue(g.kairos_state['snapshot']['liquidity_venues_USDT'],cash),'liquidity_allocation':liquidity_allocation(cash,trading,reserves['balancer_allocated'] or 0.),'reserve':reserve,'reserve_caps':reserves.get('reserve_caps'),'liquidity_reserves':reserves,'current_cash_capacity':current_cash_capacity,'projected_cash_capacity':projected_cash_capacity,'reserve_nominal':reserve_nominal,'residual_after_bags':residual_after_bags,'operational_25':operational_25,'c1':c1,'c2':c2,'trading':trading,
                  'operating':d['usdt_operating'],'buy_ceiling':theoretical_ceiling},
@@ -1470,7 +1533,7 @@ def balancer_report(d, observed):
 
 @app.context_processor
 def common_nav():
-    return {'nav_modes':[m for m in MODE_DEFS if m['slug'] in ENABLED_MODE_SLUGS], 'portfolio_authenticated':_portfolio_authorized(), 'portfolio_csrf':(session.get('logout_csrf') or session.get('csrf_token','')) if _portfolio_authorized() else ''}
+    return {'spot_source':market_source(), 'nav_modes':[m for m in MODE_DEFS if m['slug'] in ENABLED_MODE_SLUGS], 'portfolio_authenticated':_portfolio_authorized(), 'portfolio_csrf':(session.get('logout_csrf') or session.get('csrf_token','')) if _portfolio_authorized() else ''}
 
 @app.route('/')
 def home():
@@ -1514,7 +1577,7 @@ def integral_portfolio_page():
         category_values={item['key']:item['value'] for item in capital_candidate['items']}
         candidate_spot = {'core':category_values['hodl_core'],'exchange':category_values['exchange'],
                           'liquidity':category_values['liquidity'],'trading':category_values['trading'],
-                          'total':capital_candidate['total'],'source':'Binance MCP + Google Sheets PUBLICADO'}
+                          'total':capital_candidate['total'],'source':market_source()+' MCP + Google Sheets PUBLICADO'}
         spot_breakdown,spot_observed,pnl_report = candidate_spot,observed,candidate_pnl
         capital_distribution=capital_candidate
         allocation,categories,portfolio_rows=candidate_allocation,candidate_categories,candidate_rows
@@ -1537,7 +1600,7 @@ def integral_portfolio_page():
                               'http_status':info.get('http_status') if info else None,
                               'retry_at_utc':info.get('retry_at_utc') if info else None,
                               'last_valid_spot_utc':market_cache_status()['last_valid_observed_at'],
-                              'message':info['message'] if info and info.get('http_status') in (418,429) else 'Valoración actual no disponible. No se muestran cifras Spot parciales ni se reutiliza una cotización anterior.'}
+                              'message':info['message'] if info and (info.get('http_status') in (418,429) or info.get('code') in ('REFRESH_REQUIRED','BACKUP_UNAVAILABLE')) else 'Valoración actual no disponible. No se muestran cifras Spot parciales ni se reutiliza una cotización anterior.'}
     return render_template('portfolio_integral.html', master=APP_VERSION,
                            capital_distribution=capital_distribution,
                            spot=spot_breakdown, spot_observed=spot_observed, pnl_report=pnl_report,
@@ -2265,7 +2328,7 @@ def _deployed_asset_status():
         'mobile_no_tooltips': ('static/tooltips.js', ("(hover: none) and (pointer: coarse)", "node.removeAttribute('title')", "node.setAttribute('title',previousTitles.get(node))")),
         'forecast_published_pivot_locks': ('static/forecast_fibo_plan.js', ("function wavePath(p,selectors)", "const approved=s=>s==='VALIDADO'||s==='CONFIRMADO'", 'fixed[wave]=price;locked.push(wave)')),
         'forecast_locked_chart': ('templates/forecast.html', ('Fibo.wavePath(p,selectors)', "'data-wave-fixed':locked?'true':'false'", '🔒 ${r.statuses[key]}')),
-        'forecast_spot_overlay_v2029': ('templates/forecast.html', ("class:'fc-spot-line'", "'data-spot-reference':'binance-mcp'", 'fc.generated_at', "validSpot?[...prices,spot]:prices")),
+        'forecast_spot_overlay_v2029': ('templates/forecast.html', ("class:'fc-spot-line'", "'data-spot-reference':spotSource", 'fc.generated_at', "validSpot?[...prices,spot]:prices")),
         'buy_post_fibo_weights': ('static/o2_sequential.js', ('postWeights','postCrypto','stageBudgets','unallocated','policy.stageBudgets')),
         'buy_postweight_semaphore': ('static/o2_sequential.js', ('function postBuySemaphore(', "state:'green'", "state:'amber'", "state:'red'", "state:'none'")),
         'buy_postweight_color_ui': ('templates/trade_sim.html', ('buy-weight-green', 'buy-weight-amber', 'buy-weight-red', 'postBuySemaphore(amount,postWeight,t.target)', 'USDT &gt; 0')),
@@ -2375,7 +2438,7 @@ def health():
     with _DEPENDENCY_LOCK:
         last=dict(_DEPENDENCY_LAST)
     response = {'status': 'UP' if assets['consistent'] else 'DEGRADED',
-                'service': 'KairosWeb', 'version': APP_VERSION,
+                'service': 'KairosWeb', 'version': APP_VERSION, 'release_suite':'2026.11.02.1', 'component_versions':{'KairosWeb': '3.0.33', 'KairosGPT': '1.3.16', 'MCP_Binance': '5.4.1', 'MCP_KuCoin': '1.0.1', 'MCP_Hyperliquid': '1.0.1', 'MASTER_schema': '5.0.0'},
                 'server':{'status':'UP' if assets['consistent'] else 'DEGRADED'},
                 'operational_providers':{k:v.get('status','NOT_CHECKED') for k,v in last['providers'].items()},
                 'functional_modules':{k:v.get('status','NOT_CHECKED') for k,v in last['modules'].items()},
@@ -2388,7 +2451,7 @@ def health():
 def portfolio():
     try:
         observed, dashboard = load_live_dashboard()
-        return jsonify({'status':'OK', 'source':'Binance Spot MCP + Google Sheets PUBLICADO',
+        return jsonify({'status':'OK', 'source':market_source()+' MCP + Google Sheets PUBLICADO',
                     'snapshot_id':g.kairos_state['control']['snapshot_id'],
                     'config_source':'12_PARAMETROS_KAIROS', 'observed_at':observed, **dashboard})
     except Exception as exc:
@@ -2402,6 +2465,7 @@ def market_status_endpoint():
 @app.route('/api/mcp-status')
 def mcp_status():
     return jsonify({'binance_configured':bool(os.getenv('BINANCE_MCP_URL')),
+                    'kucoin_configured':bool(os.getenv('KUCOIN_MCP_URL')),
                     'hyperliquid_configured':bool(os.getenv('HYPERLIQUID_MCP_URL')),
                     'hyperliquid_usage':'Macro HYPE only; no Binance/HYPE price fallback',
                     'google_sheets_configured':bool(os.getenv('KAIROS_GOOGLE_SERVICE_ACCOUNT_JSON') or os.getenv('GOOGLE_APPLICATION_CREDENTIALS'))})

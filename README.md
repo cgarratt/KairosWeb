@@ -1,3 +1,11 @@
+# KairosWeb v3.0.33 · Suite2026.11.02.1
+
+Compatible con GPT1.3.16, Binance5.4.1, KuCoin1.0.1 e Hyperliquid1.0.1. Conservar los tres endpoints independientes. La versión incluye los modos de Portafolio, Balancer, Compras, Ventas, Órdenes y Forecast, con sus restricciones vigentes. Leer RELEASE_NOTES_v3.0.33.md e INSTALACION_SUITE.md del paquete completo. Pendiente de despliegue.
+
+# KairosWeb v3.0.32
+
+KuCoin Spot como respaldo explícito de Binance. Desplegar MCP KuCoin1.0.0 y configurar KUCOIN_MCP_URL en Render Web. Conservar Binance5.4.0. Leer RELEASE_NOTES_v3.0.32.md. Preparado localmente, no desplegado.
+
 # KairosWeb v3.0.31
 
 Una carga manual de Binance compartida por las pantallas. Instalar primero MCP v5.4.0 y luego Web. Pulsar Actualizar Spot para cargar datos; no se consulta Binance por navegar. Ver RELEASE_NOTES_v3.0.31.md. Preparado y validado localmente; pendiente de despliegue.

@@ -1,10 +1,13 @@
 {
   "versions": {
-    "KairosGPT": "1.3.15",
-    "KairosWeb": "3.0.31",
+    "KairosWeb": "3.0.33",
+    "KairosGPT": "1.3.16",
+    "MCP_Binance": "5.4.1",
+    "MCP_KuCoin": "1.0.1",
+    "MCP_Hyperliquid": "1.0.1",
     "MASTER_schema": "5.0.0"
   },
-  "scope": "BINANCE_MANUAL_SHARED_SNAPSHOT",
+  "scope": "COORDINATED_MODES_SPOT_BACKUP",
   "master_mutated": false,
   "deployment_verified": false,
   "project_installation_verified": false,
@@ -16,7 +19,7 @@
   "gpt_image_confirmation_required": true,
   "gpt_explicit_prompt_exception": true,
   "tests": {
-    "web_python_passed": 164,
+    "web_python_passed": 172,
     "javascript_checks_passed": 10,
     "browser_visual_tested": false,
     "live_master_writes_tested": false,
@@ -24,11 +27,26 @@
     "python_js_allocation_parity_same_inputs": true,
     "mock_dom_pause_expiry_without_polling": true,
     "manual_snapshot_no_navigation_network": true,
-    "single_tool_call_no_transport_retry": true
+    "single_tool_call_no_transport_retry": true,
+    "backup_single_source_fail_closed": true,
+    "gpt_python_passed": 158,
+    "remote_market_tested": false,
+    "binance_python_passed": 58,
+    "kucoin_python_passed": 10,
+    "hyperliquid_python_passed": 6,
+    "python_total_passed": 404,
+    "pure_validator_ast_identical": true,
+    "liquidity_module_byte_identical": true,
+    "weekly_buy_policy_parity_except_imports": true,
+    "mcp_discovery_and_local_version_invocation_passed": 3,
+    "docker_runtime_imports_passed": 3
   },
   "batch_save_atomic": false,
   "save_semantics": "SEQUENTIAL_STOP_ON_ERROR_NO_AUTOMATIC_RETRY",
   "zero_amount_orders_hidden": true,
   "generic_retracement_order_identity": "O2C1..O2C4",
-  "companion_mcp_release": "5.4.0"
+  "companion_mcp_release": "5.4.1",
+  "companion_kucoin_mcp_release": "1.0.1",
+  "release_suite": "2026.11.02.1",
+  "companion_hyperliquid_mcp_release": "1.0.1"
 }
