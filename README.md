@@ -1,11 +1,9 @@
-# KairosWeb v4.2.0 · Indicadores BTC/USDT
+# KairosWeb v4.3.0
 
-Balancer: RSI y Stoch RSI diarios (1D). Compras y Ventas: los mismos indicadores semanales (1W). Dos velocímetros por página; RSI/RSI-MA y K/D. TOTAL2 retirado del código activo, botón, endpoint y dependencias Web.
+BTC/USDT: RSI/RSI-MA y Stoch K/D con valores visibles; tercera tarjeta ADX(14), umbral estricto >23 como confirmación de fuerza. Balancer diario; Compras/Ventas semanal. Resumen técnico explicado y resumen de operaciones por escenario. BTC NEVER SELL protegido. TOTAL2 retirado.
 
-Descomprimir este ZIP y sustituir el contenido del repositorio Web existente. Conservar variables y secretos. Desplegar el último commit en el servicio Render Web. No se requiere actualizar los MCP ni configurar TradingView. Compatible con Binance MCP 5.4.1/5.5.0 y KuCoin MCP 1.1.0 para los históricos existentes.
+Instalación: descomprimir ZIP, subir contenido completo a raíz del repositorio Web existente y desplegar en Render. Mantener variables/secretos; no actualizar los MCP. /health debe indicar 4.3.0 y assets consistentes. En Configuración, Actualizar históricos (preferiblemente 999 días) y volver a las páginas.
 
-En Configuración → Estado de conexiones MCP, Actualizar históricos (preferiblemente 999 días para el cálculo semanal). Actualizar Spot no descarga históricos. Verificar /health: version 4.2.0 y release_assets.consistent=true. Abrir Balancer (1D), Compras y Ventas (1W).
+ADX requiere OHLC válidos del mismo período/proveedor. ADX <=23: neutral. ADX >23: compra/venta solo con alineación RSI/Stoch; si falta alineación, esperar. La señal BTC no sustituye las reglas de cada token. Ningún resumen envía órdenes ni modifica saldos, pivotes o MASTER.
 
-Si ya activaste las alertas TOTAL2 de la versión anterior, puedes desactivarlas en TradingView y retirar las variables TOTAL2 que añadiste. La Web ya no las utiliza; este paquete no modifica servicios ni alertas remotas. Mantener BINANCE_MCP_URL, KUCOIN_MCP_URL y los secretos existentes.
-
-El paquete contiene código y pruebas; no acredita despliegue remoto ni datos reales actuales. Ver RELEASE_NOTES_v4.2.0.md y VALIDACION_RELEASE_v4_2.json.
+Detalles: RELEASE_NOTES_v4.3.0.md y VALIDACION_RELEASE_v4_3.json. Paquete de código; despliegue remoto pendiente.

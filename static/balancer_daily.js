@@ -6,7 +6,7 @@ function draw(svg){const width=Math.max(110,svg.clientWidth),cx=width/2,r=cx-14,
 const valid=svg.dataset.first!==''&&svg.dataset.second!==''&&[+svg.dataset.first,+svg.dataset.second].every(x=>Number.isFinite(x)&&x>=0&&x<=100);
 const arc=(a,b,color)=>{const p=point(a,r),q=point(b,r);el('path',{d:`M ${p[0]} ${p[1]} A ${r} ${r} 0 0 1 ${q[0]} ${q[1]}`,fill:'none',stroke:color,'stroke-width':8},svg);};
 const low=+svg.dataset.low,high=+svg.dataset.high;
-if(valid){arc(0,low,'var(--green)');arc(low,high,'var(--line)');arc(high,100,'var(--red)');}else arc(0,100,'var(--line)');
+if(valid&&svg.dataset.kind==='adx'){arc(0,23,'var(--line)');arc(23,100,'var(--green)');}else if(valid){arc(0,low,'var(--green)');arc(low,high,'var(--line)');arc(high,100,'var(--red)');}else arc(0,100,'var(--line)');
 for(const v of[0,low,high,100]){const p=point(v,r-10),q=point(v,r-15);el('line',{x1:p[0],y1:p[1],x2:q[0],y2:q[1],stroke:'var(--muted)','stroke-width':1},svg);}
 for(const[v,x]of[[0,cx-r],[100,cx+r]])el('text',{x,y:cy+17,'text-anchor':'middle'},svg).textContent=v;
 if(!valid){el('text',{x:cx,y:cy-14,'text-anchor':'middle'},svg).textContent='N/D';return;}

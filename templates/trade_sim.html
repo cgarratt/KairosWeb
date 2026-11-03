@@ -161,6 +161,11 @@ function renderO2Fibonacci(sim){
  }).join('');
  el('fib-total').innerHTML=`<tr><td>TOTAL USDT</td><td>—</td><td>—</td><td>—</td>${sim.consumed.map(v=>`<td>—</td><td>—</td><td>${dollar(v)}</td>`).join('')}<td><b>${dollar(sim.spent)}</b></td></tr>`;
 }
+function renderOperationSummary(intro,lines){
+ const host=document.getElementById('bd-operation-live');if(!host)return;
+ host.replaceChildren();const p=document.createElement('p');p.textContent=intro;host.appendChild(p);
+ const ul=document.createElement('ul');for(const line of lines){const li=document.createElement('li');li.textContent=line;ul.appendChild(li);}host.appendChild(ul);
+}
 function paint(){let target=Number(el('allocation-slider').value);el('slider-value').textContent=target.toFixed(1)+'%';el('portfolio-metric').textContent=dollar(P);el('cash-metric').textContent=dollar(cash);el('cash-pct').textContent=(100*cash/P).toFixed(1)+'% de P';let allocated=[],after=cash;
 if(mode==='compras'){
   // COMPRAS: slider 0–100% del USDT operativo máximo, NO del patrimonio P.
@@ -191,6 +196,15 @@ if(mode==='compras'){
    el('actual-buy-spend').textContent=dollar(sum);
    el('unallocated-buy-budget').textContent=dollar(sim.unallocated);
   // Conciliación y restricciones conservadas en la lógica; no mostrar nota amarilla.
+  renderOperationSummary(
+   'Presupuesto seleccionado: '+dollar(referenceCapacity)+'. Compras simuladas: '+dollar(sum)+'. Presupuesto sin asignar: '+dollar(sim.unallocated)+'. USDT físico posterior: '+dollar(after)+'.',
+   source.tokens.flatMap((t,i)=>{
+    const amount=sim.totalByToken[i];if(!(amount>=0.005))return [];
+    const parts=sim.amounts[i].flatMap((a,j)=>a>=0.005?[((source.weekly_context?.[t.token]?.mode==='O4'?'O4':'O2')+'C'+(j+1))+' '+dollar(a)+' a '+fibPrice(sim.prices[i][j])]:[]);
+    const units=sim.amounts[i].reduce((n,a,j)=>n+(a>0&&sim.prices[i][j]>0?a/sim.prices[i][j]:0),0);
+    return [t.token+': '+dollar(amount)+' (~'+units.toLocaleString('es-PE',{maximumFractionDigits:8})+' uds.) · '+parts.join('; ')];
+   }).concat(sim.spent<0.005?['Sin compras elegibles. Conservar el presupuesto en USDT.']:[])
+  );
   renderO2Fibonacci(sim);
   sim.stageBudgets.forEach((amount,i)=>{el('buy-tranche-'+i).textContent=dollar(amount);
     el('buy-tranche-limit-'+i).textContent='Cupo máximo: '+dollar(stagedPlan.stageCapacities[i]);});
@@ -209,6 +223,12 @@ if(mode==='compras'){
      ? 'Objetivo alcanzado (simulado). No se ejecutaron órdenes.'
      : 'Objetivo NO alcanzable con Exchange/Tier. USDT faltante: '+dollar(sim.unmet_usdt)+'. No se vende custodia protegida.';
   el('sim-foot').innerHTML=`<tr><td colspan="6">TOTAL VENTAS USDT</td><td>${dollar(sum)}</td><td>—</td><td>SIMULACIÓN</td></tr>`;
+  renderOperationSummary(
+   'Objetivo USDT: '+target.toFixed(1)+'%. Ventas simuladas: '+dollar(sum)+'. Caja posterior: '+dollar(after)+'. '+(sim.status==='TARGET_REACHED'?'Meta alcanzada en simulación.':'Déficit para la meta: '+dollar(sim.unmet_usdt)+'.'),
+   sim.orders.filter(order=>order.usdt>=0.005).map(order=>
+    'Prioridad '+order.priority+' · '+order.token+': vender '+Number(order.units).toLocaleString('es-PE',{maximumFractionDigits:8})+' uds. por ~'+dollar(order.usdt)+' · etapa '+order.stage+'.'
+   ).concat(sim.total_usdt<0.005?['Sin ventas necesarias o sin capacidad libre de Exchange/Tier.']:[])
+  );
   const byToken=Object.fromEntries(sim.positions.map(x=>[x.token,x]));
   el('sim-body').innerHTML=sim.orders.map(order=>{
     const x=source.tokens.find(x=>x.token===order.token),p=byToken[order.token];

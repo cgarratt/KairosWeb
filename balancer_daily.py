@@ -96,8 +96,17 @@ def weekly_series(series, now=None):
         opening = datetime.fromisoformat(bar['open_utc'].replace('Z','+00:00'))
         group = records[index:index+7]
         if opening.weekday() == 0 and len(group) == 7:
-            weeks.append(dict(open_utc=bar['open_utc'],close_utc=group[-1]['close_utc'],
-                              close=group[-1]['close'],source=series['source']))
+            week=dict(open_utc=bar['open_utc'],close_utc=group[-1]['close_utc'],
+                      close=group[-1]['close'],source=series['source'])
+            try:
+                # Preserve real weekly extrema, never use weekly close as high/low.
+                for daily in group:
+                    h,l,c=(float(daily[k]) for k in ('high','low','close'))
+                    if any(isinstance(daily[k],bool) for k in ('high','low','close')) or not all(math.isfinite(v) and v>0 for v in (h,l,c)) or not l<=c<=h:
+                        raise ValueError('OHLC inválido')
+                week.update(high=max(float(d['high']) for d in group),low=min(float(d['low']) for d in group))
+            except (KeyError,ValueError,TypeError,OverflowError):pass
+            weeks.append(week)
     return dict(status='OK',symbol='BTCUSDT',interval='1w',closed_only=True,
                 source=series['source'],records=weeks)
 
@@ -110,7 +119,9 @@ def technical_context(snapshot=None, interval='1d', now=None):
     btc = analyze(series,'BTCUSDT',now,interval)
     if interval == '1w' and btc['status'] != 'OK':
         btc['reason'] = 'Se requieren al menos 80 semanas UTC completas de BTC. Actualizar históricos (mínimo 566 días para cubrir semanas parciales).'
-    return [btc]
+    from adx_context import enrich_context
+    valid = bool(series) and analyze(series,'BTCUSDT',now,interval,validate_only=True)['status']=='OK'
+    return [enrich_context(btc,series,valid)]
 
 
 def daily_context(snapshot=None, now=None):

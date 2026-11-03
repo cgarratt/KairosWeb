@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.2.0'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.3.0'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -2378,6 +2378,8 @@ def _deployed_asset_status():
     templates or static files are from an older release. No secrets exposed.
     """
     critical = {
+        'adx_context_v43': ('adx_context.py', ('def adx_values(', 'def confirmed_signal(', 'adx<=23')),
+        'adx_ui_v43': ('templates/_balancer_daily.html', ('data-kind="adx"', 'Resumen de operaciones', 'item.combined_signal')),
         'balancer_daily_v4': ('templates/_balancer_daily.html', ('bd-dial', 'data-first', 'payload.context_interval_label')),
         'balancer_daily_js_v4': ('static/balancer_daily.js', ('ResizeObserver', 'stroke-dasharray', 'N/D')),
         'compras_template': ('templates/trade_sim.html', ('<th>% Peso</th>', 'renderO2Fibonacci', 'allocation-slider', 'data-o2-ui-version')),
@@ -2535,7 +2537,7 @@ def health():
     with _DEPENDENCY_LOCK:
         last=dict(_DEPENDENCY_LAST)
     response = {'status': 'UP' if assets['consistent'] else 'DEGRADED',
-                'service': 'KairosWeb', 'version': APP_VERSION, 'release_suite':'2026.11.03.6', 'component_versions':{'KairosWeb': APP_VERSION, 'KairosGPT': '1.3.18', 'MCP_Binance': '5.4.1', 'MCP_KuCoin': '1.1.0', 'MCP_Hyperliquid': '1.0.1', 'MASTER_schema': '5.0.0'},
+                'service': 'KairosWeb', 'version': APP_VERSION, 'release_suite':'2026.11.03.7', 'component_versions':{'KairosWeb': APP_VERSION, 'KairosGPT': '1.3.18', 'MCP_Binance': '5.4.1', 'MCP_KuCoin': '1.1.0', 'MCP_Hyperliquid': '1.0.1', 'MASTER_schema': '5.0.0'},
                 'server':{'status':'UP' if assets['consistent'] else 'DEGRADED'},
                 'operational_providers':{k:v.get('status','NOT_CHECKED') for k,v in last['providers'].items()},
                 'functional_modules':{k:v.get('status','NOT_CHECKED') for k,v in last['modules'].items()},
