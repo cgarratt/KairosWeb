@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Kairos · {{ mode.name }}{% endblock %}
 {% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='balancer_daily.css') }}?v={{ master }}">
 <style>
 .sim-layout{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.sim-layout.purchase-metrics{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}.sim-metric{border:1px solid #dce6f4;background:#f7fbff;padding:15px;border-radius:16px}.sim-metric b{font-size:23px;color:#164c94;display:block;margin:9px 0}.sim-metric small{color:#536984}.control-panel{padding:22px;border:1px solid #c7dbf6;border-radius:18px;background:#eef5ff}input[type=range]{width:100%;accent-color:#266ac6;cursor:pointer;height:25px}.sim-rows td{font-variant-numeric:tabular-nums}.sim-actions{display:inline-flex;padding:5px 10px;border-radius:20px;font-size:12px;font-weight:800;background:#e7f8f0;color:#16825d}.sim-actions.watch{background:#fff3d8;color:#8f6900}.sim-actions.sell{background:#ffedf0;color:#af334a}.sim-warn{padding:12px 16px;background:#fff8e9;border-radius:12px;color:#966200;border:1px solid #f0dda9;font-size:13px}.sim-bar{height:15px;border-radius:20px;overflow:hidden;background:#e4eaf3}.sim-bar>div{height:100%;background:linear-gradient(90deg,#1c61b9,#43abe5);transition:width .15s}.sim-panel-title{display:flex;justify-content:space-between;align-items:center;gap:12px}@media(max-width:800px){.sim-layout{grid-template-columns:repeat(2,1fr)}}@media(max-width:530px){.sim-layout{grid-template-columns:1fr}}
 
@@ -23,6 +24,7 @@
 {% block content %}
 <div class="grid">
 <section class="panel span-12 hero"><div><h2>{{ mode.name }}</h2><p>{{ mode.description }}</p></div><div class="badge info">SIMULACIÓN · SIN ÓRDENES</div></section>
+{% include '_balancer_daily.html' %}
 {% include '_wave_confirmed.html' %}
 <section class="panel span-12"><h2>{{ 'Despliegue USDT · retrocesos semanales' if mode.slug=='compras' else 'Objetivo de liquidez USDT' }}</h2><p class="sub">{{ 'P1 admite PROPUESTO, VALIDADO y CONFIRMADO para simular; P2 es el máximo semanal cerrado posterior. Solo compras a INFRA; USDT no asignado permanece en caja.' if mode.slug=='compras' else 'Etapa 1: vender SOBRE primero. Etapa 2: optimizar las desviaciones de pesos hasta alcanzar el porcentaje USDT indicado, con topes de Exchange/Tier. BTC NEVER SELL.' }}</p>
 <div class="sim-layout{{ ' purchase-metrics' if mode.slug=='compras' else '' }}" style="margin:18px 0">

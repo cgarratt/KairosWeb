@@ -1,0 +1,19 @@
+<section class="span-12" id="balancer-daily">
+ <div class="bd-heading"><strong>Contexto de mercado</strong><span>RSI y Stoch RSI · {{ payload.context_interval_label }}</span></div>
+ <div class="bd-strip">
+ {% for item in payload.daily_context %}{% for kind, first, second, name1, name2 in [('RSI','rsi','ma','RSI','RSI-MA'),('Stoch RSI','k','d','K','D')] %}
+ <article class="bd-pill">
+  <div class="bd-title"><strong>BTC/USDT</strong> · {{ kind }}</div>
+  <svg class="bd-dial" data-first="{{ item[first] if item.status == 'OK' else '' }}" data-second="{{ item[second] if item.status == 'OK' else '' }}" data-low="{{ 30 if kind == 'RSI' else 20 }}" data-high="{{ 70 if kind == 'RSI' else 80 }}" role="img" aria-label="{{ kind }} {{ item.symbol }}: {{ name1 }} {{ '%.1f'|format(item[first]) if item.status == 'OK' else 'N/D' }}, {{ name2 }} {{ '%.1f'|format(item[second]) if item.status == 'OK' else 'N/D' }}"></svg>
+  <div class="bd-legend"><span><i></i>{{ name1 }}</span><span><i class="bd-second"></i>{{ name2 }}</span></div>
+  {% if item.status != 'OK' %}<div class="bd-state">N/D · Sin datos válidos</div>
+  {% elif kind == 'RSI' %}<div class="bd-state {{ 'bd-green' if item.rsi < 30 else 'bd-red' if item.rsi > 70 else '' }}">{{ 'Sobreventa' if item.rsi < 30 else 'Sobrecompra' if item.rsi > 70 else 'Neutral' }}</div>
+  {% else %}<div class="bd-state">{{ 'K por encima de D' if item.k > item.d else 'K por debajo de D' if item.k < item.d else 'K igual a D' }}</div>{% endif %}
+ </article>
+ {% endfor %}{% endfor %}
+ </div>
+ <div class="bd-recommendations">{% for item in payload.daily_context %}<span>BTC/USDT <strong class="{{ 'bd-green' if item.signal == 'COMPRAR' else 'bd-red' if item.signal == 'VENDER' else '' }}">{{ item.signal }}</strong>{% if item.symbol == 'BTCUSDT' and item.signal == 'VENDER' %} · Venta bloqueada por BTC NEVER SELL{% endif %}</span>{% endfor %}</div>
+ <details><summary>Ver valores y fuentes</summary>{% for item in payload.daily_context %}<p><strong>{{ item.symbol }}</strong> · {% if item.status == 'OK' %}RSI {{ '%.2f'|format(item.rsi) }} / MA {{ '%.2f'|format(item.ma) }} · K {{ '%.2f'|format(item.k) }} / D {{ '%.2f'|format(item.d) }} · {{ item.source }} · Cierre {{ item.close_lima }} ({{ item.close_utc }}){% else %}{{ item.reason }}{% endif %}</p>{% endfor %}</details>
+ <p class="bd-note">Solo cierres {{ payload.context_period_label }}. Recomendación técnica de contexto; No modifica candidatos, presupuestos ni anclas del modo. Sujeto a caja, custodia y BTC NEVER SELL.</p>
+</section>
+<script src="{{ url_for('static', filename='balancer_daily.js') }}?v={{ master }}" defer></script>

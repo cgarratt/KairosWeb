@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Kairos v3{% endblock %}</title>
+  <title>{% block title %}Kairos v4{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='kairos-horizon.svg') }}">
   <meta name="theme-color" content="#103d88">
   <script>document.documentElement.dataset.balances="hidden";document.documentElement.dataset.privacyBoot="pending";try{document.documentElement.dataset.theme=localStorage.getItem("kairosweb-theme")==="dark"?"dark":"light";}catch(e){document.documentElement.dataset.theme="light";}</script>
@@ -90,7 +90,7 @@
     <div class="topbar">
       <div class="brand">
         <div class="logo"><img src="{{ url_for('static', filename='kairos-horizon.svg') }}" width="45" height="45" alt="Kairos"></div>
-        <div><h1>Kairos v3</h1><p>v{{ master }}</p></div>
+        <div><h1>Kairos v4</h1><p>v{{ master }}</p></div>
       </div>
       <div class="right-tools">
         {% if portfolio_authenticated %}

@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '3.0.39'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.2.0'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1845,6 +1845,17 @@ def mode_page(slug):
         return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master=APP_VERSION), 503
     try:
         payload = build_mode_payload(slug, dashboard, observed)
+        if slug in ('balancer','compras','ventas'):
+            from balancer_daily import technical_context
+            try:
+                context_snapshot=_read_binance_snapshot()
+            except SpotRefreshRequired:
+                context_snapshot={}
+            context_interval='1d' if slug=='balancer' else '1w'
+            payload['daily_context']=technical_context(context_snapshot,context_interval)
+            payload['context_interval_label']='Diario (1D)' if context_interval=='1d' else 'Semanal (1W)'
+            payload['context_period_label']='diarios' if context_interval=='1d' else 'semanales'
+
         if slug == 'ventas':
             override=request.args.get('usdt_pct')
             if override is not None:
@@ -2367,6 +2378,8 @@ def _deployed_asset_status():
     templates or static files are from an older release. No secrets exposed.
     """
     critical = {
+        'balancer_daily_v4': ('templates/_balancer_daily.html', ('bd-dial', 'data-first', 'payload.context_interval_label')),
+        'balancer_daily_js_v4': ('static/balancer_daily.js', ('ResizeObserver', 'stroke-dasharray', 'N/D')),
         'compras_template': ('templates/trade_sim.html', ('<th>% Peso</th>', 'renderO2Fibonacci', 'allocation-slider', 'data-o2-ui-version')),
         'o2_simulator': ('static/o2_sequential.js', ('classifyDrift', 'snapshots')),
         'alerts_bell': ('static/alert_bell.js', ('alert-timeframe', '/api/alerts/read', 'event-bull', 'event-bear')),
@@ -2522,7 +2535,7 @@ def health():
     with _DEPENDENCY_LOCK:
         last=dict(_DEPENDENCY_LAST)
     response = {'status': 'UP' if assets['consistent'] else 'DEGRADED',
-                'service': 'KairosWeb', 'version': APP_VERSION, 'release_suite':'2026.11.02.7', 'component_versions':{'KairosWeb': '3.0.39', 'KairosGPT': '1.3.18', 'MCP_Binance': '5.4.1', 'MCP_KuCoin': '1.1.0', 'MCP_Hyperliquid': '1.0.1', 'MASTER_schema': '5.0.0'},
+                'service': 'KairosWeb', 'version': APP_VERSION, 'release_suite':'2026.11.03.6', 'component_versions':{'KairosWeb': APP_VERSION, 'KairosGPT': '1.3.18', 'MCP_Binance': '5.4.1', 'MCP_KuCoin': '1.1.0', 'MCP_Hyperliquid': '1.0.1', 'MASTER_schema': '5.0.0'},
                 'server':{'status':'UP' if assets['consistent'] else 'DEGRADED'},
                 'operational_providers':{k:v.get('status','NOT_CHECKED') for k,v in last['providers'].items()},
                 'functional_modules':{k:v.get('status','NOT_CHECKED') for k,v in last['modules'].items()},
