@@ -3,3 +3,27 @@
 #balancer-daily .bd-strip{max-width:960px} @media(max-width:380px){#balancer-daily .bd-strip{grid-template-columns:1fr}}
 
 #balancer-daily .bd-legend{flex-wrap:wrap;font-size:12px}#balancer-daily .bd-legend strong{color:var(--text);font-variant-numeric:tabular-nums}#balancer-daily .bd-recommendations{display:block;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:16px}#balancer-daily .bd-recommendations p{margin:6px 0 0;line-height:1.5}#balancer-daily .bd-operation-summary{font-size:13px;line-height:1.6;margin-top:16px}#balancer-daily .bd-operation-summary li{margin:7px 0}@media(max-width:650px){#balancer-daily .bd-strip{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:400px){#balancer-daily .bd-strip{grid-template-columns:1fr}}
+/* v4.4 approved compact layout: four peer cards on desktop. */
+#balancer-daily .bd-strip{grid-template-columns:repeat(4,minmax(0,1fr));max-width:none;align-items:stretch}
+#balancer-daily .bd-pill{padding:14px 12px;min-height:218px;text-align:left}
+#balancer-daily .bd-title{text-align:left;font-size:12px;margin-bottom:12px}
+#balancer-daily .bd-gauge-layout{display:grid;grid-template-columns:80px minmax(0,1fr);gap:12px;align-items:center;min-height:104px}
+#balancer-daily .bd-dial{width:80px;max-width:80px;margin:0}
+#balancer-daily .bd-legend{display:grid;justify-content:start;gap:10px;font-size:12px;margin:0}
+#balancer-daily .bd-legend span{flex-wrap:wrap;gap:5px}
+#balancer-daily .bd-state{text-align:left;margin-top:15px}
+#balancer-daily .bd-spot-value{font-size:24px;font-weight:650;font-variant-numeric:tabular-nums;margin-bottom:10px}
+#balancer-daily .bd-spot-value small{font-size:11px;font-weight:400;color:var(--muted)}
+#balancer-daily .bd-distances{display:grid;gap:10px}
+#balancer-daily .bd-distance-head{display:flex;justify-content:space-between;align-items:center;gap:5px;font-size:12px;font-variant-numeric:tabular-nums}
+#balancer-daily .bd-distance-head small{font-size:11px;color:var(--muted)}
+#balancer-daily .bd-distance-track{height:4px;position:relative;background:var(--line);border-radius:3px;margin-top:4px}
+#balancer-daily .bd-distance-track:after{content:'';position:absolute;left:50%;height:10px;top:-3px;border-left:1px solid var(--muted)}
+#balancer-daily .bd-distance-bar{position:absolute;height:4px;background:var(--bd-ref-color);border-radius:3px}
+#balancer-daily .bd-ref-sth{--bd-ref-color:#9972de}#balancer-daily .bd-ref-ema20{--bd-ref-color:var(--green)}#balancer-daily .bd-ref-ema50{--bd-ref-color:var(--bd-gold)}
+html[data-theme=dark] #balancer-daily .bd-ref-sth{--bd-ref-color:#c29bff}
+#balancer-daily .bd-media-note{font-size:11px;color:var(--muted);margin-top:12px}
+#balancer-daily .bd-source-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px;font-size:12px}
+@media(max-width:1050px){#balancer-daily .bd-gauge-layout{grid-template-columns:65px minmax(0,1fr);gap:7px}#balancer-daily .bd-dial{width:65px}}
+@media(max-width:850px){#balancer-daily .bd-strip{grid-template-columns:repeat(2,minmax(0,1fr))}#balancer-daily .bd-gauge-layout{grid-template-columns:80px minmax(0,1fr)}#balancer-daily .bd-dial{width:80px}}
+@media(max-width:430px){#balancer-daily .bd-strip{grid-template-columns:1fr}}

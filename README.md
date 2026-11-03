@@ -1,9 +1,9 @@
-# KairosWeb v4.3.0
+# KairosWeb v4.4.0 · Cuatro tarjetas BTC
 
-BTC/USDT: RSI/RSI-MA y Stoch K/D con valores visibles; tercera tarjeta ADX(14), umbral estricto >23 como confirmación de fuerza. Balancer diario; Compras/Ventas semanal. Resumen técnico explicado y resumen de operaciones por escenario. BTC NEVER SELL protegido. TOTAL2 retirado.
+RSI, Stoch RSI, ADX y Spot/STH/EMA20/EMA50. Minivelocímetros compactos y distancias respecto del Spot. Cuatro tarjetas en una línea en escritorio. Balancer diario; Compras/Ventas semanal. STH conserva corte diario independiente.
 
-Instalación: descomprimir ZIP, subir contenido completo a raíz del repositorio Web existente y desplegar en Render. Mantener variables/secretos; no actualizar los MCP. /health debe indicar 4.3.0 y assets consistentes. En Configuración, Actualizar históricos (preferiblemente 999 días) y volver a las páginas.
+Instalación: descomprimir ZIP, subir todo el contenido a raíz del repositorio Web existente y desplegar en Render. Conservar variables/secretos. No actualizar MCP de mercado. /health: version 4.4.0 y assets consistentes. Actualizar Spot e históricos (preferiblemente 999 días); pulsar «Actualizar STH · Glassnode» para cargar STH y conversión USDT/USD desde el MCP público oficial. Primera carga vacía: STH N/D hasta pulsar ese botón.
 
-ADX requiere OHLC válidos del mismo período/proveedor. ADX <=23: neutral. ADX >23: compra/venta solo con alineación RSI/Stoch; si falta alineación, esperar. La señal BTC no sustituye las reglas de cada token. Ningún resumen envía órdenes ni modifica saldos, pivotes o MASTER.
+No se presume USDT=USD; sin FX válido, distancia a STH N/D. Fuentes/cortes en los desplegables. La conexión Glassnode se probó desde el adaptador local, no desde tu servicio Render. Si el proveedor no responde o no concede acceso, la interfaz conserva N/D con causa.
 
-Detalles: RELEASE_NOTES_v4.3.0.md y VALIDACION_RELEASE_v4_3.json. Paquete de código; despliegue remoto pendiente.
+No requiere API key en acceso público probado. Caché local temporal; tras reinicio sin persistencia, actualizar STH de nuevo. Opciones avanzadas y metodología: RELEASE_NOTES_v4.4.0.md. El paquete no despliega automáticamente ni modifica MASTER o reglas financieras.

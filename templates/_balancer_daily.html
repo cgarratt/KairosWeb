@@ -1,11 +1,11 @@
 <section class="span-12" id="balancer-daily">
- <div class="bd-heading"><strong>Contexto de mercado</strong><span>RSI · Stoch RSI · ADX · {{ payload.context_interval_label }}</span></div>
+ <div class="bd-heading"><strong>Contexto de mercado</strong><span>RSI · Stoch RSI · ADX · Medias · {{ payload.context_interval_label }}</span></div>
  <div class="bd-strip">
  {% for item in payload.daily_context %}{% for kind, first, second, name1, name2 in [('RSI','rsi','ma','RSI','RSI-MA'),('Stoch RSI','k','d','K','D')] %}
  <article class="bd-pill">
   <div class="bd-title"><strong>BTC/USDT</strong> · {{ kind }}</div>
-  <svg class="bd-dial" data-first="{{ item[first] if item.status == 'OK' else '' }}" data-second="{{ item[second] if item.status == 'OK' else '' }}" data-low="{{ 30 if kind == 'RSI' else 20 }}" data-high="{{ 70 if kind == 'RSI' else 80 }}" role="img" aria-label="{{ kind }} {{ item.symbol }}: {{ name1 }} {{ '%.1f'|format(item[first]) if item.status == 'OK' else 'N/D' }}, {{ name2 }} {{ '%.1f'|format(item[second]) if item.status == 'OK' else 'N/D' }}"></svg>
-  <div class="bd-legend"><span><i></i>{{ name1 }} <strong>{{ '%.2f'|format(item[first]) if item.status == 'OK' else 'N/D' }}</strong></span><span><i class="bd-second"></i>{{ name2 }} <strong>{{ '%.2f'|format(item[second]) if item.status == 'OK' else 'N/D' }}</strong></span></div>
+  <div class="bd-gauge-layout"><svg class="bd-dial" data-first="{{ item[first] if item.status == 'OK' else '' }}" data-second="{{ item[second] if item.status == 'OK' else '' }}" data-low="{{ 30 if kind == 'RSI' else 20 }}" data-high="{{ 70 if kind == 'RSI' else 80 }}" role="img" aria-label="{{ kind }} {{ item.symbol }}: {{ name1 }} {{ '%.1f'|format(item[first]) if item.status == 'OK' else 'N/D' }}, {{ name2 }} {{ '%.1f'|format(item[second]) if item.status == 'OK' else 'N/D' }}"></svg>
+  <div class="bd-legend"><span><i></i>{{ name1 }} <strong>{{ '%.2f'|format(item[first]) if item.status == 'OK' else 'N/D' }}</strong></span><span><i class="bd-second"></i>{{ name2 }} <strong>{{ '%.2f'|format(item[second]) if item.status == 'OK' else 'N/D' }}</strong></span></div></div>
   {% if item.status != 'OK' %}<div class="bd-state">N/D · Sin datos válidos</div>
   {% elif kind == 'RSI' %}<div class="bd-state {{ 'bd-green' if item.rsi < 30 else 'bd-red' if item.rsi > 70 else '' }}">{{ 'Sobreventa' if item.rsi < 30 else 'Sobrecompra' if item.rsi > 70 else 'Neutral' }}</div>
   {% else %}<div class="bd-state">{{ 'K por encima de D' if item.k > item.d else 'K por debajo de D' if item.k < item.d else 'K igual a D' }}</div>{% endif %}
@@ -13,11 +13,25 @@
  {% endfor %}
  <article class="bd-pill">
   <div class="bd-title"><strong>BTC/USDT</strong> · ADX (14)</div>
-  <svg class="bd-dial" data-kind="adx" data-first="{{ item.adx if item.adx_status == 'OK' else '' }}" data-second="{{ 23 if item.adx_status == 'OK' else '' }}" data-low="23" data-high="100" role="img" aria-label="ADX {{ '%.2f'|format(item.adx) if item.adx_status == 'OK' else 'N/D' }}; umbral 23"></svg>
-  <div class="bd-legend"><span><i></i>ADX <strong>{{ '%.2f'|format(item.adx) if item.adx_status == 'OK' else 'N/D' }}</strong></span><span><i class="bd-second"></i>Umbral <strong>23</strong></span></div>
+  <div class="bd-gauge-layout"><svg class="bd-dial" data-kind="adx" data-first="{{ item.adx if item.adx_status == 'OK' else '' }}" data-second="{{ 23 if item.adx_status == 'OK' else '' }}" data-low="23" data-high="100" role="img" aria-label="ADX {{ '%.2f'|format(item.adx) if item.adx_status == 'OK' else 'N/D' }}; umbral 23"></svg>
+  <div class="bd-legend"><span><i></i>ADX <strong>{{ '%.2f'|format(item.adx) if item.adx_status == 'OK' else 'N/D' }}</strong></span><span><i class="bd-second"></i>Umbral <strong>23</strong></span></div></div>
   <div class="bd-state">{{ 'Tendencia con fuerza' if item.adx_status == 'OK' and item.adx > 23 else 'Neutral · ADX ≤ 23' if item.adx_status == 'OK' else 'N/D · OHLC pendientes' }}</div>
  </article>
  {% endfor %}
+ {% set refs = payload.btc_references|default({}) %}
+ <article class="bd-pill bd-media-card" data-public-price>
+  <div class="bd-title"><strong>BTC · Spot y referencias</strong></div>
+  <div class="bd-spot-value">{{ '$%s'|format('{:,.2f}'.format(refs.spot)) if refs.spot else 'N/D' }} <small>USDT · Spot</small></div>
+  <div class="bd-distances">
+  {% for row in refs.rows|default([{'label':'STH','currency':'USD'},{'label':'EMA20','currency':'USDT'},{'label':'EMA50','currency':'USDT'}]) %}
+   <div class="bd-distance bd-ref-{{ row.color|default('sth') }}">
+    <div class="bd-distance-head"><span>{{ row.label }} · {{ '{:,.2f}'.format(row.value) if row.value else 'N/D' }} <small>{{ row.currency }}</small></span><strong>{{ '%+.2f%%'|format(row.delta) if row.delta is defined and row.delta is not none else 'N/D' }}</strong></div>
+    <div class="bd-distance-track">{% if row.delta is defined and row.delta is not none %}<span class="bd-distance-bar" style="left:{{ row.left }}%;width:{{ row.width }}%"></span>{% endif %}</div>
+   </div>
+  {% endfor %}
+  </div>
+  <div class="bd-media-note">Distancia de Spot a cada referencia · STH con corte propio.</div>
+ </article>
  </div>
  <div class="bd-recommendations" aria-live="polite">{% for item in payload.daily_context %}<div><strong>BTC/USDT · {{ item.combined_signal }}</strong><p>{{ item.recommendation_summary }}</p></div>{% endfor %}</div>
  <div class="bd-operation-summary"><strong>Resumen de operaciones · simulación</strong>
@@ -33,7 +47,15 @@
  </ul>
  {% else %}<div data-private="operations" id="bd-operation-live" aria-live="polite">Calculando el escenario seleccionado…</div>{% endif %}
  <p class="bd-note">Propuestas para revisión: sin órdenes enviadas. QF, Core/HODL, compromisos y BTC NEVER SELL protegidos. El indicador BTC no sustituye las restricciones de cada token.</p></div>
+ <div class="bd-source-tools"><button type="button" class="btn" id="btc-sth-refresh" data-csrf="{{ session.get('csrf_token','') }}">Actualizar STH · Glassnode</button><span id="btc-sth-status" role="status" aria-live="polite"></span></div>
  <details><summary>Ver valores y fuentes</summary>{% for item in payload.daily_context %}<p><strong>{{ item.symbol }}</strong> · {% if item.status == 'OK' %}RSI {{ '%.2f'|format(item.rsi) }} / MA {{ '%.2f'|format(item.ma) }} · K {{ '%.2f'|format(item.k) }} / D {{ '%.2f'|format(item.d) }} · ADX {{ '%.2f'|format(item.adx) if item.adx_status == 'OK' else 'N/D' }} · {{ item.source }} · Cierre {{ item.close_lima }} ({{ item.close_utc }}){% else %}{{ item.reason }}{% endif %}{% if item.adx_status != 'OK' %} · ADX: {{ item.adx_reason }}{% endif %}</p>{% endfor %}</details>
+ <details data-public-price><summary>Fuentes de Spot, STH y EMA</summary>
+ <p>Spot BTC/USDT: {{ refs.spot_source|default('N/D',true) }} · Observación {{ refs.spot_utc|default('N/D',true) }}. EMA20/50: {{ refs.ema_source|default('N/D',true) }} · Cierre {{ refs.ema_cut_utc|default('N/D',true) }}. EMA inicializada con SMA del período.</p>
+ <p>STH BTC (&lt;155 días): Glassnode, price_realized_less_155_usd, resolución 24h · Fecha nativa {{ refs.sth_cut_utc|default('N/D',true) }}. Se conserva la misma referencia STH en 1D y 1W. Si no hay dato reciente, N/D.</p>
+ <p>Para STH, Spot se convierte a USD usando el último cierre diario de USDT/USD de Glassnode: {{ '%.6f'|format(refs.fx) if refs.fx else 'N/D' }} · Fecha nativa {{ refs.fx_cut_utc|default('N/D',true) }}. Es una conversión de referencia diaria, no un tipo de cambio en tiempo real. EMA se compara directamente en USDT. Sin FX válido, distancia STH N/D. Se aceptan datos onchain cerrados de hasta 72 horas desde su fecha nativa.</p>
+ {% for row in refs.rows|default([]) %}{% if row.reason %}<p>{{ row.label }}: {{ row.reason }}</p>{% endif %}{% endfor %}
+ <p>Distancia % = (Spot en la moneda de la referencia − referencia) / referencia × 100. Escala visual ±6.25%; las barras se limitan al borde y el porcentaje mantiene su valor completo.</p>
+ </details>
  <p class="bd-note">Solo cierres {{ payload.context_period_label }}. ADX > 23 confirma fuerza; dirección según RSI/Stoch RSI. No modifica candidatos, presupuestos ni anclas del modo. Sujeto a caja, custodia y BTC NEVER SELL.</p>
 </section>
 <script src="{{ url_for('static', filename='balancer_daily.js') }}?v={{ master }}" defer></script>

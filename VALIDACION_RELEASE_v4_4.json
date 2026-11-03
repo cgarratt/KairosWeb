@@ -1,0 +1,28 @@
+{
+  "version": "4.4.0",
+  "base": "4.3.0",
+  "pytest_passed": 261,
+  "subtests_passed": 9,
+  "jinja_templates_compiled": true,
+  "javascript_syntax_checked": true,
+  "compras_ventas_inline_js_checked": true,
+  "mini_gauges_runtime_checked": true,
+  "assets_consistent": true,
+  "glassnode_adapter_live_verified": true,
+  "glassnode_native_data_date": "2026-11-02T00:00:00+00:00",
+  "glassnode_metrics": [
+    "/v1/metrics/market/price_realized_less_155_usd?asset=BTC",
+    "/v1/metrics/market/price_usd_close?asset=USDT"
+  ],
+  "market_values_bundled": false,
+  "render_deployment_verified": false,
+  "browser_visual_verified": false,
+  "master_mutated": false,
+  "periods": {
+    "balancer": "1d",
+    "compras": "1w",
+    "ventas": "1w"
+  },
+  "sth_resolution": "24h independent",
+  "fx_assumed_one": false
+}
