@@ -1,0 +1,9 @@
+{
+  "version": "4.6.0",
+  "tests_passed": 243,
+  "javascript_syntax_checked": true,
+  "custom_sale_prices_tested": true,
+  "protected_pivot_tested": true,
+  "master_mutated": false,
+  "remote_deployment_verified": false
+}

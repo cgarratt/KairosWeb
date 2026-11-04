@@ -64,10 +64,10 @@
 <p class="footer-note">Referencia de niveles: {{ payload.o2_source }} · Cotizaciones Spot observadas: {{ payload.generated_at }} · Unidades snapshot: {{ payload.snapshot_note }}</p></section>
 <section class="panel span-12"><div class="fc-hero"><div><h2>Trayectoria del ciclo por token</h2><p class="sub">Los pivotes VALIDADO y CONFIRMADO conservan el precio publicado; sólo PROPUESTO admite cambios de escenario. Eje por etapas, no temporal. La línea punteada muestra el Spot del MCP y no es un pivote.</p></div><div class="fc-field" style="flex:0 0 190px"><label for="chart-token">Token</label><select id="chart-token"></select></div></div><div class="fc-controls">
 <div class="fc-field"><label for="o2-choice">O2 · retroceso CL→O1</label><select id="o2-choice"><option value="0.382">O2C1 · Fib 38.2%</option><option value="0.5">O2C2 · Fib 50%</option><option value="0.618" selected>O2C3 · Fib 61.8%</option><option value="0.786">O2C4 · Fib 78.6%</option></select></div>
-<div class="fc-field"><label for="o3-choice">O3 · extensión desde O2</label><select id="o3-choice"><option value="1.618">O3V1 · Fib 1.618</option><option value="2.618">O3V2 · Fib 2.618</option><option value="3.618">O3V3 · Fib 3.618</option><option value="4.618">O3V4 · Fib 4.618</option></select></div>
+<div class="fc-field"><label for="o3-choice">O3 · extensión desde O2</label><select id="o3-choice"><option value="0.382">Fib 38.2%</option><option value="0.5">Fib 50%</option><option value="0.618">Fib 61.8%</option><option value="0.786">Fib 78.6%</option><option value="1">Fib 100%</option><option value="1.272">Fib 127.2%</option><option value="1.618" selected>Fib 161.8%</option></select></div>
 <div class="fc-field"><label for="o4-choice">O4 · retroceso O2→O3</label><select id="o4-choice"><option value="0.382">O4C1 · Fib 38.2%</option><option value="0.5" selected>O4C2 · Fib 50%</option><option value="0.618">O4C3 · Fib 61.8%</option><option value="0.786">O4C4 · Fib 78.6%</option></select></div>
-<div class="fc-field"><label for="o5-choice">O5 · extensión desde O4</label><select id="o5-choice"><option value="1.618">O5V1 · Fib 1.618</option><option value="2.618">O5V2 · Fib 2.618</option><option value="3.618">O5V3 · Fib 3.618</option><option value="4.618">O5V4 · Fib 4.618</option></select></div>
-</div><svg id="waves-chart" class="fc-chart" viewBox="0 0 740 490" role="img" aria-label="Precios hipotéticos por onda"></svg><p class="fc-legend" id="chart-info">Selecciona un token con referencias disponibles.</p></section>
+<div class="fc-field"><label for="o5-choice">O5 · extensión desde O4</label><select id="o5-choice"><option value="0.382">Fib 38.2%</option><option value="0.5">Fib 50%</option><option value="0.618">Fib 61.8%</option><option value="0.786">Fib 78.6%</option><option value="1">Fib 100%</option><option value="1.272">Fib 127.2%</option><option value="1.618" selected>Fib 161.8%</option></select></div>
+</div><div id="sale-level-controls" class="fc-controls"></div><p class="footer-note">Niveles locales compartidos con la simulación independiente. No modifica Google Sheets ni pivotes publicados.</p><svg id="waves-chart" class="fc-chart" viewBox="0 0 740 490" role="img" aria-label="Precios hipotéticos por onda"></svg><p class="fc-legend" id="chart-info">Selecciona un token con referencias disponibles.</p></section>
 
 <section class="panel span-12">
 <h2>Simulación - Ondas Elliott</h2><p class="sub">Escenario por token. Cycle Low/O1 proceden de estructura semanal UTC (confirmada o candidata), nunca se infieren de Fibonacci; O2–O5 son niveles hipotéticos según las extensiones y retrocesos elegidos.</p>
@@ -118,6 +118,7 @@ const Fibo=window.KairosForecastFibo;
 const Portfolio=window.KairosForecastBalance;
 const LevelStatus=window.KairosForecastLevelStatus;
 const weights=Object.fromEntries(Object.entries(fc.forecast_fibo_allocations||Fibo.DEFAULTS).map(([k,v])=>[k,v.slice()]));
+const saleLevels={o3:[.382,.5,.618,.786],o5:[.382,.5,.618,.786]};
 let lastForecastError=null;
 const $=id=>document.getElementById(id);
 const money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
@@ -132,13 +133,19 @@ $('forecast-deploy').value=Math.min(25,Math.max(0,defaultPct));
 const btcShareO3=Number(fc.official_o3_split),btcShareO5=Number(fc.official_o5_split);
 if([btcShareO3,btcShareO5,fc.official_o3_usdt_split,fc.official_o5_usdt_split].some(x=>!Number.isFinite(Number(x)))||Math.abs(btcShareO3+Number(fc.official_o3_usdt_split)-1)>1e-8||Math.abs(btcShareO5+Number(fc.official_o5_usdt_split)-1)>1e-8)throw Error('MASTER: distribución BTC/USDT no validada');
 function stageWeights(stage){return Fibo.shares(weights[stage]);}
+function saleLabel(stage,i){return stage.toUpperCase()+'V'+(i+1)+' · Fib '+Number((saleLevels[stage][i]*100).toFixed(1))+'%';}
+function renderSaleControls(){
+ $('sale-level-controls').innerHTML=['o3','o5'].map(stage=>`<fieldset class="fc-stage-weights"><legend>Ventas ${stage.toUpperCase()} · niveles Fibo</legend><div class="fc-stage-levels">${saleLevels[stage].map((v,i)=>`<label>${stage.toUpperCase()}V${i+1}<select data-sale-wave="${stage}" data-sale-index="${i}">${Fibo.SALE_OPTIONS.map(f=>`<option value="${f}" ${f===v?'selected':''}>${Number((f*100).toFixed(1))}%</option>`).join('')}</select></label>`).join('')}</div></fieldset>`).join('');
+ $('sale-level-controls').addEventListener('change',e=>{const x=e.target;if(!x.dataset.saleWave)return;saleLevels[x.dataset.saleWave][Number(x.dataset.saleIndex)]=Number(x.value);document.querySelectorAll('[data-sale-label]').forEach(n=>{n.textContent=saleLabel(n.dataset.saleLabel,Number(n.dataset.saleLabelIndex));});renderAll();});
+}
 function renderWeightControls(){
  const names={o2:'Compras O2',o3:'Ventas O3',o4:'Compras O4',o5:'Ventas O5'};
- const labels={o2:['O2C1 · Fib 38.2%','O2C2 · Fib 50%','O2C3 · Fib 61.8%','O2C4 · Fib 78.6%'],o3:['O3V1 · Fib 1.618','O3V2 · Fib 2.618','O3V3 · Fib 3.618','O3V4 · Fib 4.618'],o4:['O4C1 · Fib 38.2%','O4C2 · Fib 50%','O4C3 · Fib 61.8%','O4C4 · Fib 78.6%'],o5:['O5V1 · Fib 1.618','O5V2 · Fib 2.618','O5V3 · Fib 3.618','O5V4 · Fib 4.618']};
- $('forecast-weights').innerHTML=Object.keys(names).map(stage=>`<fieldset class="fc-stage-weights"><legend>${names[stage]}</legend><div class="fc-stage-levels">${weights[stage].map((v,i)=>`<label>${labels[stage][i]} <input type="number" min="0" max="100" step="0.1" data-forecast-stage="${stage}" data-level="${i}" value="${v}" aria-label="${names[stage]} nivel ${i+1}"/> %</label>`).join('')}</div><strong id="sum-${stage}"></strong></fieldset>`).join('');
+ const labels={o2:['O2C1 · Fib 38.2%','O2C2 · Fib 50%','O2C3 · Fib 61.8%','O2C4 · Fib 78.6%'],o3:[],o4:['O4C1 · Fib 38.2%','O4C2 · Fib 50%','O4C3 · Fib 61.8%','O4C4 · Fib 78.6%'],o5:[]};
+ $('forecast-weights').innerHTML=Object.keys(names).map(stage=>`<fieldset class="fc-stage-weights"><legend>${names[stage]}</legend><div class="fc-stage-levels">${weights[stage].map((v,i)=>`<label>${saleLevels[stage]?`<span data-sale-label="${stage}" data-sale-label-index="${i}">${saleLabel(stage,i)}</span>`:labels[stage][i]} <input type="number" min="0" max="100" step="0.1" data-forecast-stage="${stage}" data-level="${i}" value="${v}" aria-label="${names[stage]} nivel ${i+1}"/> %</label>`).join('')}</div><strong id="sum-${stage}"></strong></fieldset>`).join('');
  $('forecast-weights').addEventListener('input',e=>{const inp=e.target.closest('[data-forecast-stage]');if(!inp)return;weights[inp.dataset.forecastStage][Number(inp.dataset.level)]=Number(inp.value);renderAll();});
 }
 function verifyWeights(){let errors=[];
+ for(const stage of ['o3','o5'])if(saleLevels[stage].some((v,i,a)=>!Fibo.SALE_OPTIONS.includes(v)||(i>0&&v<a[i-1])))errors.push(stage.toUpperCase()+': ordena los niveles de V1 a V4 de menor a mayor.');
  for(const stage of ['o2','o3','o4','o5']){let sum=weights[stage].reduce((a,b)=>a+Number(b),0);const target=$('sum-'+stage);target.textContent='Total '+sum.toFixed(1)+'%';target.style.color=Math.abs(sum-100)<1e-6?'#38C99C':'#F17676';try{stageWeights(stage)}catch(e){errors.push(stage.toUpperCase()+': '+e.message)}}
  $('weights-validation').textContent=errors.length?'NO VALIDADO · '+errors.join(' | '):'Todos los tramos suman 100%. Simulación local; no modifica el Master.';
  return errors.length===0;
@@ -245,9 +252,9 @@ function runCycle(){
    const cIn=Math.min(Math.max(0,a.ex-a.reserved),Math.max(0,Number(policy[1])*total-a.core));a.ex-=cIn;a.core+=cIn;
  }}
  function runWave(stage,upto,fraction){
-   const buy=stage==='o2'||stage==='o4',levels=buy?Fibo.BUY_LEVELS:Fibo.SELL_LEVELS;
+   const buy=stage==='o2'||stage==='o4',levels=buy?Fibo.BUY_LEVELS:saleLevels[stage];
    const weights=stageWeights(stage).map((w,j)=>levels[j]<=upto+1e-9?w:0);
-   const grid=levels.map((_,j)=>assets.map(a=>(buy?Fibo.scenarioBuyPrices(a.wave,stage):Fibo.scenarioSellPrices(a.wave,stage))?.[j]));
+   const grid=levels.map((_,j)=>assets.map(a=>(buy?Fibo.scenarioBuyPrices(a.wave,stage):Fibo.scenarioSellPrices(a.wave,stage,saleLevels[stage]))?.[j]));
    const commitments=Number(fc.current.confirmed_buy_commitments||0);
    const result=KairosForecastCycle.simulateWave({stage,assets,cash,qf,weights,grid,buyCommitments:commitments,
       budget:buy?Math.max(0,cash-qf-commitments)*fraction:undefined,deploy:buy?1:fraction,
@@ -302,7 +309,7 @@ function renderAll(){if(!verifyWeights()){$('cycle-summary').replaceChildren();$
 ['o2-choice','o3-choice','o4-choice','o5-choice'].forEach(id=>$(id).addEventListener('change',renderAll));
 $('chart-token').addEventListener('change',()=>drawCurve(calcWaves()));
 ['o2-budget','o3-sell','o4-budget','o5-sell','o5-core'].forEach(id=>$(id).addEventListener('change',renderAll));
-renderWeightControls();renderAll();
+renderSaleControls();renderWeightControls();renderAll();
 
 </script>
 {% endblock %}

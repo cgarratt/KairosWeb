@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.5.0'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.6.0'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -2522,7 +2522,7 @@ def health():
     with _DEPENDENCY_LOCK:
         last=dict(_DEPENDENCY_LAST)
     response = {'status': 'UP' if assets['consistent'] else 'DEGRADED',
-                'service': 'KairosWeb', 'version': APP_VERSION, 'release_suite':'2026.11.04.1', 'component_versions':{'KairosWeb': APP_VERSION, 'KairosGPT': '1.3.18', 'MCP_Binance': '5.4.1', 'MCP_KuCoin': '1.1.0', 'MCP_Hyperliquid': '1.0.1', 'MASTER_schema': '5.0.0'},
+                'service': 'KairosWeb', 'version': APP_VERSION, 'release_suite':'2026.11.04.2', 'component_versions':{'KairosWeb': APP_VERSION, 'KairosGPT': '1.3.18', 'MCP_Binance': '5.4.1', 'MCP_KuCoin': '1.1.0', 'MCP_Hyperliquid': '1.0.1', 'MASTER_schema': '5.0.0'},
                 'server':{'status':'UP' if assets['consistent'] else 'DEGRADED'},
                 'operational_providers':{k:v.get('status','NOT_CHECKED') for k,v in last['providers'].items()},
                 'functional_modules':{k:v.get('status','NOT_CHECKED') for k,v in last['modules'].items()},

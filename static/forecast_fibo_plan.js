@@ -25,11 +25,12 @@
     }
     throw Error('Onda no permitida');
   }
-  function scenarioSellPrices(w,step){
+  function scenarioSellPrices(w,step,levels=SELL_LEVELS){
+    if(!Array.isArray(levels)||levels.length!==4||levels.some(f=>!Number.isFinite(f)||f<=0))throw Error("NIVELES_VENTA_INVALIDOS");
     if(!w||!w.values)return null;
     const [cl,o1,o2,o3,o4]=w.values;
-    if(step==='o3')return SELL_LEVELS.map(f=>o2+f*(o1-cl));
-    if(step==='o5')return SELL_LEVELS.map(f=>o4+f*(o3-o2));
+    if(step==='o3')return levels.map(f=>o2+f*(o1-cl));
+    if(step==='o5')return levels.map(f=>o4+f*(o3-o2));
     throw Error('Onda no permitida');
   }
   // Shared chart/table/Forecast values. Published VALIDADO and CONFIRMADO
@@ -68,7 +69,8 @@
   function holdValues(values,units){
     return (values||Array(6).fill(null)).map(v=>Number.isFinite(v)&&v>0?units*v:null);
   }
-  const api={holdValues,BUY_LEVELS,SELL_LEVELS,DEFAULTS,shares,budget,scenarioBuyPrices,scenarioSellPrices,wavePath};
+  const SALE_OPTIONS=[.382,.5,.618,.786,1,1.272,1.618];
+  const api={SALE_OPTIONS,holdValues,BUY_LEVELS,SELL_LEVELS,DEFAULTS,shares,budget,scenarioBuyPrices,scenarioSellPrices,wavePath};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   root.KairosForecastFibo=api;
 })(typeof window!=='undefined'?window:globalThis);

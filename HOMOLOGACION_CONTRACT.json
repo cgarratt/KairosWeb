@@ -1,13 +1,13 @@
 {
   "versions": {
-    "KairosWeb": "4.5.0",
+    "KairosWeb": "4.6.0",
     "KairosGPT": "1.3.18",
     "MCP_KuCoin": "1.1.0",
     "MCP_Binance": "5.4.1",
     "MCP_Hyperliquid": "1.0.1",
     "MASTER_schema": "5.0.0"
   },
-  "scope": "UI_CONTEXT_SECTIONS_REMOVED",
+  "scope": "LOCAL_FORECAST_SALE_LEVELS",
   "master_mutated": false,
   "deployment_verified": false,
   "project_installation_verified": false,
@@ -24,7 +24,7 @@
   "generic_retracement_order_identity": "O2C1..O2C4",
   "companion_mcp_release": "5.4.1",
   "companion_kucoin_mcp_release": "1.1.0",
-  "release_suite": "2026.11.04.1",
+  "release_suite": "2026.11.04.2",
   "companion_hyperliquid_mcp_release": "1.0.1",
   "limitations": [
     "No shared deployed gateway",

@@ -362,8 +362,12 @@
       if(tab==='units')item.classList.add('units');
       const primary=el('div','settings-token');
       if(tab==='parameters'){
-        primary.append(el('strong','token-name',fmt.labels[entry.key]||entry.key),el('small','settings-key',entry.key));
-        if(entry.description)primary.append(el('p','parameter-description',entry.description));
+        const saleMatch=String(entry.key||'').match(/^FORECAST_(O[35])_FIB_(\d+)_PCT$/);
+        const saleIndex=saleMatch?FIB_DISPLAY_ORDER[saleMatch[1]].indexOf(saleMatch[2]):-1;
+        primary.append(el('strong','token-name',saleIndex>=0?`${saleMatch[1]}V${saleIndex+1} · asignación`:(fmt.labels[entry.key]||entry.key)));
+        if(saleIndex<0)primary.append(el('small','settings-key',entry.key));
+        const description=saleIndex>=0?'Porcentaje de unidades elegibles de este tramo. El nivel Fibo se elige en Forecast; simulación local.':entry.description;
+        if(description)primary.append(el('p','parameter-description',description));
         primary.append(el('small','settings-hint',`Área: ${entry.module_name} · Estado: ${entry.status} · Fuente: ${entry.source||'Master'}`));
       }else if((tab==='units'||tab==='targets')&&entry.token)primary.append(settingsTokenLabel(entry.token));
       else primary.append(el('strong','token-name',tab==='capital_targets'&&entry.segment==='Trading'?'Trading · ReservaTrading':entry[rowKey()]));
