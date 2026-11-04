@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.4.0'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.5.0'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -276,7 +276,7 @@ def bind_published_sheet():
     # The health and diagnostics endpoints remain reachable during source outages.
     independent={'/health','/api/mcp-status','/api/mcp-config-check','/api/mcp-diagnostics',
                  '/api/alerts/unread','/api/alerts/read','/api/alerts/read-all',
-                 '/api/history/refresh','/api/btc-references/refresh','/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status', '/api/mcp-refresh', '/api/health/diagnostics'}
+                 '/api/history/refresh','/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status', '/api/mcp-refresh', '/api/health/diagnostics'}
     if request.path in independent or request.path in ('/login','/logout','/admin/login','/api/admin/session') or request.path=='/settings' or request.path.startswith('/static/'):
         return None
     try:
@@ -1845,22 +1845,6 @@ def mode_page(slug):
         return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master=APP_VERSION), 503
     try:
         payload = build_mode_payload(slug, dashboard, observed)
-        if slug in ('balancer','compras','ventas'):
-            from balancer_daily import technical_context
-            try:
-                context_snapshot=_read_binance_snapshot()
-            except SpotRefreshRequired:
-                context_snapshot={}
-            context_interval='1d' if slug=='balancer' else '1w'
-            payload['daily_context']=technical_context(context_snapshot,context_interval)
-            payload['context_interval_label']='Diario (1D)' if context_interval=='1d' else 'Semanal (1W)'
-            payload['context_period_label']='diarios' if context_interval=='1d' else 'semanales'
-            from btc_references import reference_context
-            from glassnode_references import cached
-            btc_row=next((r for r in dashboard['rows'] if r['token']=='BTC'),{})
-            payload['btc_references']=reference_context(context_snapshot,context_interval,
-                btc_row.get('price'),observed,cached())
-
         if slug == 'ventas':
             override=request.args.get('usdt_pct')
             if override is not None:
@@ -2383,13 +2367,6 @@ def _deployed_asset_status():
     templates or static files are from an older release. No secrets exposed.
     """
     critical = {
-        'btc_refs_v44': ('btc_references.py', ('def ema(', 'def reference_context(', 'comparable_spot')),
-        'glassnode_refs_v44': ('glassnode_references.py', ('price_realized_less_155_usd', 'https://mcp.glassnode.com', 'USDT')),
-        'btc_refs_ui_v44': ('templates/_balancer_daily.html', ('bd-media-card', 'Actualizar STH', 'payload.btc_references')),
-        'adx_context_v43': ('adx_context.py', ('def adx_values(', 'def confirmed_signal(', 'adx<=23')),
-        'adx_ui_v43': ('templates/_balancer_daily.html', ('data-kind="adx"', 'Resumen de operaciones', 'item.combined_signal')),
-        'balancer_daily_v4': ('templates/_balancer_daily.html', ('bd-dial', 'data-first', 'payload.context_interval_label')),
-        'balancer_daily_js_v4': ('static/balancer_daily.js', ('ResizeObserver', 'stroke-dasharray', 'N/D')),
         'compras_template': ('templates/trade_sim.html', ('<th>% Peso</th>', 'renderO2Fibonacci', 'allocation-slider', 'data-o2-ui-version')),
         'o2_simulator': ('static/o2_sequential.js', ('classifyDrift', 'snapshots')),
         'alerts_bell': ('static/alert_bell.js', ('alert-timeframe', '/api/alerts/read', 'event-bull', 'event-bear')),
@@ -2545,7 +2522,7 @@ def health():
     with _DEPENDENCY_LOCK:
         last=dict(_DEPENDENCY_LAST)
     response = {'status': 'UP' if assets['consistent'] else 'DEGRADED',
-                'service': 'KairosWeb', 'version': APP_VERSION, 'release_suite':'2026.11.03.8', 'component_versions':{'KairosWeb': APP_VERSION, 'KairosGPT': '1.3.18', 'MCP_Binance': '5.4.1', 'MCP_KuCoin': '1.1.0', 'MCP_Hyperliquid': '1.0.1', 'MASTER_schema': '5.0.0'},
+                'service': 'KairosWeb', 'version': APP_VERSION, 'release_suite':'2026.11.04.1', 'component_versions':{'KairosWeb': APP_VERSION, 'KairosGPT': '1.3.18', 'MCP_Binance': '5.4.1', 'MCP_KuCoin': '1.1.0', 'MCP_Hyperliquid': '1.0.1', 'MASTER_schema': '5.0.0'},
                 'server':{'status':'UP' if assets['consistent'] else 'DEGRADED'},
                 'operational_providers':{k:v.get('status','NOT_CHECKED') for k,v in last['providers'].items()},
                 'functional_modules':{k:v.get('status','NOT_CHECKED') for k,v in last['modules'].items()},
@@ -2647,20 +2624,6 @@ def admin_session_state():
     # even when 01_CONTROL cannot be read from Google Sheets.
     return jsonify({'status':'OK','is_admin':bool(_admin_authorized()),
                     'csrf_token':session.get('csrf_token') if _admin_authorized() else None})
-
-
-@app.route('/api/btc-references/refresh', methods=['POST'])
-def btc_references_refresh():
-    if not _portfolio_authorized():
-        return jsonify({'status':'PORTFOLIO_AUTH_REQUIRED'}),401
-    if not _same_origin() or not _csrf_ok():
-        return jsonify({'status':'FORBIDDEN'}),403
-    from glassnode_references import refresh
-    try:
-        return jsonify(refresh())
-    except Exception as exc:
-        app.logger.warning('Glassnode references class=%s',type(exc).__name__)
-        return jsonify({'status':'DATA_ERROR','reason':'No se pudo consultar Glassnode MCP. Spot y EMA conservan sus fuentes independientes.'}),503
 
 
 @app.route('/api/history/refresh', methods=['POST'])

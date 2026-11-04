@@ -1,9 +1,13 @@
-# KairosWeb v4.4.0 · Cuatro tarjetas BTC
+# KairosWeb 4.5.0
 
-RSI, Stoch RSI, ADX y Spot/STH/EMA20/EMA50. Minivelocímetros compactos y distancias respecto del Spot. Cuatro tarjetas en una línea en escritorio. Balancer diario; Compras/Ventas semanal. STH conserva corte diario independiente.
+Retira de Balancer, Compras y Ventas el contexto de mercado (RSI, Stoch RSI, ADX, Spot/STH/EMA), la recomendación conjunta BTC y el resumen adicional de operaciones mostrado en la captura. Retira también sus controles, recursos y endpoint de actualización STH.
 
-Instalación: descomprimir ZIP, subir todo el contenido a raíz del repositorio Web existente y desplegar en Render. Conservar variables/secretos. No actualizar MCP de mercado. /health: version 4.4.0 y assets consistentes. Actualizar Spot e históricos (preferiblemente 999 días); pulsar «Actualizar STH · Glassnode» para cargar STH y conversión USDT/USD desde el MCP público oficial. Primera carga vacía: STH N/D hasta pulsar ese botón.
+Conserva simuladores, tablas originales, referencias de ondas, restricciones y cálculos de caja, compras, ventas y custodia. No modifica MASTER ni envía órdenes. No requiere actualizar los MCP.
 
-No se presume USDT=USD; sin FX válido, distancia a STH N/D. Fuentes/cortes en los desplegables. La conexión Glassnode se probó desde el adaptador local, no desde tu servicio Render. Si el proveedor no responde o no concede acceso, la interfaz conserva N/D con causa.
+## Despliegue
 
-No requiere API key en acceso público probado. Caché local temporal; tras reinicio sin persistencia, actualizar STH de nuevo. Opciones avanzadas y metodología: RELEASE_NOTES_v4.4.0.md. El paquete no despliega automáticamente ni modifica MASTER o reglas financieras.
+Descomprimir el ZIP y sustituir el contenido del repositorio Web, eliminando los archivos retirados indicados abajo. Conservar la configuración privada del entorno. Desplegar en Render mediante el procedimiento habitual del repositorio. Verificar /health y las tres páginas después del despliegue.
+
+Archivos retirados: balancer_daily.py, adx_context.py, btc_references.py, glassnode_references.py, templates/_balancer_daily.html, static/balancer_daily.js y static/balancer_daily.css.
+
+Este paquete es un release de código validado localmente; no acredita despliegue remoto ni conciliación contable.

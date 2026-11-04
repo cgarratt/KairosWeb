@@ -1,12 +1,11 @@
 {
   "product": "KairosWeb",
-  "version": "4.4.0",
-  "base": "4.3.0",
+  "version": "4.5.0",
+  "base": "4.4.0",
   "status": "SOURCE_RELEASE",
   "deployed": false,
-  "indicators": "BTCUSDT RSI/MA, Stoch K/D, ADX14, Spot, STH, EMA20/50",
-  "validation": "VALIDACION_RELEASE_v4_4.json",
-  "release_notes": "RELEASE_NOTES_v4.4.0.md",
-  "glassnode_public_adapter_live_verified": true,
-  "render_deployment_verified": false
+  "validation": "VALIDACION_RELEASE_v4_5.json",
+  "release_notes": "RELEASE_NOTES_v4.5.0.md",
+  "render_deployment_verified": false,
+  "scope": "REMOVE_MARKET_CONTEXT_AND_OPERATION_SUMMARY"
 }
