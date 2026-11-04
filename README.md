@@ -1,15 +1,11 @@
-# KairosWeb v4.6.0 · Niveles Fibo de ventas
+# KairosWeb v4.6.1
 
-Configuración muestra O3V1–O3V4 y O5V1–O5V4 sin niveles Fibonacci fijos. Las claves históricas de los porcentajes se conservan para compatibilidad; no se migran ni escriben datos de MASTER.
+Mueve los ocho selectores de niveles Fibo de ventas O3/O5 a Simulación integral O2 → O5, antes de la distribución porcentual. Añade 261.8% y 361.8% tanto a los selectores de cada venta como a los puntos finales O3/O5 de la trayectoria.
 
-Forecast incorpora ocho desplegables en Trayectoria del ciclo por token: uno por tramo de venta. Opciones: 38.2%, 50%, 61.8%, 78.6%, 100%, 127.2% y 161.8%. Inicio del escenario local: 38.2%, 50%, 61.8%, 78.6% en cada onda. Los controles O3/O5 del punto final de trayectoria también admiten los siete valores.
+Opciones: 38.2%, 50%, 61.8%, 78.6%, 100%, 127.2%, 161.8%, 261.8%, 361.8%. Etiquetas y cálculos de la simulación comparten los mismos niveles. Solo participan niveles alcanzados por el punto final O3/O5 seleccionado en trayectoria. Se conserva el orden ascendente V1–V4 y suma de asignaciones 100%.
 
-La distribución independiente muestra los niveles elegidos arriba y calcula sus precios con esos mismos valores: O3 desde O2 usando O1−CL; O5 desde O4 usando O3−O2. Solo participan los niveles alcanzados por el punto final del escenario. V1–V4 deben estar ordenados de menor a mayor (se admiten iguales); una selección descendente bloquea el cálculo con una indicación visible. Los porcentajes conservan su validación de suma 100%.
+Selecciones locales, reiniciadas al recargar. No modifica MASTER, órdenes ni pivotes publicados.
 
-Los valores son de simulación local y se reinician al recargar la página. No se publican en Sheets ni modifican pivotes VALIDADO/CONFIRMADO, órdenes o saldos. Las reglas operativas de órdenes quedan conservadas. Este cambio no resuelve ni certifica el incidente de conexión mostrado previamente en Órdenes.
+Descomprimir y reemplazar los archivos del repositorio Web sobre v4.6.0 y desplegar en Render. No requiere cambios MCP ni de entorno.
 
-## Instalación
-
-Descomprimir y reemplazar el contenido del repositorio Web sobre v4.5.0; desplegar con el procedimiento habitual de Render. Sin cambios de MCP ni variables de entorno. Si se actualiza desde v4.4 o anterior, retirar además los siete archivos obsoletos descritos en el release v4.5.
-
-Validación local: 243 pruebas aprobadas, incluyendo precios personalizados O3/O5, pivote confirmado protegido, compilación de plantilla y sintaxis JavaScript. Despliegue remoto pendiente.
+Validación local: 244 pruebas aprobadas. Despliegue remoto pendiente.

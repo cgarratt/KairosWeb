@@ -69,7 +69,7 @@
   function holdValues(values,units){
     return (values||Array(6).fill(null)).map(v=>Number.isFinite(v)&&v>0?units*v:null);
   }
-  const SALE_OPTIONS=[.382,.5,.618,.786,1,1.272,1.618];
+  const SALE_OPTIONS=[.382,.5,.618,.786,1,1.272,1.618,2.618,3.618];
   const api={SALE_OPTIONS,holdValues,BUY_LEVELS,SELL_LEVELS,DEFAULTS,shares,budget,scenarioBuyPrices,scenarioSellPrices,wavePath};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   root.KairosForecastFibo=api;
