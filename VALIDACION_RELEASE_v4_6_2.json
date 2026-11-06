@@ -1,0 +1,9 @@
+{
+  "version": "4.6.2",
+  "unit_tests_passed": 15,
+  "published_pivots_tokens_checked": 12,
+  "spot_requested": false,
+  "master_modified": false,
+  "deployment_verified": false,
+  "browser_qa": false
+}

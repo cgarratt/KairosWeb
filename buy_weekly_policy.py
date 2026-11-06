@@ -1,7 +1,7 @@
 """Kairos LONG-TERM COMPRAS eligibility, shared with KairosGPT.
 
-The two latest weekly anchors, including published or MCP PROPUESTO candidates,
-may supply a SIMULATION. Only independently approved pivots enable operations.  No daily maxima, O2 legacy inverse Fibonacci or
+Canonical cycle pairs CL/O1 (O2) and O2/O3 (O4), including published
+PROPUESTO pivots, may supply a SIMULATION. Only independently approved pivots enable operations.  No daily maxima, O2 legacy inverse Fibonacci or
 unvalidated Elliott guesses.  Pure function: no MCP calls or Sheet writes.
 
 This is deliberately NOT a restriction on ordinary VENTAS or on explicitly
@@ -160,7 +160,7 @@ def select_buy_impulse(weeks, published=None, *, left=5, right=5):
 def published_buy_impulse(published):
     """MASTER is authoritative for dated simulation anchors, regardless of MCP.
 
-    None means an incomplete published pair, permitting MCP fallback. Invalid
+    None means no published structure, permitting proposed CL/O1 fallback. Invalid
     published chronology or values block; market data never replaces them.
     """
     from pivot_timeline import timeline_issues
@@ -172,7 +172,6 @@ def published_buy_impulse(published):
     waves=published.get('waves') or {}
     states={'ESTIMADO':'PROPUESTO','CANDIDATO':'PROPUESTO',
             'VALIDADO_TECNICAMENTE':'VALIDADO'}
-    lows=[]
     def anchor(name,price,day,status):
         if price is None or not day:return None
         st=states.get(str(status or 'PROPUESTO').upper(),str(status or 'PROPUESTO').upper())
@@ -184,26 +183,40 @@ def published_buy_impulse(published):
                     week_start=(dt-timedelta(days=dt.weekday())).isoformat(),
                     status=st,source='07_PIVOTES_PUBLICADO')
     try:
-        cl=anchor('CL',published.get('cycle_low'),published.get('cl_date'),published.get('cl_status'))
-        if cl:lows.append(cl)
-        for key in ('o2','o4'):
+        if not published or not any((published.get('cycle_low'),published.get('cl_date'),waves)):
+            return None
+        pivots={'CL':anchor('CL',published.get('cycle_low'),published.get('cl_date'),published.get('cl_status'))}
+        for key in ('o1','o2','o3','o4','o5'):
             rec=waves.get(key) or {}
-            item=anchor(key.upper(),rec.get('price'),rec.get('date'),rec.get('status'))
-            if item:lows.append(item)
-        if not lows:return None
-        low=max(lows,key=lambda x:x['date'])
-        high_key={'CL':'o1','O2':'o3','O4':'o5'}[low['pivot']]
-        rec=waves.get(high_key) or {}
-        high=anchor(high_key.upper(),rec.get('price'),rec.get('date'),rec.get('status'))
-        if high is None:return None
+            pivots[key.upper()]=anchor(key.upper(),rec.get('price'),rec.get('date'),rec.get('status'))
+        # The correction is selected from completed impulse PAIRS, never from
+        # the latest LOW alone. O2 does not replace CL while O3 is missing.
+        mode='O4' if pivots['O3'] is not None else 'O2'
+        names=('O2','O3') if mode=='O4' else ('CL','O1')
+        low,high=(pivots[n] for n in names)
+        if low is None or high is None:return blocked('PAR_'+mode+'_PUBLICADO_INCOMPLETO')
         if high['date']<=low['date'] or high['price']<=low['price']:
             return blocked('IMPULSO_PUBLICADO_INVALIDO')
+        if mode=='O4':
+            cl,o1=pivots['CL'],pivots['O1']
+            if not cl or not o1 or not (cl['price']<low['price']<o1['price']<high['price']):
+                return blocked('ESTRUCTURA_O4_INVALIDA')
+        terminal=pivots['O5'] and pivots['O5']['status']=='CONFIRMADO'
+        correction=pivots['O4' if mode=='O4' else 'O2']
+        finished=correction and correction['status']=='CONFIRMADO'
+        provisional=any(x and x['status']=='PROPUESTO' for x in pivots.values())
+        phase=('CICLO_COMPLETO' if terminal else
+               ('O5_EN_DESARROLLO' if mode=='O4' else 'O3_EN_DESARROLLO') if finished else
+               mode+('_PROPUESTA' if provisional else '_EN_SEGUIMIENTO'))
         grid=fib_grid('O2',{'CL':low['price'],'O1':high['price']})
-        provisional=any(x['status']=='PROPUESTO' for x in (low,high))
-        return dict(eligible=True,status='PROPUESTO_SIMULACION' if provisional else 'SIMULACION_ESTRUCTURA_PUBLICADA',
-            simulation_only=True,operational_blocked=True,
-            reason='P1_P2_MASTER_PRIORITARIO',mode=_anchor_match(published,low,high),
-            anchors={'low':low,'high':high},
+        eligible=not (terminal or finished)
+        return dict(eligible=eligible,status=('BLOQUEADO' if not eligible else
+                    'PROPUESTO_SIMULACION' if provisional else 'SIMULACION_ESTRUCTURA_PUBLICADA'),
+            simulation_only=True,operational_blocked=True,cycle_phase=phase,
+            anchor_pair='/'.join(names),cycle_basis='07_PIVOTES_PUBLICADO',
+            reason=('CICLO_COMPLETO_REQUIERE_NUEVO_CL' if terminal else
+                    'CORRECCION_CONFIRMADA_ESPERAR_SIGUIENTE_IMPULSO' if finished else 'P1_P2_MASTER_PRIORITARIO'),
+            mode=mode,anchors={'low':low,'high':high},
             pivot_authority={k:{'pivot':v['pivot'],'status':v['status']} for k,v in [('low',low),('high',high)]},
             levels=dict(zip(('ref382','c1','c2','ref786'),grid.values())),
             requires_explicit_user_trade_approval=True)
@@ -212,7 +225,8 @@ def published_buy_impulse(published):
 
 
 def select_p1_p2_buy_impulse(weeks, published=None, archived=None):
-    """Simulación: último P1 semanal documentado, incluso PROPUESTO;
+    """Simulación por ciclo: CL/O1 para O2; O2/O3 para O4.
+    Sin estructura publicada, proponer CL archivado y máximo semanal posterior;
     P2 es el mayor HIGH de semanas UTC completas posteriores a P1.
 
     Nunca inferir un P1 a partir de precios Fibo ni de Spot. Un CL/MIN
@@ -254,10 +268,6 @@ def select_p1_p2_buy_impulse(weeks, published=None, archived=None):
         else:
             add_p1('CL',archived.get('cycle_low'),archived.get('cl_date'),
                    'PROPUESTO','MCP_ARCHIVE_PROPUESTO')
-        for key in ('o2','o4'):
-            rec=(published.get('waves') or {}).get(key) or {}
-            add_p1(key.upper(),rec.get('price'),rec.get('date'),rec.get('status'),
-                   '07_PIVOTES_PUBLICADO')
         if not possible:return deny('P1_ND')
         p1=max(possible,key=lambda x:x['date'])
         located=next((i for i,w in enumerate(weeks)

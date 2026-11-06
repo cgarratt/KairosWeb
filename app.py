@@ -36,7 +36,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.6.1'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.6.2'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -72,7 +72,7 @@ def policy_numeric(key, allowed):
 MODE_DEFS = [
     {'slug':'portafolio','name':'Portafolio','subtitle':'Visión ejecutiva y valoración en BTC','description':'Única página principal: distribución, balance, rentabilidad y custodia.'},
     {'slug':'balancer','name':'Balancer','subtitle':'Rebalanceo y liquidez','description':'Propuestas de rebalanceo, control de piso de liquidez y protección de Core.'},
-    {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Retrocesos desde P1 semanal PROPUESTO/VALIDADO/CONFIRMADO y P2 máximo posterior; solo simulaciones INFRA.'},
+    {'slug':'compras','name':'Compras','subtitle':'Despliegue de liquidez','description':'Anclas por ciclo: O2 usa CL/O1; O4 usa O2/O3. Solo simulaciones INFRA.'},
     {'slug':'ventas','name':'Ventas','subtitle':'Objetivo USDT','description':'Propuestas solo SELL para acercarse a la meta de liquidez y reducir sobrepeso.'},
     {'slug':'ordenes','name':'Órdenes','subtitle':'Seguimiento de órdenes','description':'Propuestas por onda y ejecuciones acreditadas mediante KairosGPT.'},
     {'slug':'forecast','name':'Forecast','subtitle':'Cycle Low → O5','description':'Tabla de niveles O2C1–O2C4 y ondas/pivotes proyectados; todo es simulación.'},
@@ -1248,9 +1248,9 @@ def build_mode_payload(slug, d, observed):
             'weekly_context':weekly_context,
             'drift_band_pp':approved_numeric('DRIFT_BAND_PP'),
             'structural_liquidity_target':approved_numeric('STRUCTURAL_USDT_TARGET'),
-            'notes':['Presupuesto O2/O4: todo USDT no QF, utiliza primero liquidez semanal y después Reserva Balancer asignada, sin doble asignación.','Compras: P1 es el último mínimo semanal fechado (PROPUESTO/VALIDADO/CONFIRMADO); P2 es el mayor máximo semanal cerrado posterior.',
+            'notes':['Presupuesto O2/O4: todo USDT no QF, utiliza primero liquidez semanal y después Reserva Balancer asignada, sin doble asignación.','Compras: P1/P2 = CL/O1 para O2; O2/O3 para O4 cuando el impulso esté publicado completo y sea coherente.',
              'O2 aplica sus pesos; O4 sus pesos; retroceso alcista genérico utiliza pesos O2 publicados.',
-             'Sin P1 con fecha/precio válidos o sin máximo semanal posterior P2: USDT 0. PROPUESTO permite simulación, nunca ejecución real; compra solo INFRA y fondo no gastado queda en USDT.',
+             'Sin pareja canónica fechada y coherente: USDT 0. PROPUESTO permite simulación, nunca ejecución real; compra solo INFRA y fondo no gastado queda en USDT.',
              'Ventas ordinarias y Forecast hipotético no heredan este bloqueo. Simulación no genera órdenes.']}
         buy_rows=[]
         for r in under:

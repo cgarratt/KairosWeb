@@ -1,11 +1,17 @@
-# KairosWeb v4.6.1
+# KairosWeb v4.6.2 — Compras por ciclo
 
-Mueve los ocho selectores de niveles Fibo de ventas O3/O5 a Simulación integral O2 → O5, antes de la distribución porcentual. Añade 261.8% y 361.8% tanto a los selectores de cada venta como a los puntos finales O3/O5 de la trayectoria.
+P1/P2 se seleccionan por parejas canónicas del mismo ciclo, nunca por el mínimo más reciente:
+- O2: CL/O1. Un O2 propuesto no desplaza CL.
+- O4: O2/O3 publicados, fechados y coherentes. O3 propuesto permite solo escenario O4 propuesto.
+- O2 confirmado sin O3: fase O3 en desarrollo, sin nueva asignación.
+- O4 confirmado: fase O5 en desarrollo, sin nueva asignación.
+- O5 confirmado: ciclo completo; requiere nuevo ciclo con CL/O1 revisados.
+- Cronología o estructura inválida bloquea el token. No se reemplazan anclas publicadas con máximos MCP.
 
-Opciones: 38.2%, 50%, 61.8%, 78.6%, 100%, 127.2%, 161.8%, 261.8%, 361.8%. Etiquetas y cálculos de la simulación comparten los mismos niveles. Solo participan niveles alcanzados por el punto final O3/O5 seleccionado en trayectoria. Se conserva el orden ascendente V1–V4 y suma de asignaciones 100%.
+La tabla muestra fase, pareja y rol de P1/P2. El selector recalcula la fase al cargar el MASTER; no vigila continuamente ni publica pivotes. PROPUESTO no certifica Elliott ni habilita órdenes reales. Elegibilidad estructural no equivale a asignación: siguen aplicando INFRA, estados, caja y límites.
 
-Selecciones locales, reiniciadas al recargar. No modifica MASTER, órdenes ni pivotes publicados.
+Validación: 15 pruebas unitarias, comprobación de selección en 12 tokens con pivotes publicados leídos en esta sesión; sin valoración Spot. Forecast CL/O1 sin cambios. Se conserva la simulación integral y sus selectores Fibo de v4.6.1. No modifica el MASTER ni cambia estados de órdenes.
 
-Descomprimir y reemplazar los archivos del repositorio Web sobre v4.6.0 y desplegar en Render. No requiere cambios MCP ni de entorno.
+Instalación: descomprimir y reemplazar archivos en la raíz del repositorio Web v4.6.1; desplegar en Render. Sin cambios MCP ni variables de entorno. El paquete incluye la copia compat del selector; no instala instrucciones del Proyecto GPT.
 
-Validación local: 244 pruebas aprobadas. Despliegue remoto pendiente.
+Despliegue remoto y comprobación visual en producción pendientes.

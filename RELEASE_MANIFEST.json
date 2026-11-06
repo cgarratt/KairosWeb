@@ -1,11 +1,11 @@
 {
   "product": "KairosWeb",
-  "version": "4.6.1",
-  "base": "4.6.0",
+  "version": "4.6.2",
+  "base": "4.6.1",
   "status": "SOURCE_RELEASE",
   "deployed": false,
-  "validation": "VALIDACION_RELEASE_v4_6_1.json",
-  "release_notes": "RELEASE_NOTES_v4.6.1.md",
   "render_deployment_verified": false,
-  "scope": "INTEGRAL_SALE_CONTROLS_AND_EXTENDED_FIBO_OPTIONS"
+  "scope": "COMPRAS_CANONICAL_DYNAMIC_CYCLE_ANCHORS",
+  "validation": "VALIDACION_RELEASE_v4_6_2.json",
+  "release_notes": "RELEASE_NOTES_v4.6.2.md"
 }

@@ -1,0 +1,270 @@
+{
+  "kind": "OFFLINE_PUBLISHED_PIVOTS_NO_SPOT",
+  "source_snapshot": "KAIROS-20261106T020140Z-GPT-BALANCER-4BUY",
+  "results": [
+    {
+      "token": "BTC",
+      "eligible": true,
+      "mode": "O2",
+      "phase": "O2_PROPUESTA",
+      "P1": {
+        "pivot": "CL",
+        "price": 57800.19,
+        "date": "2026-07-01",
+        "week_start": "2026-06-29",
+        "status": "VALIDADO",
+        "source": "07_PIVOTES_PUBLICADO"
+      },
+      "P2": {
+        "pivot": "O1",
+        "price": 87395.67,
+        "date": "2026-09-21",
+        "week_start": "2026-09-21",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      }
+    },
+    {
+      "token": "ETH",
+      "eligible": true,
+      "mode": "O2",
+      "phase": "O2_PROPUESTA",
+      "P1": {
+        "pivot": "CL",
+        "price": 1505.68,
+        "date": "2026-06-06",
+        "week_start": "2026-06-01",
+        "status": "VALIDADO",
+        "source": "07_PIVOTES_PUBLICADO"
+      },
+      "P2": {
+        "pivot": "O1",
+        "price": 2807.34,
+        "date": "2026-09-21",
+        "week_start": "2026-09-21",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      }
+    },
+    {
+      "token": "SOL",
+      "eligible": true,
+      "mode": "O2",
+      "phase": "O2_PROPUESTA",
+      "P1": {
+        "pivot": "CL",
+        "price": 60.13,
+        "date": "2026-06-06",
+        "week_start": "2026-06-01",
+        "status": "VALIDADO",
+        "source": "07_PIVOTES_PUBLICADO"
+      },
+      "P2": {
+        "pivot": "O1",
+        "price": 124.95,
+        "date": "2026-09-27",
+        "week_start": "2026-09-21",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      }
+    },
+    {
+      "token": "LINK",
+      "eligible": true,
+      "mode": "O2",
+      "phase": "O2_PROPUESTA",
+      "P1": {
+        "pivot": "CL",
+        "price": 6.996,
+        "date": "2026-06-06",
+        "week_start": "2026-06-01",
+        "status": "VALIDADO",
+        "source": "07_PIVOTES_PUBLICADO"
+      },
+      "P2": {
+        "pivot": "O1",
+        "price": 15.777,
+        "date": "2026-09-29",
+        "week_start": "2026-09-28",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      }
+    },
+    {
+      "token": "HYPE",
+      "eligible": true,
+      "mode": "O4",
+      "phase": "O4_PROPUESTA",
+      "P1": {
+        "pivot": "O2",
+        "price": 51.11,
+        "date": "2026-08-02",
+        "week_start": "2026-07-27",
+        "status": "VALIDADO",
+        "source": "07_PIVOTES_PUBLICADO"
+      },
+      "P2": {
+        "pivot": "O3",
+        "price": 97.885,
+        "date": "2026-09-23",
+        "week_start": "2026-09-21",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      }
+    },
+    {
+      "token": "HBAR",
+      "eligible": true,
+      "mode": "O2",
+      "phase": "O2_PROPUESTA",
+      "P1": {
+        "pivot": "CL",
+        "price": 0.06429,
+        "date": "2026-08-17",
+        "week_start": "2026-08-17",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      },
+      "P2": {
+        "pivot": "O1",
+        "price": 0.13096,
+        "date": "2026-09-28",
+        "week_start": "2026-09-28",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      }
+    },
+    {
+      "token": "SUI",
+      "eligible": true,
+      "mode": "O2",
+      "phase": "O2_PROPUESTA",
+      "P1": {
+        "pivot": "CL",
+        "price": 0.6359,
+        "date": "2026-08-18",
+        "week_start": "2026-08-17",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      },
+      "P2": {
+        "pivot": "O1",
+        "price": 1.2938,
+        "date": "2026-09-21",
+        "week_start": "2026-09-21",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      }
+    },
+    {
+      "token": "ONDO",
+      "eligible": true,
+      "mode": "O2",
+      "phase": "O2_PROPUESTA",
+      "P1": {
+        "pivot": "CL",
+        "price": 0.2018,
+        "date": "2026-02-06",
+        "week_start": "2026-02-02",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      },
+      "P2": {
+        "pivot": "O1",
+        "price": 0.4877,
+        "date": "2026-05-09",
+        "week_start": "2026-05-04",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      }
+    },
+    {
+      "token": "PUMPFUN",
+      "eligible": true,
+      "mode": "O2",
+      "phase": "O2_PROPUESTA",
+      "P1": {
+        "pivot": "CL",
+        "price": 0.001151,
+        "date": "2026-06-25",
+        "week_start": "2026-06-22",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      },
+      "P2": {
+        "pivot": "O1",
+        "price": 0.006806,
+        "date": "2026-09-28",
+        "week_start": "2026-09-28",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      }
+    },
+    {
+      "token": "PLUME",
+      "eligible": true,
+      "mode": "O2",
+      "phase": "O2_PROPUESTA",
+      "P1": {
+        "pivot": "CL",
+        "price": 0.00836,
+        "date": "2025-10-10",
+        "week_start": "2025-10-06",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      },
+      "P2": {
+        "pivot": "O1",
+        "price": 0.01725,
+        "date": "2026-05-18",
+        "week_start": "2026-05-18",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      }
+    },
+    {
+      "token": "VIRTUAL",
+      "eligible": true,
+      "mode": "O2",
+      "phase": "O2_PROPUESTA",
+      "P1": {
+        "pivot": "CL",
+        "price": 0.4593,
+        "date": "2026-02-06",
+        "week_start": "2026-02-02",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      },
+      "P2": {
+        "pivot": "O1",
+        "price": 0.9783,
+        "date": "2026-05-04",
+        "week_start": "2026-05-04",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      }
+    },
+    {
+      "token": "PEPE",
+      "eligible": true,
+      "mode": "O2",
+      "phase": "O2_PROPUESTA",
+      "P1": {
+        "pivot": "CL",
+        "price": 2.23e-06,
+        "date": "2026-07-01",
+        "week_start": "2026-06-29",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      },
+      "P2": {
+        "pivot": "O1",
+        "price": 5.36e-06,
+        "date": "2026-09-22",
+        "week_start": "2026-09-21",
+        "status": "PROPUESTO",
+        "source": "07_PIVOTES_PUBLICADO"
+      }
+    }
+  ]
+}
