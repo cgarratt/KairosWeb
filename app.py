@@ -1,3 +1,4 @@
+from drift_policy import relative_band, relative_drift, classify as classify_relative
 """KairosWeb: Google Sheets published state + Binance/Hyperliquid MCP only."""
 import asyncio
 import json
@@ -37,7 +38,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.6.3'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.6.4'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -758,12 +759,12 @@ def fmt_price(v):
 def fmt_pct(v):
     return f"{v:.1f}%"
 
-def tone_from_drift(d, band_pp=None):
+def tone_from_drift(d, band_pp=None, target=None):
     # The same MASTER-approved band drives classification and visual styling.
-    band=approved_numeric('DRIFT_BAND_PP') if band_pp is None else float(band_pp)
+    band=relative_band(PARAMETERS) if band_pp is None else float(band_pp)
     if not math.isfinite(band) or band < 0:
         raise SheetDataError('DRIFT_BAND_PP: invalid band')
-    return drift_tone(d,band)
+    return drift_tone(d,band*target if target is not None else band)
 
 def custody_summary(prices):
     sums={'HODL_bloqueado':0.0,'Core_estrategico':0.0,'Exchange_declarado':0.0}
@@ -972,8 +973,10 @@ def core_dashboard(prices):
     for row in rows:
         row['weight']=row['value']/portfolio_crypto if portfolio_crypto else 0
         row['drift_pp']=(row['weight']-row['target'])*100
-        band=approved_numeric('DRIFT_BAND_PP')
-        row['status']='SOBRE' if row['drift_pp']>band else 'INFRA' if row['drift_pp'] < -band else 'NEUTRAL'
+        band=relative_band(PARAMETERS)
+        row['drift_relative_pct']=relative_drift(row['weight'],row['target'])
+        row['drift_band_pp']=band*row['target']
+        row['status']=classify_relative(row['weight'],row['target'],band)
     liquidity=SNAPSHOT['physical_total_USDT']
     trading=SNAPSHOT['trading_real_fixed_USDT']
     total_value = portfolio_crypto+liquidity
@@ -1065,9 +1068,9 @@ def bar_card(title, subtitle, items):
 
 def build_mode_payload(slug, d, observed):
     rows = sorted(d['rows'], key=lambda x: x['value'], reverse=True)
-    band=approved_numeric('DRIFT_BAND_PP')
-    under = top_n(rows, key=lambda r: r['drift_pp'], n=6, reverse=False, predicate=lambda r: r['drift_pp'] < -band)
-    over = top_n(rows, key=lambda r: r['drift_pp'], n=6, reverse=True, predicate=lambda r: r['drift_pp'] > band)
+    band=relative_band(PARAMETERS)
+    under = top_n(rows, key=lambda r: r['drift_pp'], n=6, reverse=False, predicate=lambda r: r['drift_pp'] < -band*r['target']-1e-9)
+    over = top_n(rows, key=lambda r: r['drift_pp'], n=6, reverse=True, predicate=lambda r: r['drift_pp'] > band*r['target']+1e-9)
     sellable_over = [r for r in over if r['token'] != 'BTC']
     bsi_rows = [r for r in d['bsi_historical']['rows'] if r['bsi'] is not None]
     top_bsi = sorted(bsi_rows, key=lambda x: x['bsi'], reverse=True)[:6]
@@ -1105,7 +1108,7 @@ def build_mode_payload(slug, d, observed):
             ],
             'bars':[
                 bar_card('Distribución por token','Peso relativo dentro de la manga cripto',[
-                    {'label':r['token'], 'value':r['weight']*100, 'display':fmt_pct(r['weight']*100), 'tone':tone_from_drift(r['drift_pp'])}
+                    {'label':r['token'], 'value':r['weight']*100, 'display':fmt_pct(r['weight']*100), 'tone':tone_from_drift(r['drift_pp'],target=r['target'])}
                     for r in rows[:8]
                 ]),
                 bar_card('Liquidez por venue','USDT físico confirmado por venue',[
@@ -1143,7 +1146,7 @@ def build_mode_payload(slug, d, observed):
             ],
             'bars':[
                 bar_card('Brechas vs target','Diferencias más relevantes en puntos porcentuales',[
-                    {'label':r['token'],'value':abs(r['drift_pp']),'display':('+' if r['drift_pp']>=0 else '')+f"{r['drift_pp']:.1f} pp",'tone':tone_from_drift(r['drift_pp'])}
+                    {'label':r['token'],'value':abs(r['drift_pp']),'display':('+' if r['drift_pp']>=0 else '')+f"{r['drift_pp']:.1f} pp",'tone':tone_from_drift(r['drift_pp'],target=r['target'])}
                     for r in sorted(rows, key=lambda x: abs(x['drift_pp']), reverse=True)[:8]
                 ]),
                 bar_card('BTC Strength Index (BSI)','Información relativa frente a BTC (referencial)',[
@@ -1249,7 +1252,7 @@ def build_mode_payload(slug, d, observed):
             'buy_stage_weights':{t:(fibo_allocations['o4'] if c.get('mode')=='O4' else o2_weights)
                                   for t,c in weekly_context.items()},
             'weekly_context':weekly_context,
-            'drift_band_pp':approved_numeric('DRIFT_BAND_PP'),
+            'drift_band_relative_pct':relative_band(PARAMETERS),
             'structural_liquidity_target':approved_numeric('STRUCTURAL_USDT_TARGET'),
             'notes':['Presupuesto O2/O4: todo USDT no QF, utiliza primero liquidez semanal y después Reserva Balancer asignada, sin doble asignación.','Compras: P1/P2 = CL/O1 para O2; O2/O3 para O4 cuando el impulso esté publicado completo y sea coherente.',
              'O2 aplica sus pesos; O4 sus pesos; retroceso alcista genérico utiliza pesos O2 publicados.',
@@ -1304,8 +1307,8 @@ def build_mode_payload(slug, d, observed):
                                 'target':r['target'],'exchange_units':exch,
                                 'units':r['units'],'tier':r['tier'],'reserved_sell_units':float(r.get('reserved_sell_units',0)),
                                 'max_usdt':min(excess,value), 'free_exchange_usdt':value,
-                                'overweight':r['drift_pp']>band})
-        return {'generated_at':observed,'status_badge':market_source()+' MCP · SIMULACIÓN','snapshot_note':d['note'],'kind':'ventas','current':{'P':p,'cash':cash,'cash_pct':d['usdt_pct']*100,'floor':approved_numeric('STRUCTURAL_USDT_TARGET')*p,'max_percent':max(100*policy_numeric('SLIDER_MAX_SIMULATED_USDT_TARGET',{'APROBADO_SIMULACION'}),d['usdt_pct']*100),'default_percent':100*approved_numeric('ORDINARY_DEFAULT_USDT_TARGET'),'trading':d['trading_reserve'],'band_pp':band},'tokens':sell_tokens, 'notes':['Solo SELL; BTC NEVER SELL. No se altera Core/HODL.','Slider hasta la meta simulada configurada en Google Sheets; 40% no es límite del simulador.','Inventario referencial de Exchange; usuario declara 0 órdenes y 0 fills pendientes, sin certificación remota del exchange.']}
+                                'overweight':r['drift_pp']>band*r['target']+1e-9})
+        return {'generated_at':observed,'status_badge':market_source()+' MCP · SIMULACIÓN','snapshot_note':d['note'],'kind':'ventas','current':{'P':p,'cash':cash,'cash_pct':d['usdt_pct']*100,'floor':approved_numeric('STRUCTURAL_USDT_TARGET')*p,'max_percent':max(100*policy_numeric('SLIDER_MAX_SIMULATED_USDT_TARGET',{'APROBADO_SIMULACION'}),d['usdt_pct']*100),'default_percent':100*approved_numeric('ORDINARY_DEFAULT_USDT_TARGET'),'trading':d['trading_reserve'],'band_relative_pct':band},'tokens':sell_tokens, 'notes':['Solo SELL; BTC NEVER SELL. No se altera Core/HODL.','Slider hasta la meta simulada configurada en Google Sheets; 40% no es límite del simulador.','Inventario referencial de Exchange; usuario declara 0 órdenes y 0 fills pendientes, sin certificación remota del exchange.']}
         needed = max(0.0, usdt_gap)
         sell_rows=[]
         for r in sellable_over:
@@ -1377,7 +1380,7 @@ def build_mode_payload(slug, d, observed):
     if slug == 'alertas':
         alert_rows=[]
         for r in rows:
-            if abs(r['drift_pp']) > approved_numeric('DRIFT_BAND_PP'):
+            if abs(r['drift_pp']) > relative_band(PARAMETERS)*r['target']+1e-9:
                 alert_rows.append([r['token'], 'Composición', f"{r['drift_pp']:+.1f} pp", 'Revisar peso vs target'])
         for r in top_bsi[:4]:
             if r['bsi'] > 20:
@@ -1399,7 +1402,7 @@ def build_mode_payload(slug, d, observed):
             ],
             'bars':[
                 bar_card('Activos a vigilar','Se priorizan mayores desviaciones y BSI alto',[
-                    {'label':r['token'],'value':abs(r['drift_pp']),'display':f"{r['drift_pp']:+.1f} pp",'tone':tone_from_drift(r['drift_pp'])}
+                    {'label':r['token'],'value':abs(r['drift_pp']),'display':f"{r['drift_pp']:+.1f} pp",'tone':tone_from_drift(r['drift_pp'],target=r['target'])}
                     for r in sorted(rows, key=lambda x: abs(x['drift_pp']), reverse=True)[:8]
                 ])
             ],
@@ -1462,7 +1465,7 @@ def build_mode_payload(slug, d, observed):
             ],
             'bars':[
                 bar_card('Peso actual vs target','Referencia rápida de composición',[
-                    {'label':r['token'],'value':r['weight']*100,'display':f"{fmt_pct(r['weight']*100)} / {fmt_pct(r['target']*100)}",'tone':tone_from_drift(r['drift_pp'])} for r in rows[:8]
+                    {'label':r['token'],'value':r['weight']*100,'display':f"{fmt_pct(r['weight']*100)} / {fmt_pct(r['target']*100)}",'tone':tone_from_drift(r['drift_pp'],target=r['target'])} for r in rows[:8]
                 ])
             ],
             'tables':[
@@ -1565,7 +1568,7 @@ def balancer_report(d, observed):
     residual_after_bags=reserves['weekly_uncommitted']
     reserve_nominal=policy_numeric('BALANCER_NOMINAL_REFERENCE_P',{'REFERENCIA_NO_TOPE'})*p
     theoretical_ceiling=reserves['compras_max']
-    band=approved_numeric('DRIFT_BAND_PP')
+    band=relative_band(PARAMETERS)
     # Custody Balancer: published 02_POSICIONES + 04_CUSTODIA, unit-only calculation.
     # The comparison does not assume orders filled or any custody transfer.
     custody_positions = {
@@ -1576,8 +1579,8 @@ def balancer_report(d, observed):
     }
     custody_comparison = compare_custody(custody_positions, g.kairos_state['custody_policy'], min_transfer_fraction=.05,
         reserved_exchange={('PUMPFUN' if r['token']=='PUMP' else r['token']):r.get('reserved_sell_units',0) for r in d['rows']})
-    buy_candidates=[r for r in rows if r['drift_pp'] < -band]
-    sell_candidates=[r for r in rows if r['drift_pp'] > band and r['token']!='BTC']
+    buy_candidates=[r for r in rows if r['drift_pp'] < -band*r['target']-1e-9]
+    sell_candidates=[r for r in rows if r['drift_pp'] > band*r['target']+1e-9 and r['token']!='BTC']
     from orders_inbox import allocate_infra_buys, overweight_sell_plan
     # Reader certifies 05_ORDENES contains no operational open orders.
     # This is *only* the published ledger, NOT live exchange verification.
@@ -1754,7 +1757,7 @@ def orders_inbox_page():
                      'units':r['units'],'target':r['target']} for r in d['rows']]
             buy={'tokens':tokens,'o2_levels':{},'buy_eligibility':{},
                  'buy_stage_weights':{},'forecast_o2_allocation':[25.,25.,25.,25.],
-                 'drift_band_pp':approved_numeric('DRIFT_BAND_PP'),'weekly_context':{}}
+                 'drift_band_relative_pct':relative_band(PARAMETERS),'weekly_context':{}}
         stage='Ensamblaje de propuestas'
         from orders_inbox import build_order_inbox
         from wave_macro_context import published_wave_levels
@@ -2431,7 +2434,7 @@ def _deployed_asset_status():
         'buy_slider_percent_available': ('templates/trade_sim.html', ('Capital para compras O2/O4 (% de USDT sin QF)', 'budgetFromAvailablePercent(target,maxBuyCash)', 'Llenado secuencial: primero C1, luego C2, C3 y C4')),
         'buy_waterfall_fixed_percentages': ('static/purchase_weights.js', ('function waterfall(budget,maximum,percentages)', 'function budgetFromAvailablePercent(percent,maximum)', 'function validateDraft(rawValues)')),
         'balancer_math_v2026': ('orders_inbox.py', ('def sell_capacity_usdt(', 'def overweight_sell_plan(', 'def allocate_infra_buys(', 'def tradingbot_tokens(')),
-        'balancer_wiring_v2026': ('app.py', ('sale_preview=overweight_sell_plan(rows,band)', 'buy_preview=allocate_infra_buys(rows,current_cash_capacity,band)', 'return drift_tone(d,band)', 'def tradingbot_universe():')),
+        'balancer_wiring_v2026': ('app.py', ('sale_preview=overweight_sell_plan(rows,band)', 'buy_preview=allocate_infra_buys(rows,current_cash_capacity,band)', 'return drift_tone(d,band*target if target is not None else band)', 'def tradingbot_universe():')),
         'sales_optimizer_engine': ('static/sales_optimizer.js', ('function calculate(items,physicalCash,targetPct,bandPp,qf=0)', 'const stage1=', 'const stage2Amount=', 'TARGET_REACHED', 'CAPACITY_LIMITED')),
         'sales_optimizer_ui': ('templates/trade_sim.html', ('KairosSalesOptimizer.calculate(', 'sell-plan-status', 'sim-body', 'requested_percent')),
         'balancer_custody_engine': ('custody_balancer.py', ('def compare_custody(', "'ideal_nominal'", "'ideal_feasible'", "'transfer_count'")),

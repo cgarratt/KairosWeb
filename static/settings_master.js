@@ -11,7 +11,7 @@
     parameters:'12_PARAMETROS_KAIROS · Valores aprobados, porcentajes y planes de ventas. Cada parámetro describe su impacto.',
     pivots:'07_PIVOTES · CL y O1–O5: PROPUESTO → VALIDADO (5L/5R+BOS 1W) → CONFIRMADO. «Actualizar candidatos desde MCP» actualiza solo PROPUESTO; VALIDADO y CONFIRMADO conservan precio, fecha y estado. «Validar → Publicar» registra cambios administrativos sin ejecutar órdenes.',mcp:'Diagnóstico MCP independiente del Master. Consultas de solo lectura y reconexión sin reiniciar Render.'};
   const PARAM_GROUPS=[
-    {id:'portfolio',name:'Portafolio',description:'Meta de liquidez y tolerancia de desvío.',keys:['STRUCTURAL_USDT_TARGET','DRIFT_BAND_PP']},
+    {id:'portfolio',name:'Portafolio',description:'Meta de liquidez y tolerancia de desvío.',keys:['STRUCTURAL_USDT_TARGET','DRIFT_BAND_RELATIVE_PCT']},
     {id:'o2',name:'Compras O2 · Forecast',description:'Cuatro retrocesos independientes: 100% del presupuesto máximo de 25% P de O2.',prefix:'FORECAST_O2_FIB_'},
     {id:'o3',name:'Ventas O3 · Forecast',description:'Cuatro extensiones independientes: 100% de las unidades elegibles para O3. Sin límite por % de USDT; capacidad Exchange/Tier.',prefix:'FORECAST_O3_FIB_',keys:['O3_BTC_PROCEEDS_FRACTION','O3_USDT_PROCEEDS_FRACTION']},
     {id:'o4',name:'Compras O4 · Forecast',description:'Cuatro retrocesos independientes: 100% del presupuesto máximo de 25% P de O4.',prefix:'FORECAST_O4_FIB_'},
@@ -94,7 +94,7 @@
       cell.append(el('span','settings-hint','Valor publicado'),el('strong','computed-value',fmt.toDisplay(entry.value,entry)+'%'));
       const link=el('a','settings-hint','Editar en Objetivos de gestión');link.href='/settings?tab=portfolio_goals';cell.append(link);item.append(cell);return;
     }
-    const holder=el('div','settings-field');const name=el('label','',tab==='parameters'&&entry.key?.endsWith('_PCT')?'Asignación (%)':label);
+    const holder=el('div','settings-field');const name=el('label','',entry.key==='DRIFT_BAND_RELATIVE_PCT'?'Tolerancia (%)':tab==='parameters'&&entry.key?.endsWith('_PCT')?'Asignación (%)':label);
     let input;if(field==='tier'){
       input=el('select');for(const v of ['T1','T2','T3']){const option=el('option','',v);option.value=v;input.append(option);}input.value=entry[field];
     }else{

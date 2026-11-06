@@ -6,7 +6,7 @@
     'QF_MARGIN_CAP_PER_POSITION',
     'QF_ACCOUNT_RISK_PER_TRADE','QF_ACCOUNT_RISK_TOTAL','PROXIMITY_BAND']);
   const percentDirectKeys=new Set(['TRIGGER_STRICT_GT']);
-  const labels={BALANCER_MAX_PORTFOLIO_FRACTION:'Reserva Balancer: máximo del portafolio',TRADING_MAX_PORTFOLIO_FRACTION:'Reserva Trading: máximo del portafolio',DRIFT_BAND_PP:'Tolerancia de desvío del Balancer',STRUCTURAL_USDT_TARGET:'Objetivo estructural de liquidez',
+  const labels={BALANCER_MAX_PORTFOLIO_FRACTION:'Reserva Balancer: máximo del portafolio',TRADING_MAX_PORTFOLIO_FRACTION:'Reserva Trading: máximo del portafolio',DRIFT_BAND_RELATIVE_PCT:'Tolerancia relativa al peso objetivo (%)',STRUCTURAL_USDT_TARGET:'Objetivo estructural de liquidez',
     O3_BTC_PROCEEDS_FRACTION:'Ventas O3: proporción destinada a BTC',O3_USDT_PROCEEDS_FRACTION:'Ventas O3: proporción mantenida en USDT',
     O5_BTC_PROCEEDS_FRACTION:'Ventas O5: proporción propuesta para BTC',O5_USDT_PROCEEDS_FRACTION:'Ventas O5: proporción mantenida en USDT',
     O5_STAGED_TRANCHES:'Tramos de venta históricos de O5 (referencia, no editar)',
@@ -27,7 +27,7 @@
   }
   function scale(entry){const k=entry.key||'';
     if(/^FORECAST_O[2345]_FIB_(?:382|500|618|786|1618|2618|3618|4618)_PCT$/.test(k))return 'percent-direct';
-    if(k==='DRIFT_BAND_PP')return 'pp';
+    if(k==='DRIFT_BAND_RELATIVE_PCT')return 'percent-direct';
     if(percentDirectKeys.has(k))return 'percent-direct';
     if(fractionKeys.has(k)||String(entry.unit||'').includes('fraction'))return 'fraction';
     if(k==='O5_STAGED_TRANCHES'||/^FORECAST_O[2345]_FIB_ALLOCATION$/.test(k))return 'percent-list';

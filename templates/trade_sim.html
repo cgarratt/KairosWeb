@@ -61,7 +61,7 @@
 {% if mode.slug=='compras' %}
 <section class="panel span-12" id="o2-fibonacci-panel" data-o2-ui-version="{{ master }}"><h2>Maestro de Precios - Retrocesos Fibo</h2>
 <p class="sub">Anclas por ciclo: <strong>O2: P1 = CL, P2 = O1</strong> · <strong>O4: P1 = O2, P2 = O3</strong>. Un O2 propuesto no cambia las anclas por sí solo. Las fases propuestas son escenarios, no confirmaciones.</p>
-<p class="sub">Solo se colorean Precio, % Peso y USDT cuando el token recibe <strong>USDT &gt; 0</strong> en ese tramo simulado. Semáforo por <strong>desviación del peso cripto post-compra frente al objetivo</strong>, en puntos porcentuales (pp): <strong>verde</strong> = alcanza el objetivo (≥ 0 pp); <strong>ámbar</strong> = desde −1 pp hasta &lt; 0 pp; <strong>rojo</strong> = por debajo de −1 pp. USDT $0 y N/D sin color. Esto no indica ejecución real ni altera el estado de P1/P2.</p>
+<p class="sub">Solo se colorean Precio, % Peso y USDT cuando el token recibe <strong>USDT &gt; 0</strong> en ese tramo simulado. Semáforo por <strong>desviación del peso cripto post-compra frente al objetivo</strong>, en % relativo: <strong>verde</strong> = dentro de la tolerancia configurada; <strong>ámbar</strong> = hasta el doble de tolerancia; <strong>rojo</strong> = fuera de ese rango. USDT $0 y N/D sin color. Esto no indica ejecución real ni altera el estado de P1/P2.</p>
 <div id="venue-cash-summary"></div>
 <div class="o2-table-scroll"><table class="o2-table"><thead><tr><th>Token / Venue</th><th>Spot</th><th>P1</th><th>P2</th><th>Precio 38.2%</th><th>% Peso</th><th>USDT</th><th>Precio 50%</th><th>% Peso</th><th>USDT</th><th>Precio 61.8%</th><th>% Peso</th><th>USDT</th><th>Precio 78.6%</th><th>% Peso</th><th>USDT</th><th>Total USDT</th></tr></thead><tbody id="fib-body"></tbody><tfoot id="fib-total"></tfoot></table></div>
 <p class="sub" id="fibo-indicator-legend">Indicadores: 🟢 Desv. &gt;5% · 🟡 Desv. 0–5% · 🔴 Desv. &lt;0% · 🔵 Confirmada/Ejecutada · ⚪ No aplica. Desv. % = (Spot − objetivo) / objetivo × 100.</p>
@@ -141,12 +141,12 @@ function renderO2Fibonacci(sim){
     const postWeight=sim.snapshots[j]?.postWeights?.[i];
     const weightText=hasLevel&&Number.isFinite(postWeight)?(postWeight*100).toFixed(2)+'%':'N/D';
     const semaphore=hasLevel
-      ? window.KairosO2Sequential.postBuySemaphore(amount,postWeight,t.target)
+      ? window.KairosO2Sequential.postBuySemaphore(amount,postWeight,t.target,source.drift_band_relative_pct)
       : {state:'none',driftPP:null};
     const css=semaphore.state==='none'?'':'buy-weight-'+semaphore.state;
     const explanation=semaphore.state==='none'
       ? (amount>0?'Sin valoración post-compra verificable':'Sin USDT asignado en este tramo: no se colorea')
-      : `Compra hipotética ${dollar(amount)} · Peso post-compra ${weightText} · Objetivo ${(100*t.target).toFixed(2)}% · Desviación ${semaphore.driftPP.toFixed(2)} pp · Semáforo ${semaphore.state.toUpperCase()}. No es orden.`;
+      : `Compra hipotética ${dollar(amount)} · Peso post-compra ${weightText} · Objetivo ${(100*t.target).toFixed(2)}% · Desviación relativa ${Number(semaphore.driftRelativePct).toFixed(2)}% (${semaphore.driftPP.toFixed(2)} pp) · Semáforo ${semaphore.state.toUpperCase()}. No es orden.`;
     return `<td class="${css}" data-sort-value="${hasLevel?level:''}" title="${explanation}">${fibPrice(level)} ${orderClass?'<span role="img" aria-label="'+orderClass.effective_status+'" title="'+orderClass.effective_status+' · '+(orderClass.reason||'')+'">'+orderClass.indicator+'</span>':''}</td><td class="${css}" data-sort-value="${hasLevel&&Number.isFinite(postWeight)?postWeight:''}" title="${explanation}">${weightText}</td><td class="${css}" data-sort-value="${amount}" title="${explanation}">${dollar(amount)}</td>`;
   }).join('');
   const ctx=source.weekly_context?.[t.token]||{};
@@ -183,6 +183,7 @@ if(mode==='compras'){
   const selectedMix=fiboCustom?fiboPercentages:fiboMasterPercentages;
   const stagedPlan=window.KairosPurchaseWeights.waterfall(referenceCapacity,maxBuyCash,selectedMix);
   const sim=window.KairosO2Sequential.calculate(source.tokens,source.o2_levels,appliedWeights,stagedPlan.selectedBudget,source.drift_band_pp,{
+    relativeBandPct:source.drift_band_relative_pct,
     requireEligibility:true,eligibility:source.buy_eligibility,weightsByToken:appliedByToken,
     venueFreeUSDT:source.venue_free_usdt,tokenVenues:source.token_venues,
     stageBudgets:stagedPlan.stageBudgets,orderStates:source.buy_order_states,
@@ -195,7 +196,7 @@ if(mode==='compras'){
    el('actual-buy-spend').textContent=dollar(sum);
    el('unallocated-buy-budget').textContent=dollar(sim.unallocated);
   // Conciliación y restricciones conservadas en la lógica; no mostrar nota amarilla.
-  el('venue-cash-summary').innerHTML='<h3>Caja por venue · simulación</h3><table><thead><tr><th>Venue</th><th>Libre inicial</th><th>Asignado</th><th>Restante</th></tr></thead><tbody>'+Object.entries(sim.venueCashInitial).map(([v,start])=>'<tr><td>'+safeHTML(v)+'</td><td>'+dollar(start)+'</td><td>'+dollar(start-sim.venueCashRemaining[v])+'</td><td>'+dollar(sim.venueCashRemaining[v])+'</td></tr>').join('')+'</tbody></table>';
+  el('venue-cash-summary').innerHTML=sim.unallocated>0.01?'<p class="muted">Sin asignar: '+dollar(sim.unallocated)+' · límites de peso objetivo, órdenes o elegibilidad por exchange.</p>':'';
   renderO2Fibonacci(sim);
   sim.stageBudgets.forEach((amount,i)=>{el('buy-tranche-'+i).textContent=dollar(amount);
     el('buy-tranche-limit-'+i).textContent='Cupo máximo: '+dollar(stagedPlan.stageCapacities[i]);});
@@ -204,7 +205,7 @@ if(mode==='compras'){
   const forecastPatrimonyPercent=P>0?100*referenceCapacity/P:0;
   el('forecast-detail-link').href='/mode/forecast?deploy='+encodeURIComponent(forecastPatrimonyPercent.toFixed(4));
 }else{
-  const sim=window.KairosSalesOptimizer.calculate(source.tokens,cash,target,source.current.band_pp,source.current.trading);
+  const sim=window.KairosSalesOptimizer.calculate(source.tokens,cash,target,0,source.current.trading,source.current.band_relative_pct);
   allocated=sim.positions.map(x=>x.sell_usdt);
   const sum=sim.total_usdt;after=sim.cash_after;
   el('third-metric').textContent=dollar(P*target/100)+' ('+target.toFixed(1)+'%)';

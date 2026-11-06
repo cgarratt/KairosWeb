@@ -1,0 +1,27 @@
+{
+  "version": "4.6.4",
+  "status": "PASS_LOCAL",
+  "pytest_passed": 36,
+  "checks": [
+    "relative_10_percent_boundaries",
+    "legacy_pp_not_reinterpreted",
+    "relative_setting_roundtrip_10",
+    "projected_post_buy_denominator",
+    "6200_Binance_full_feasible_spend",
+    "no_forced_target_overshoot",
+    "carry_unused_to_next_positive_tranche",
+    "confirmed_orders_zero_new_cash",
+    "80_seeded_python_js_projected_allocator_parity",
+    "venue_cash_and_QF_conservation",
+    "same_Python_policy_in_Web_and_GPT"
+  ],
+  "master_modified": false,
+  "deployed": false,
+  "production_verified": false,
+  "browser_visual_verified": false,
+  "python_compiled": true,
+  "javascript_syntax": true,
+  "template_syntax_verified": true,
+  "runtime_app_import": "NOT_VERIFIED: environment lacks httpx",
+  "test_data": "SYNTHETIC; balances from screenshots not used as live account inputs"
+}

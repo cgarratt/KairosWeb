@@ -12,12 +12,17 @@ function classifyDrift(weight,target,bandPP){
 // Visual traffic light for positive simulated BUY fills only, based on the
 // weight AFTER the same tranche. Drift thresholds are percentage POINTS.
 // This does not modify trade eligibility: INFRA/targets/QF stay independent.
-function postBuySemaphore(amount,postWeight,targetWeight){
+function postBuySemaphore(amount,postWeight,targetWeight,relativeBandPct=null){
   const fill=Number(amount),post=Number(postWeight),target=Number(targetWeight);
   if(!Number.isFinite(fill)||fill<0.005 || !Number.isFinite(post)||post<0 ||
      !Number.isFinite(target)||target<0 || target>1 || post>1)
     return {state:'none',driftPP:null};
   const driftPP=100*(post-target);
+  if(relativeBandPct!==null && target>0){
+    const driftRelativePct=100*(post/target-1),band=Number(relativeBandPct);
+    if(!Number.isFinite(band)||band<0)return {state:'none',driftPP:null};
+    return {state:Math.abs(driftRelativePct)<=band+1e-8?'green':Math.abs(driftRelativePct)<=2*band+1e-8?'amber':'red',driftPP,driftRelativePct};
+  }
   const epsilon=1e-8; // avoid float noise at exactly target or -1 pp
   if(driftPP>=-epsilon)return {state:'green',driftPP};
   if(driftPP>=-1-epsilon)return {state:'amber',driftPP};
@@ -39,6 +44,13 @@ function proportionalByVenue(gaps,venues,cash,budget){
     Object.keys(free).forEach(v=>{free[v]=Math.max(0,free[v]-delta.reduce((a,x,i)=>a+(venues[i]===v?x:0),0))});
   }
   return {alloc,cash:free};
+}
+function projectedByVenue(values,targets,permitted,venues,cash,budget){
+ const crypto=values.reduce((a,b)=>a+b,0),ceiling=Math.min(budget,Object.values(cash).reduce((a,b)=>a+b,0));
+ const plan=spend=>proportionalByVenue(values.map((v,i)=>permitted[i]?Math.max(0,targets[i]*(crypto+spend)-v):0),venues,cash,spend);
+ let result=plan(ceiling);if(result.alloc.reduce((a,b)=>a+b,0)>=ceiling-1e-8)return result;
+ let lo=0,hi=ceiling;for(let k=0;k<80;k++){const mid=(lo+hi)/2,r=plan(mid);if(r.alloc.reduce((a,b)=>a+b,0)>=mid-1e-9)lo=mid;else hi=mid;}
+ return plan(lo);
 }
 function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
   const levels=levelRows||{}, n=tokens.length, w=weights.map(x=>Math.max(0,Number(x)||0)), sumW=w.reduce((a,b)=>a+b,0);
@@ -93,11 +105,11 @@ function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
     const crypto=values.reduce((a,b)=>a+b,0);
     // Estado ANTES de comprar en este tramo, con compras previas ya incorporadas.
     const preWeights=values.map(x=>crypto>0?x/crypto:NaN);
-    const drift=preWeights.map((v,i)=>classifyDrift(v,target[i],bandPP));
+    const drift=preWeights.map((v,i)=>classifyDrift(v,target[i],policy.relativeBandPct!==undefined?Number(policy.relativeBandPct)*target[i]:bandPP));
     // The four theoretical tranches ALWAYS sum to the full slider budget.
     // A structurally blocked or overweight token cannot diminish the PLAN;
     // its unspent portion remains physical USDT, not an invented fill.
-    const stageBudget=Math.min(cash,stageBudgets[j]);
+    const stageBudget=Math.min(cash,stageBudgets.slice(0,j+1).reduce((a,b)=>a+b,0)-consumed.reduce((a,b)=>a+b,0));
     // Missing Fibonacci anchors have no executable hypothetical limit price.
     // They remain in the portfolio valuation but cannot receive a simulated fill.
     // Canonical Balancer buys: INFRA only (DRIFT_BAND_PP from published
@@ -110,7 +122,7 @@ function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
       return stageWeights[i][j]>0 && prices[i][j]>0 && prices[i][j]<Number(t.price) && state==='PROPUESTA' && allowed[i] && drift[i].status==='INFRA';
     });
     const gap0=permitted.map((yes,i)=>yes?Math.max(0,target[i]*crypto-values[i]):0);
-    const distribution=proportionalByVenue(gap0,venues,venueCash,stageBudget);
+    const distribution=projectedByVenue(values,target,permitted,venues,venueCash,stageBudget);
     venueCash=distribution.cash;
     for(let i=0;i<n;i++){
       const a=distribution.alloc[i];
@@ -128,6 +140,6 @@ function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
   }
   return {venueCashInitial:venueInitial,venueCashRemaining:venueCash,allocationPolicy:"PROPORTIONAL_DEFICIT_BY_VENUE",prices,amounts,stageBudgets,unallocated:Math.max(0,plannedBudget-consumed.reduce((a,b)=>a+b,0)),consumed,totalByToken:amounts.map(a=>a.reduce((s,x)=>s+x,0)),spent:consumed.reduce((a,b)=>a+b,0),cash,snapshots};
 }
-const api={calculate,classifyDrift,postBuySemaphore,proportionalByVenue};if(typeof module!=='undefined'&&module.exports)module.exports=api;
+const api={calculate,classifyDrift,postBuySemaphore,proportionalByVenue,projectedByVenue};if(typeof module!=='undefined'&&module.exports)module.exports=api;
 root.KairosO2Sequential=api;
 })(typeof window!=='undefined'?window:globalThis);

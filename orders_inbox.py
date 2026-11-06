@@ -7,7 +7,7 @@ Real activity remains exclusively in 05_ORDENES/06_FILLS after reconciliation.
 """
 from math import isfinite
 from wave_structure import SELL_RATIOS
-from venue_allocation import proportional_by_venue, funding_venue
+from venue_allocation import proportional_by_venue, projected_by_venue, funding_venue
 
 VENUES = {
     'BTC':'Binance', 'ETH':'Binance', 'SOL':'Binance', 'LINK':'Binance',
@@ -96,9 +96,10 @@ def overweight_sell_plan(rows, band_pp):
         if crypto<=_EPS:break
         candidates=[(100*(values[i]/crypto-targets[i]),i)
                     for i,r in enumerate(rows) if r['token']!='BTC'
-                    and targets[i] < 1 and limits[i]-used[i]>_EPS]
+                    and targets[i] < 1 and limits[i]-used[i]>_EPS
+                    and 100*(values[i]/crypto-targets[i])>r.get('drift_band_pp',band)+1e-8]
         candidates.sort(key=lambda x:(-x[0],x[1]))
-        if not candidates or candidates[0][0]<=band+1e-8:break
+        if not candidates:break
         _,i=candidates[0]
         amount=min(limits[i]-used[i],
                    max(0.,(values[i]-targets[i]*crypto)/(1-targets[i])))
@@ -110,7 +111,7 @@ def overweight_sell_plan(rows, band_pp):
              'cap_usdt':limits[i], 'weight':r['weight'],
              'target':r['target'],'drift':r['drift_pp']}
             for i,r in enumerate(rows) if r['token']!='BTC'
-            and r['drift_pp']>band]
+            and r['drift_pp']>r.get('drift_band_pp',band)]
 
 
 def allocate_infra_buys(rows, budget, band_pp):
@@ -131,7 +132,7 @@ def allocate_infra_buys(rows, budget, band_pp):
         value=_checked(row['value'],f"{row['token']} valuation")
         target=_checked(row['target'],f"{row['token']} target")
         if target>1 or target<=0:continue
-        if 100*(value/crypto-target)<-band-1e-8:
+        if 100*(value/crypto-target)<-row.get('drift_band_pp',band)-1e-8:
             gap=max(0.,target*crypto-value)
             candidates.append((row,gap,target))
     if not candidates:return []
@@ -193,7 +194,7 @@ def _proximity(side, spot, target, threshold):
     return distance, 'EN_ESPERA'
 
 
-def _buy_allocation(items, budget, crypto, drift_band_pp=1.0, venue_cash=None):
+def _buy_allocation(items, budget, crypto, drift_band_pp=1.0, venue_cash=None, relative_band_pct=None):
     """Balancer parity: buy INFRA only, never overshoot per-token targets.
 
     One stage at a time, with the portfolio already marked to the simulated
@@ -205,12 +206,12 @@ def _buy_allocation(items, budget, crypto, drift_band_pp=1.0, venue_cash=None):
     targets=[max(0.,float(x['target'])) for x in items]
     if crypto<=0 or budget<=0:return [0.]*n
     permitted=[i for i in range(n) if
-               targets[i]>0 and (values[i]/crypto-targets[i])*100 < -float(drift_band_pp)-1e-9]
+               targets[i]>0 and (values[i]/crypto-targets[i])*100 < -(float(relative_band_pct)*targets[i] if relative_band_pct is not None else float(drift_band_pp))-1e-9]
     if not permitted:return [0.]*n
     gaps=[max(0.,targets[i]*crypto-values[i]) if i in permitted else 0. for i in range(n)]
     if venue_cash is None:
         return [0.]*n
-    alloc,left=proportional_by_venue(gaps,[funding_venue(x.get('token'),x.get('venue')) for x in items],venue_cash,budget)
+    alloc,left=projected_by_venue(values,targets,[i in permitted for i in range(n)],[funding_venue(x.get('token'),x.get('venue')) for x in items],venue_cash,budget)
     venue_cash.clear();venue_cash.update(left)
     return alloc
 
@@ -274,7 +275,7 @@ def staged_buy_candidates(buy, budget, proximity_pct=1.0):
                     for i,t in enumerate(tokens)]
         values=[units[i]*sim_prices[i] for i in range(len(tokens))]
         crypto=sum(values)
-        planned=min(remaining,stage_budgets[j])
+        planned=min(remaining,sum(stage_budgets[:j+1])-(budget-remaining))
         items=[]
         for i,token_row in enumerate(tokens):
             token=token_row['token']
@@ -286,7 +287,7 @@ def staged_buy_candidates(buy, budget, proximity_pct=1.0):
             items.append({'target':targets[i] if may_buy else 0.,
                           'current_usdt':values[i],
                           'venue':token_row.get('venue') or VENUES.get(token),'token':token})
-        spends=_buy_allocation(items,planned,crypto,buy.get('drift_band_pp',1.0),venue_cash)
+        spends=_buy_allocation(items,planned,crypto,buy.get('drift_band_pp',1.0),venue_cash,buy.get('drift_band_relative_pct'))
         actually_spent=0.
         for i,t in enumerate(tokens):
             price=px_all[i][j];a=max(0.,spends[i]) if price else 0.
@@ -409,7 +410,7 @@ def portfolio_candidates(d, bal, drift_band_pp=1.0):
                 value=holdings[token]
                 if target is None or target>=1 or crypto<=0:
                     continue
-                if (value/crypto-target)*100 >= -float(drift_band_pp)-1e-9:
+                if (value/crypto-target)*100 >= -float(row.get('drift_band_pp',float(drift_band_pp)*target))-1e-9:
                     continue  # Only INFRA at THIS step may receive BUY.
                 headroom=max(0.,(target*crypto-value)/(1-target))
                 amount=min(amount,headroom)
@@ -440,7 +441,7 @@ def build_order_inbox(d, buy_payload, balancer_payload, proximity_pct=1.0, wave_
     budget=min(float(d['usdt_operating']),max(0.,float(d['usdt_total'])-float(d['trading_reserve'])))
     buys,unassigned=staged_buy_candidates(buy_payload,budget,threshold)
     technical_sells=structural_sell_candidates(d,buy_payload,wave_levels,threshold)
-    portfolio=portfolio_candidates(d,balancer_payload,buy_payload.get('drift_band_pp',1.0))
+    portfolio=portfolio_candidates(d,balancer_payload,buy_payload.get('drift_band_relative_pct',10.0))
     combined=buys+technical_sells+portfolio
     for c in combined:
         c['near_reference']=(c.get('order_status')!='NO_APLICA' and c['category']=='ESTRUCTURA' and c['proximity']=='CERCA')

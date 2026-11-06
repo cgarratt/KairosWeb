@@ -20,7 +20,7 @@
     }
     return out;
   }
-  function calculate(items,physicalCash,targetPct,bandPp,qf=0){
+  function calculate(items,physicalCash,targetPct,bandPp,qf=0,relativeBandPct=null){
     const cash=finite(physicalCash,'USDT'),target=finite(targetPct,'target %'),band=finite(bandPp,'banda'),reserve=finite(qf,'QF');
     if(items.length!==12||target>100||band>100||reserve>cash)throw Error('DATA ERROR: ventas parámetros');
     const unique=new Set(items.map(x=>x.token));if(unique.size!==12||!unique.has('BTC'))throw Error('DATA ERROR: universo 12 tokens');
@@ -43,7 +43,7 @@
       const sleeve=now.reduce((s,x)=>s+x,0);
       if(sleeve<=EPS)break;
       const candidates=items.map((x,i)=>({i,drift:100*(now[i]/sleeve-targets[i]),room:limits[i]-stage1[i]}))
-        .filter(x=>items[x.i].token!=='BTC'&&x.drift>band+1e-9&&x.room>EPS&&targets[x.i]<1)
+        .filter(x=>items[x.i].token!=='BTC'&&x.drift>(relativeBandPct===null?band:Number(relativeBandPct)*targets[x.i])+1e-9&&x.room>EPS&&targets[x.i]<1)
         .sort((a,b)=>b.drift-a.drift||a.i-b.i);
       if(!candidates.length)break;
       const {i,room}=candidates[0];

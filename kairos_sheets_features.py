@@ -30,7 +30,7 @@ INBOX_SHEETS = {
 }
 WRITE_LOCK = threading.Lock()
 EDITABLE_PARAM_KEYS = frozenset({
-    'DRIFT_BAND_PP','STRUCTURAL_USDT_TARGET',
+    'DRIFT_BAND_RELATIVE_PCT','STRUCTURAL_USDT_TARGET',
     'O3_BTC_PROCEEDS_FRACTION','O3_USDT_PROCEEDS_FRACTION',
     'O5_BTC_PROCEEDS_FRACTION','O5_USDT_PROCEEDS_FRACTION',
     'RISK_REWARD_MIN','QF_MARGIN_CAP_PER_POSITION',
@@ -812,26 +812,35 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
             is_tranche=key in ALL_TRANCHE_KEYS
             try:row=_find_row(b,'parameters',key,column=1)
             except SettingsError:
-                if not is_tranche:raise
-                # Create one numeric cell per Fibonacci tranche only when an
-                # administrator intentionally publishes it (never on GET).
-                row=len(b[SHEETS['parameters']])
-                if row>=175:raise SettingsError('Sin espacio libre para parámetros Forecast')
-                stage=STAGE_FOR_KEY[key];idx=TRANCHE_KEYS[stage].index(key)
-                label=TRANCHES[stage][idx][1]
-                metadata=['FORECAST',key,float(DEFAULTS[stage][idx]),'number',
-                  '% de presupuesto 25% P' if stage in ('o2','o4') else '% de unidades elegibles',
-                  'APROBADO_SIMULACION','SIMULACION','KairosWeb Settings · aprobación del usuario',
-                  f'{stage.upper()} Fib {label}: tramo independiente del pool congelado de la onda. No modifica la política operativa.', 'ALTA']
-                for col,v in enumerate(metadata):
-                    if col in (2,7):_set(b,'parameters',row,col,v)
-                    else:change('parameters',row,col,v)
+                if key=='DRIFT_BAND_RELATIVE_PCT':
+                    row=len(b[SHEETS['parameters']])
+                    if row>=int(re.search(r'[A-Z]+(\d+)$',SHEETS['parameters']).group(1))-3:raise SettingsError('Sin espacio para tolerancia')
+                    metadata=['COMPOSICION',key,10.,'number','% relativo al peso objetivo','APROBADO','TODOS','Aprobación usuario · tolerancia relativa 10%', 'INFRA < -tolerancia%; SOBRE > +tolerancia%; NEUTRAL incluye límites. (peso/meta-1)*100.', 'ALTA']
+                    for col,val in enumerate(metadata):change('parameters',row,col,val)
+                elif not is_tranche:raise
+                if is_tranche:
+                    # Create one numeric cell per Fibonacci tranche only when an
+                    # administrator intentionally publishes it (never on GET).
+                    row=len(b[SHEETS['parameters']])
+                    if row>=175:raise SettingsError('Sin espacio libre para parámetros Forecast')
+                    stage=STAGE_FOR_KEY[key];idx=TRANCHE_KEYS[stage].index(key)
+                    label=TRANCHES[stage][idx][1]
+                    metadata=['FORECAST',key,float(DEFAULTS[stage][idx]),'number',
+                      '% de presupuesto 25% P' if stage in ('o2','o4') else '% de unidades elegibles',
+                      'APROBADO_SIMULACION','SIMULACION','KairosWeb Settings · aprobación del usuario',
+                      f'{stage.upper()} Fib {label}: tramo independiente del pool congelado de la onda. No modifica la política operativa.', 'ALTA']
+                    for col,v in enumerate(metadata):
+                        if col in (2,7):_set(b,'parameters',row,col,v)
+                        else:change('parameters',row,col,v)
             ptype=_get(b,'parameters',row,3)
             approved=('APROBADO','APROBADO_SIMULACION') if is_tranche else ('APROBADO','APROBADO_CONDICIONAL')
             if _get(b,'parameters',row,5) not in approved:
                 raise SettingsError('Parámetro no aprobado')
             value=x.get('value')
-            if is_tranche:
+            if key=='DRIFT_BAND_RELATIVE_PCT':
+                value=_numeric(value,key)
+                if value>100:raise SettingsError('Tolerancia: máximo 100%')
+            elif is_tranche:
                 value=_numeric(value,key)
                 if value>100:raise SettingsError(key+': máximo 100%')
             elif ptype in ('number','integer'):
@@ -934,6 +943,12 @@ def settings_data():
                       'target_usdt':float(next(r[1] for r in rows('integral') if r and r[0]==segment))}
                      for segment in ('Liquidez','Trading','HODL + Core','Exchange')] if capital_amount>0 else []
     params=parameter_settings_rows(rows('parameters'))
+    if not any(r['key']=='DRIFT_BAND_RELATIVE_PCT' for r in params):
+        params.append({'key':'DRIFT_BAND_RELATIVE_PCT','module':'COMPOSICION','module_name':'COMPOSICION',
+            'value':10.,'unit':'% relativo al peso objetivo','type':'number','status':'APROBADO',
+            'description':'INFRA < −10%; SOBRE > +10%; NEUTRAL incluye límites. Fórmula: (peso actual / objetivo − 1) × 100. Se escribe al guardar.',
+            'source':'Autorización usuario · release 4.6.4; pendiente de persistir en MASTER','read_only':False})
+
     # 16 separately editable numeric values; draft defaults never edit Sheets.
     existing={r['key'] for r in params}
     defaults=defaults_from_master(state['parameters'])

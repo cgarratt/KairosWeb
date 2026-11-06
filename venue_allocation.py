@@ -68,3 +68,24 @@ def funding_venue(token, venue):
     # Published cash is USDT; Hyperliquid Spot HYPE settles in USDC.
     # Conversion/transfer needs separately verified inputs, not a 1:1 assumption.
     return None if token=='HYPE' and venue=='Hyperliquid' else venue
+
+
+def projected_by_venue(values, targets, permitted, venues, cash, budget):
+    """Largest feasible spend, proportional to projected deficits; no drift ranking.
+    Solve jointly with post-buy crypto denominator and actual venue ceilings.
+    """
+    values=[amount(x) for x in values];targets=[amount(x) for x in targets]
+    if not (len(values)==len(targets)==len(permitted)==len(venues)):raise ValueError('Token mismatch')
+    if any(t>1 for t in targets):raise ValueError('Target >100%')
+    crypto=sum(values);ceiling=min(amount(budget),sum(amount(x) for x in cash.values()))
+    def plan(spend):
+        gaps=[max(0.,targets[i]*(crypto+spend)-values[i]) if permitted[i] else 0. for i in range(len(values))]
+        return proportional_by_venue(gaps,venues,cash,spend)
+    a,left=plan(ceiling)
+    if sum(a)>=ceiling-1e-8:return a,left
+    lo=0.;hi=ceiling
+    for _ in range(80):
+        mid=(lo+hi)/2;a,left=plan(mid)
+        if sum(a)>=mid-1e-9:lo=mid
+        else:hi=mid
+    return plan(lo)
