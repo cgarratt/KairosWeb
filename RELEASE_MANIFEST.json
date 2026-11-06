@@ -1,16 +1,16 @@
 {
   "product": "KairosWeb",
-  "version": "4.6.4",
-  "base": "4.6.3",
+  "version": "4.6.5",
+  "base": "4.6.4",
   "status": "SOURCE_RELEASE",
   "deployed": false,
   "github_published": false,
   "master_modified": false,
   "schema_version": "5.0.0",
-  "validation": "VALIDACION_RELEASE_v4_6_4.json",
-  "tests_passed": 36,
-  "scope": "RELATIVE_DRIFT_AND_PROJECTED_CASH_BY_VENUE",
-  "web_compatible": "4.6.4",
+  "validation": "VALIDACION_RELEASE_v4_6_5.json",
+  "tests_passed": 38,
+  "scope": "REPAIR_STALE_RELEASE_HEALTH_MARKERS",
+  "web_compatible": "4.6.5",
   "gpt_compatible": "1.3.22",
-  "release_notes": "RELEASE_NOTES_v4.6.4.md"
+  "release_notes": "RELEASE_NOTES_v4.6.5.md"
 }

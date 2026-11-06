@@ -1,0 +1,9 @@
+{
+  "version": "4.6.5",
+  "tests_passed": 38,
+  "health_complete_package_http": 200,
+  "health_missing_asset_http": 503,
+  "health_stale_asset_http": 503,
+  "master_mutated": false,
+  "remote_deployment_verified": false
+}

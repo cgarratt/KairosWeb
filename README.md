@@ -1,21 +1,13 @@
-# KairosWeb v4.6.3
+# KairosWeb v4.6.5 · Corrección health Render
 
-Compras proporcional al déficit INFRA con límites por venue. Compatible con KairosGPT1.3.21. Ver RELEASE_NOTES_v4.6.3.md y RELEASE_MANIFEST.json. SOURCE_RELEASE; despliegue pendiente.
+Se reprodujo /health HTTP 503 con el paquete v4.6.4 completo: tres marcadores obsoletos en _deployed_asset_status no coincidían con la lógica vigente. Afectaban venue_buy_orders, buy_postweight_color_ui y sales_optimizer_engine.
 
-# KairosWeb v4.6.2 — Compras por ciclo
+Se actualizan los marcadores a las firmas actuales de asignación por venue, semáforo con tolerancia relativa y optimizador de ventas. Se conserva la verificación estricta de archivos presentes y marcadores. No se cambia la lógica financiera, MCP, MASTER ni órdenes. Metadatos de compatibilidad GPT: 1.3.22.
 
-P1/P2 se seleccionan por parejas canónicas del mismo ciclo, nunca por el mínimo más reciente:
-- O2: CL/O1. Un O2 propuesto no desplaza CL.
-- O4: O2/O3 publicados, fechados y coherentes. O3 propuesto permite solo escenario O4 propuesto.
-- O2 confirmado sin O3: fase O3 en desarrollo, sin nueva asignación.
-- O4 confirmado: fase O5 en desarrollo, sin nueva asignación.
-- O5 confirmado: ciclo completo; requiere nuevo ciclo con CL/O1 revisados.
-- Cronología o estructura inválida bloquea el token. No se reemplazan anclas publicadas con máximos MCP.
+Validación local: 38 pruebas aprobadas (36 heredadas y 2 de regresión health). /health 200 con paquete completo; 503 ante archivo faltante o contenido obsoleto. No acredita diagnóstico de proveedores externos ni despliegue remoto.
 
-La tabla muestra fase, pareja y rol de P1/P2. El selector recalcula la fase al cargar el MASTER; no vigila continuamente ni publica pivotes. PROPUESTO no certifica Elliott ni habilita órdenes reales. Elegibilidad estructural no equivale a asignación: siguen aplicando INFRA, estados, caja y límites.
+## Despliegue
 
-Validación: 15 pruebas unitarias, comprobación de selección en 12 tokens con pivotes publicados leídos en esta sesión; sin valoración Spot. Forecast CL/O1 sin cambios. Se conserva la simulación integral y sus selectores Fibo de v4.6.1. No modifica el MASTER ni cambia estados de órdenes.
+Descomprimir el ZIP y reemplazar los archivos del repositorio KairosWeb. Confirmar el commit y desplegar en Render. Conservar Health Check Path /health. No requiere cambios de variables de entorno, MCP ni KairosGPT. Tras el despliegue, abrir /health: version 4.6.5, status UP, release_assets.consistent true.
 
-Instalación: descomprimir y reemplazar archivos en la raíz del repositorio Web v4.6.1; desplegar en Render. Sin cambios MCP ni variables de entorno. El paquete incluye la copia compat del selector; no instala instrucciones del Proyecto GPT.
-
-Despliegue remoto y comprobación visual en producción pendientes.
+Si continúa el 503, compartir el JSON de /health para identificar qué archivo difiere del paquete.

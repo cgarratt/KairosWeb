@@ -38,7 +38,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.6.4'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.6.5'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -2376,7 +2376,7 @@ def _deployed_asset_status():
         'venue_allocation': ('venue_allocation.py', ('def proportional_by_venue(', 'def cash_from_snapshot(')),
         'venue_buy_ui': ('templates/trade_sim.html', ('venue-cash-summary','venueFreeUSDT:source.venue_free_usdt')),
         'venue_buy_js': ('static/o2_sequential.js', ('function proportionalByVenue(', 'venueCashRemaining')),
-        'venue_buy_orders': ('orders_inbox.py', ('proportional_by_venue(gaps', 'venue_free_usdt')),
+        'venue_buy_orders': ('orders_inbox.py', ('spends=_buy_allocation(items,planned,crypto', 'venue_free_usdt')),
         'compras_template': ('templates/trade_sim.html', ('<th>% Peso</th>', 'renderO2Fibonacci', 'allocation-slider', 'data-o2-ui-version')),
         'o2_simulator': ('static/o2_sequential.js', ('classifyDrift', 'snapshots')),
         'alerts_bell': ('static/alert_bell.js', ('alert-timeframe', '/api/alerts/read', 'event-bull', 'event-bear')),
@@ -2429,13 +2429,13 @@ def _deployed_asset_status():
         'forecast_spot_overlay_v2029': ('templates/forecast.html', ("class:'fc-spot-line'", "'data-spot-reference':spotSource", 'fc.generated_at', "validSpot?[...prices,spot]:prices")),
         'buy_post_fibo_weights': ('static/o2_sequential.js', ('postWeights','postCrypto','stageBudgets','unallocated','policy.stageBudgets')),
         'buy_postweight_semaphore': ('static/o2_sequential.js', ('function postBuySemaphore(', "state:'green'", "state:'amber'", "state:'red'", "state:'none'")),
-        'buy_postweight_color_ui': ('templates/trade_sim.html', ('buy-weight-green', 'buy-weight-amber', 'buy-weight-red', 'postBuySemaphore(amount,postWeight,t.target)', 'USDT &gt; 0')),
+        'buy_postweight_color_ui': ('templates/trade_sim.html', ('buy-weight-green', 'buy-weight-amber', 'buy-weight-red', 'postBuySemaphore(amount,postWeight,t.target,source.drift_band_relative_pct)', 'USDT &gt; 0')),
         'buy_custom_fibo_weights': ('static/purchase_weights.js', ('function rebalance(', 'function normalize(', 'function asFractions(', 'function waterfall(', 'function validateDraft(')),
         'buy_slider_percent_available': ('templates/trade_sim.html', ('Capital para compras O2/O4 (% de USDT sin QF)', 'budgetFromAvailablePercent(target,maxBuyCash)', 'Llenado secuencial: primero C1, luego C2, C3 y C4')),
         'buy_waterfall_fixed_percentages': ('static/purchase_weights.js', ('function waterfall(budget,maximum,percentages)', 'function budgetFromAvailablePercent(percent,maximum)', 'function validateDraft(rawValues)')),
         'balancer_math_v2026': ('orders_inbox.py', ('def sell_capacity_usdt(', 'def overweight_sell_plan(', 'def allocate_infra_buys(', 'def tradingbot_tokens(')),
         'balancer_wiring_v2026': ('app.py', ('sale_preview=overweight_sell_plan(rows,band)', 'buy_preview=allocate_infra_buys(rows,current_cash_capacity,band)', 'return drift_tone(d,band*target if target is not None else band)', 'def tradingbot_universe():')),
-        'sales_optimizer_engine': ('static/sales_optimizer.js', ('function calculate(items,physicalCash,targetPct,bandPp,qf=0)', 'const stage1=', 'const stage2Amount=', 'TARGET_REACHED', 'CAPACITY_LIMITED')),
+        'sales_optimizer_engine': ('static/sales_optimizer.js', ('function calculate(items,physicalCash,targetPct,bandPp,qf=0,relativeBandPct=null)', 'const stage1=', 'const stage2Amount=', 'TARGET_REACHED', 'CAPACITY_LIMITED')),
         'sales_optimizer_ui': ('templates/trade_sim.html', ('KairosSalesOptimizer.calculate(', 'sell-plan-status', 'sim-body', 'requested_percent')),
         'balancer_custody_engine': ('custody_balancer.py', ('def compare_custody(', "'ideal_nominal'", "'ideal_feasible'", "'transfer_count'")),
         'balancer_custody_ui': ('templates/balancer.html', ('id="custody-balancer"', 'Movimientos y distribución posterior', 'r.feasible_pct.hodl', 'payload.custody_comparison')), 
@@ -2532,7 +2532,7 @@ def health():
     with _DEPENDENCY_LOCK:
         last=dict(_DEPENDENCY_LAST)
     response = {'status': 'UP' if assets['consistent'] else 'DEGRADED',
-                'service': 'KairosWeb', 'version': APP_VERSION, 'release_suite':'2026.11.05.1', 'component_versions':{'KairosWeb': APP_VERSION, 'KairosGPT': '1.3.21', 'MCP_Binance': '5.4.1', 'MCP_KuCoin': '1.1.0', 'MCP_Hyperliquid': '1.0.1', 'MASTER_schema': '5.0.0'},
+                'service': 'KairosWeb', 'version': APP_VERSION, 'release_suite':'2026.11.05.2', 'component_versions':{'KairosWeb': APP_VERSION, 'KairosGPT': '1.3.22', 'MCP_Binance': '5.4.1', 'MCP_KuCoin': '1.1.0', 'MCP_Hyperliquid': '1.0.1', 'MASTER_schema': '5.0.0'},
                 'server':{'status':'UP' if assets['consistent'] else 'DEGRADED'},
                 'operational_providers':{k:v.get('status','NOT_CHECKED') for k,v in last['providers'].items()},
                 'functional_modules':{k:v.get('status','NOT_CHECKED') for k,v in last['modules'].items()},
