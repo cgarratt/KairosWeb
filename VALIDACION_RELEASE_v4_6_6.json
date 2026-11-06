@@ -1,0 +1,10 @@
+{
+  "version": "4.6.6",
+  "tests_passed": 43,
+  "tolerance_first_save_tested": true,
+  "tolerance_update_tested": true,
+  "duplicate_guard_preserved": true,
+  "external_validation_mocked_in_save_tests": true,
+  "master_mutated": false,
+  "remote_deployment_verified": false
+}

@@ -816,7 +816,10 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
                     row=len(b[SHEETS['parameters']])
                     if row>=int(re.search(r'[A-Z]+(\d+)$',SHEETS['parameters']).group(1))-3:raise SettingsError('Sin espacio para tolerancia')
                     metadata=['COMPOSICION',key,10.,'number','% relativo al peso objetivo','APROBADO','TODOS','Aprobación usuario · tolerancia relativa 10%', 'INFRA < -tolerancia%; SOBRE > +tolerancia%; NEUTRAL incluye límites. (peso/meta-1)*100.', 'ALTA']
-                    for col,val in enumerate(metadata):change('parameters',row,col,val)
+                    # Value/evidence are finalized below; enqueue each cell once.
+                    for col,val in enumerate(metadata):
+                        if col in (2,7):_set(b,'parameters',row,col,val)
+                        else:change('parameters',row,col,val)
                 elif not is_tranche:raise
                 if is_tranche:
                     # Create one numeric cell per Fibonacci tranche only when an
