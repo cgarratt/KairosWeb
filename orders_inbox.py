@@ -7,6 +7,7 @@ Real activity remains exclusively in 05_ORDENES/06_FILLS after reconciliation.
 """
 from math import isfinite
 from wave_structure import SELL_RATIOS
+from venue_allocation import proportional_by_venue, funding_venue
 
 VENUES = {
     'BTC':'Binance', 'ETH':'Binance', 'SOL':'Binance', 'LINK':'Binance',
@@ -192,7 +193,7 @@ def _proximity(side, spot, target, threshold):
     return distance, 'EN_ESPERA'
 
 
-def _buy_allocation(items, budget, crypto, drift_band_pp=1.0):
+def _buy_allocation(items, budget, crypto, drift_band_pp=1.0, venue_cash=None):
     """Balancer parity: buy INFRA only, never overshoot per-token targets.
 
     One stage at a time, with the portfolio already marked to the simulated
@@ -207,13 +208,12 @@ def _buy_allocation(items, budget, crypto, drift_band_pp=1.0):
                targets[i]>0 and (values[i]/crypto-targets[i])*100 < -float(drift_band_pp)-1e-9]
     if not permitted:return [0.]*n
     gaps=[max(0.,targets[i]*crypto-values[i]) if i in permitted else 0. for i in range(n)]
-    target_share=sum(targets[i] for i in permitted)
-    gap_total=sum(gaps)
-    cap=budget if target_share>=1-1e-10 else gap_total/max(1e-12,1-target_share)
-    total=min(budget,max(0.,cap))
-    rooms=[(gaps[i]+targets[i]*total) if i in permitted else 0. for i in range(n)]
-    divisor=sum(rooms)
-    return [min(rooms[i],total*rooms[i]/divisor) if divisor>1e-10 else 0. for i in range(n)]
+    if venue_cash is None:
+        return [0.]*n
+    alloc,left=proportional_by_venue(gaps,[funding_venue(x.get('token'),x.get('venue')) for x in items],venue_cash,budget)
+    venue_cash.clear();venue_cash.update(left)
+    return alloc
+
 
 
 def staged_buy_candidates(buy, budget, proximity_pct=1.0):
@@ -268,6 +268,7 @@ def staged_buy_candidates(buy, budget, proximity_pct=1.0):
     if len(approved_o2)!=4 or abs(sum(approved_o2)-100)>1e-6:
         raise ValueError('Invalid MASTER O2 allocation')
     remaining=budget;candidates=[]
+    venue_cash=dict(buy.get('venue_free_usdt') or {})
     for j in range(4):
         sim_prices=[px_all[i][j] or _finite_pos(t.get('price')) or 0.
                     for i,t in enumerate(tokens)]
@@ -281,10 +282,11 @@ def staged_buy_candidates(buy, budget, proximity_pct=1.0):
             state=buy.get('buy_order_states',{}).get(token,{}).get(prefix+'C'+str(j+1),'PROPUESTA')
             may_buy=(px_all[i][j] is not None
                      and px_all[i][j]<(_finite_pos(token_row.get('price')) or 0)
-                     and state=='PROPUESTA')
+                     and state=='PROPUESTA' and weights[i][j]>0)
             items.append({'target':targets[i] if may_buy else 0.,
-                          'current_usdt':values[i]})
-        spends=_buy_allocation(items,planned,crypto,buy.get('drift_band_pp',1.0))
+                          'current_usdt':values[i],
+                          'venue':token_row.get('venue') or VENUES.get(token),'token':token})
+        spends=_buy_allocation(items,planned,crypto,buy.get('drift_band_pp',1.0),venue_cash)
         actually_spent=0.
         for i,t in enumerate(tokens):
             price=px_all[i][j];a=max(0.,spends[i]) if price else 0.
@@ -306,7 +308,7 @@ def staged_buy_candidates(buy, budget, proximity_pct=1.0):
                 # Never compare Binance HYPE/USDT and Hyperliquid HYPE/USDC.
                 delta,proximity=None,'COTIZACION_NO_HOMOLOGADA'
             candidates.append({
-                'token':token,'venue':VENUES.get(token,'Sin asignar'),
+                'token':token,'venue':t.get('venue') or VENUES.get(token,'Sin asignar'),
                 'category':'ESTRUCTURA','side':'BUY','mode':'Compras',
                 'wave':phase,'stage':stage,'fib':FIB_NAMES[j],
                 'spot':spot,'limit':price,'distance_pct':delta,'quote_currency':'USDC' if token=='HYPE' else 'USDT',

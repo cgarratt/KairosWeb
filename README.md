@@ -1,3 +1,7 @@
+# KairosWeb v4.6.3
+
+Compras proporcional al déficit INFRA con límites por venue. Compatible con KairosGPT1.3.21. Ver RELEASE_NOTES_v4.6.3.md y RELEASE_MANIFEST.json. SOURCE_RELEASE; despliegue pendiente.
+
 # KairosWeb v4.6.2 — Compras por ciclo
 
 P1/P2 se seleccionan por parejas canónicas del mismo ciclo, nunca por el mínimo más reciente:

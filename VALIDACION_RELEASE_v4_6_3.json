@@ -1,0 +1,32 @@
+{
+  "status": "PASS_LOCAL",
+  "policy": "PROPORTIONAL_DEFICIT_BY_VENUE",
+  "master_modified": false,
+  "github_published": false,
+  "deployed": false,
+  "production_verified": false,
+  "checks": [
+    "simultaneous_deficit_proportions",
+    "no_drift_sorting",
+    "row_permutation_invariance",
+    "venue_cash_conservation",
+    "four_tranches_share_cash",
+    "QF_and_BUY_deducted_once",
+    "missing_venue_zero_allocation",
+    "deficit_and_budget_caps",
+    "confirmed_and_zero_tranche_no_new_cash",
+    "USDC_not_USDT",
+    "Python_JavaScript_allocator_parity_120_seeded_scenarios"
+  ],
+  "test_data": "SYNTHETIC; no live balances, market or private exchange verification",
+  "version": "4.6.3",
+  "pytest_passed": 29,
+  "asset_markers_consistent": true,
+  "python_compiled": true,
+  "javascript_syntax": true,
+  "templates_rendered": [
+    "compras",
+    "ventas"
+  ],
+  "browser_visual_verified": false
+}

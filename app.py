@@ -28,6 +28,7 @@ from hype_weekly import aggregate_weeks, HypeHistoryError
 from portfolio_unrealized import summarize_unrealized, portfolio_allocation, category_allocation, pri_valuation_history, btc_equivalent, current_capital_distribution
 from custody_balancer import compare_custody
 from custody_balancer import CustodyError
+from venue_allocation import cash_from_snapshot, TOKEN_VENUES
 from liquidity_reserves import calculate_budgets, allocation_from_master, budgets_from_master, liquidity_allocation, liquidity_by_venue
 from orders_inbox import drift_tone, tradingbot_tokens
 from kairos_sheets_features import (
@@ -36,7 +37,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.6.2'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.6.3'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1240,6 +1241,8 @@ def build_mode_payload(slug, d, observed):
                 for j,key in enumerate(('ref382','c1','c2','ref786'))}
         return {'buy_order_classifications':classes,'buy_order_states':order_states,'o2_histories':weekly_histories,'generated_at':observed,'status_badge':market_source()+' MCP · SIMULACIÓN','snapshot_note':d['note'],
             'kind':'compras', 'current':purchase_current, 'tokens':purchase_tokens,
+            'venue_free_usdt':cash_from_snapshot(g.kairos_state['snapshot']),
+            'token_venues':TOKEN_VENUES,
             'o2_level_reference':'MCP_WEEKLY_PROPOSED_OR_VALIDATED_SIMULATION_ONLY',
             'forecast_o2_allocation':o2_weights, 'o2_levels':weekly_levels,
             'buy_eligibility':{t:bool(c.get('eligible',False)) for t,c in weekly_context.items()},
@@ -2367,6 +2370,10 @@ def _deployed_asset_status():
     templates or static files are from an older release. No secrets exposed.
     """
     critical = {
+        'venue_allocation': ('venue_allocation.py', ('def proportional_by_venue(', 'def cash_from_snapshot(')),
+        'venue_buy_ui': ('templates/trade_sim.html', ('venue-cash-summary','venueFreeUSDT:source.venue_free_usdt')),
+        'venue_buy_js': ('static/o2_sequential.js', ('function proportionalByVenue(', 'venueCashRemaining')),
+        'venue_buy_orders': ('orders_inbox.py', ('proportional_by_venue(gaps', 'venue_free_usdt')),
         'compras_template': ('templates/trade_sim.html', ('<th>% Peso</th>', 'renderO2Fibonacci', 'allocation-slider', 'data-o2-ui-version')),
         'o2_simulator': ('static/o2_sequential.js', ('classifyDrift', 'snapshots')),
         'alerts_bell': ('static/alert_bell.js', ('alert-timeframe', '/api/alerts/read', 'event-bull', 'event-bear')),
@@ -2522,7 +2529,7 @@ def health():
     with _DEPENDENCY_LOCK:
         last=dict(_DEPENDENCY_LAST)
     response = {'status': 'UP' if assets['consistent'] else 'DEGRADED',
-                'service': 'KairosWeb', 'version': APP_VERSION, 'release_suite':'2026.11.04.3', 'component_versions':{'KairosWeb': APP_VERSION, 'KairosGPT': '1.3.18', 'MCP_Binance': '5.4.1', 'MCP_KuCoin': '1.1.0', 'MCP_Hyperliquid': '1.0.1', 'MASTER_schema': '5.0.0'},
+                'service': 'KairosWeb', 'version': APP_VERSION, 'release_suite':'2026.11.05.1', 'component_versions':{'KairosWeb': APP_VERSION, 'KairosGPT': '1.3.21', 'MCP_Binance': '5.4.1', 'MCP_KuCoin': '1.1.0', 'MCP_Hyperliquid': '1.0.1', 'MASTER_schema': '5.0.0'},
                 'server':{'status':'UP' if assets['consistent'] else 'DEGRADED'},
                 'operational_providers':{k:v.get('status','NOT_CHECKED') for k,v in last['providers'].items()},
                 'functional_modules':{k:v.get('status','NOT_CHECKED') for k,v in last['modules'].items()},

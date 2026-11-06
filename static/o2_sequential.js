@@ -23,6 +23,23 @@ function postBuySemaphore(amount,postWeight,targetWeight){
   if(driftPP>=-1-epsilon)return {state:'amber',driftPP};
   return {state:'red',driftPP};
 }
+function proportionalByVenue(gaps,venues,cash,budget){
+  const valid=x=>typeof x==='number'&&Number.isFinite(x)&&x>=0;
+  if(!Array.isArray(gaps)||gaps.length!==venues.length||gaps.some(x=>!valid(x))||!valid(budget)||!cash||typeof cash!=='object'||Object.values(cash).some(x=>!valid(x)))throw Error('Invalid venue cash/deficit');
+  const free={...cash},alloc=gaps.map(()=>0);
+  for(let round=0;round<gaps.length+Object.keys(free).length+2;round++){
+    const remaining=Math.max(0,budget-alloc.reduce((a,b)=>a+b,0));
+    const room=gaps.map((x,i)=>(free[venues[i]]||0)>1e-10?Math.max(0,x-alloc[i]):0);
+    const total=room.reduce((a,b)=>a+b,0);if(remaining<=1e-10||total<=1e-10)break;
+    const take=Math.min(remaining,total),proposals=room.map(x=>take*x/total),demand={};
+    proposals.forEach((x,i)=>{demand[venues[i]]=(demand[venues[i]]||0)+x});
+    const delta=proposals.map((p,i)=>demand[venues[i]]>0?p*Math.min(1,(free[venues[i]]||0)/demand[venues[i]]):0);
+    if(delta.reduce((a,b)=>a+b,0)<=1e-10)break;
+    delta.forEach((x,i)=>{alloc[i]+=x});
+    Object.keys(free).forEach(v=>{free[v]=Math.max(0,free[v]-delta.reduce((a,x,i)=>a+(venues[i]===v?x:0),0))});
+  }
+  return {alloc,cash:free};
+}
 function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
   const levels=levelRows||{}, n=tokens.length, w=weights.map(x=>Math.max(0,Number(x)||0)), sumW=w.reduce((a,b)=>a+b,0);
   const bandPP=(driftBandPP===undefined||driftBandPP===null)?1:driftBandPP;
@@ -67,6 +84,9 @@ function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
     for(let j=0;j<4;j++)stageBudgets[j]=Number(planned[j]);
   }
   const consumed=[0,0,0,0], snapshots=[];let cash=plannedBudget;
+  let venueCash={...(policy.venueFreeUSDT||{})};
+  const venueInitial={...venueCash};
+  const venues=tokens.map(t=>{const v=t.venue||policy.tokenVenues?.[t.token];return t.token==='HYPE'&&v==='Hyperliquid'?null:v;});
   for(let j=0;j<4;j++){
     const px=tokens.map((t,i)=>prices[i][j]||Number(t.price));
     const values=px.map((v,i)=>(Number.isFinite(v)&&v>0?units[i]*v:0));
@@ -87,20 +107,13 @@ function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
     const permitted=tokens.map((t,i)=>{
       const stage=(policy.modes?.[t.token]==='O4'?'O4':'O2')+'C'+(j+1);
       const state=policy.orderStates?.[t.token]?.[stage]||'PROPUESTA';
-      return prices[i][j]>0 && prices[i][j]<Number(t.price) && state==='PROPUESTA' && allowed[i] && drift[i].status==='INFRA';
+      return stageWeights[i][j]>0 && prices[i][j]>0 && prices[i][j]<Number(t.price) && state==='PROPUESTA' && allowed[i] && drift[i].status==='INFRA';
     });
     const gap0=permitted.map((yes,i)=>yes?Math.max(0,target[i]*crypto-values[i]):0);
-    const g0=gap0.reduce((a,b)=>a+b,0);
-    const targetShare=permitted.reduce((a,yes,i)=>a+(yes?target[i]:0),0);
-    // Buying changes the crypto sleeve denominator. Solve for the spend
-    // that reaches targets without moving an asset from INFRA to SOBRE.
-    const maxBalancedSpend=targetShare>=1-1e-10?stageBudget:g0/(1-targetShare);
-    const stageSpend=Math.min(stageBudget,Math.max(0,maxBalancedSpend));
-    const headroom=gap0.map((gap,i)=>permitted[i]?Math.max(0,gap+target[i]*stageSpend):0);
-    const headroomTotal=headroom.reduce((a,b)=>a+b,0);
+    const distribution=proportionalByVenue(gap0,venues,venueCash,stageBudget);
+    venueCash=distribution.cash;
     for(let i=0;i<n;i++){
-      const a=permitted[i]&&headroomTotal>1e-10
-        ?Math.min(headroom[i],stageSpend*headroom[i]/headroomTotal):0;
+      const a=distribution.alloc[i];
       amounts[i][j]=a;
       if(a>0)units[i]+=a/prices[i][j];
       consumed[j]+=a;
@@ -111,10 +124,10 @@ function calculate(tokens,levelRows,weights,budget,driftBandPP,policy={}){
     const postWeights=postValues.map(v=>postCrypto>0?v/postCrypto:NaN);
     snapshots.push({values,crypto,weights:preWeights,postValues,postCrypto,postWeights,
       states:drift.map(x=>x.status),driftsPP:drift.map(x=>x.driftPP),
-      spent:consumed[j],cash});
+      spent:consumed[j],cash,venueCashRemaining:{...venueCash}});
   }
-  return {prices,amounts,stageBudgets,unallocated:Math.max(0,plannedBudget-consumed.reduce((a,b)=>a+b,0)),consumed,totalByToken:amounts.map(a=>a.reduce((s,x)=>s+x,0)),spent:consumed.reduce((a,b)=>a+b,0),cash,snapshots};
+  return {venueCashInitial:venueInitial,venueCashRemaining:venueCash,allocationPolicy:"PROPORTIONAL_DEFICIT_BY_VENUE",prices,amounts,stageBudgets,unallocated:Math.max(0,plannedBudget-consumed.reduce((a,b)=>a+b,0)),consumed,totalByToken:amounts.map(a=>a.reduce((s,x)=>s+x,0)),spent:consumed.reduce((a,b)=>a+b,0),cash,snapshots};
 }
-const api={calculate,classifyDrift,postBuySemaphore};if(typeof module!=='undefined'&&module.exports)module.exports=api;
+const api={calculate,classifyDrift,postBuySemaphore,proportionalByVenue};if(typeof module!=='undefined'&&module.exports)module.exports=api;
 root.KairosO2Sequential=api;
 })(typeof window!=='undefined'?window:globalThis);
