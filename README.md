@@ -1,5 +1,5 @@
-# KairosWeb 4.7.4
+# KairosWeb 4.7.5
 
-Corrige la verificación de navegación en /health y conserva los ajustes móviles de la 4.7.3.
+Web y PWA comparten los controles del encabezado. El icono de refresco actualiza Spot y los avisos del reporte se pueden cerrar.
 
-Publicar en el repositorio conectado a Render. Verificar /health y luego reabrir la PWA desde el icono existente.
+Publicar en el repositorio conectado a Render y comprobar /health. Reabrir Kairos desde el icono existente.

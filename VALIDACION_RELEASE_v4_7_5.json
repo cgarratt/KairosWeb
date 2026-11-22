@@ -1,0 +1,11 @@
+{
+  "status": "PASS_LOCAL",
+  "health_http": 200,
+  "checks": [
+    "shared_header",
+    "no_bell",
+    "refresh_before_logout",
+    "dismissible_notices"
+  ],
+  "deployed": false
+}

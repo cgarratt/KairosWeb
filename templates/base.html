@@ -73,8 +73,10 @@
   </style>
   <link rel="stylesheet" href="{{ url_for('static',filename='alerts_settings.css') }}?v={{ master }}">
   <link rel="stylesheet" href="{{ url_for('static',filename='theme.css') }}?v={{ master }}">
-  <style>.navigation-row{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}.navigation-row .global-nav{min-width:0;max-width:100%;margin-bottom:0}.spot-refresh-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-left:auto;padding-bottom:10px}.spot-refresh-btn{white-space:nowrap;cursor:pointer}.spot-refresh-btn:disabled{opacity:.65;cursor:wait}.spot-observed{font-size:12px;color:var(--muted);text-align:right;white-space:nowrap}.right-tools{flex-wrap:wrap}@media(max-width:680px){.navigation-row{gap:4px}.navigation-row .global-nav{width:100%}.spot-refresh-wrap{align-items:flex-end}}</style>
+  <style>.navigation-row{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}.navigation-row .global-nav{min-width:0;max-width:100%;margin-bottom:0}.spot-refresh-btn{white-space:nowrap;cursor:pointer}.spot-refresh-btn:disabled{opacity:.65;cursor:wait}.spot-observed{font-size:12px;color:var(--muted);text-align:right;white-space:nowrap}.right-tools{flex-wrap:wrap}@media(max-width:680px){.navigation-row{gap:4px}.navigation-row .global-nav{width:100%}}</style>
   <link rel="stylesheet" href="{{ url_for('static',filename='pwa/navigation.css', v=master) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='report_notices.css', v=master) }}">
+  <script defer src="{{ url_for('static', filename='report_notices.js', v=master) }}"></script>
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -100,17 +102,6 @@
         <button type="button" class="tool-icon privacy-toggle" id="privacy-toggle" aria-label="Mostrar saldos" aria-pressed="false" title="Mostrar saldos">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path d="M3 3 21 21"/></svg><span class="privacy-label">Mostrar</span>
         </button>
-        <div class="alerts-wrap">
-          <button type="button" class="tool-icon" id="bell-open" aria-label="Alertas Kairos sin leer, 1H, 4H y 1D" aria-expanded="false" aria-controls="alerts-popover" title="Alertas Kairos">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></svg>
-            <span id="bell-count" class="bell-count" hidden>0</span>
-          </button>
-          <div class="alerts-popover" id="alerts-popover" hidden>
-            <div class="alerts-head"><strong>Alertas Kairos</strong><div class="settings-buttons"><button type="button" id="alerts-read-all" class="tiny-control" disabled>Marcar todas como leídas</button><button type="button" id="alerts-refresh" class="tiny-control">Actualizar</button></div></div>
-            <p class="alerts-caption">Notificaciones 1H, 4H y 1D. Las alertas de vigilancia son informativas: no certifican órdenes, fills ni señales BSI.</p>
-            <div id="alerts-list" class="alerts-list" aria-live="polite">Consultando…</div>
-          </div>
-        </div>
         {% endif %}
         <button type="button" class="tool-icon" data-theme-toggle title="Cambiar tema" aria-label="Activar tema oscuro" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.4A8.3 8.3 0 0 1 8.6 3.5a8.5 8.5 0 1 0 11.9 11.9Z"/></svg>
@@ -118,6 +109,9 @@
         {% if portfolio_authenticated %}<a class="tool-icon {{ 'active' if request.path == '/settings' else '' }}" href="{{ url_for('settings_page') }}" aria-label="Configuración de Kairos" title="Configuración y mantenimiento del Master">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 3 .6 2.1c.6.2 1.1.5 1.6.9L14 5l2 2-1 2.3c.4.5.7 1 .9 1.6L18 11v3l-2.1.6c-.2.6-.5 1.1-.9 1.6l1 2.3-2 2-2.3-1c-.5.4-1 .7-1.6.9L9.5 22h-3l-.6-2.1c-.6-.2-1.1-.5-1.6-.9l-2.3 1-2-2 1-2.3c-.4-.5-.7-1-.9-1.6L-2 14v-3l2.1-.6c.2-.6.5-1.1.9-1.6L0 6.5l2-2 2.3 1c.5-.4 1-.7 1.6-.9L6.5 3Z" transform="translate(3,0)"/><circle cx="11" cy="12.5" r="3"/></svg>
         </a>
+        <button type="button" class="tool-icon spot-refresh-btn" id="spot-refresh" data-csrf="{{ session.get('csrf_token','') }}" aria-label="Actualizar Spot" title="Actualizar Spot" aria-describedby="spot-observed">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.4 6M20 5v6h-6"/></svg>
+        </button>
         <form method="post" action="{{ url_for('portfolio_logout', next='pwa') if request.endpoint == 'pwa_home' else url_for('portfolio_logout') }}" class="session-exit">
           <input type="hidden" name="csrf" value="{{ portfolio_csrf }}">
           <button type="submit" class="btn">Cerrar sesión</button>
@@ -135,13 +129,13 @@
       </a>
       {% endfor %}
     </nav>
-      {% if portfolio_authenticated %}<div class="spot-refresh-wrap"><button type="button" class="btn spot-refresh-btn" id="spot-refresh" data-csrf="{{ session.get('csrf_token','') }}" title="Consultar nuevamente precios Spot MCP">↻ Actualizar Spot</button><span id="spot-observed" class="spot-observed" aria-live="polite">Spot: consultando estado…</span></div>{% endif %}
+
     </div>
+    {% if portfolio_authenticated %}<p id="spot-observed" class="spot-observed" aria-live="polite">Spot: consultando estado…</p>{% endif %}
     {% block content %}{% endblock %}
   </div>
   {% if portfolio_authenticated %}<script defer src="{{ url_for('static', filename='spot_refresh.js') }}?v={{ master }}"></script>{% endif %}
   <script defer src="{{ url_for('static', filename='table_sort.js') }}"></script>
-  {% if portfolio_authenticated %}<script defer src="{{ url_for('static', filename='alert_bell.js') }}?v={{ master }}"></script>{% endif %}
   <script defer src="{{ url_for('static', filename='theme.js') }}"></script>
   <script defer src="{{ url_for('static', filename='tooltips.js') }}?v={{ master }}"></script>
   <script defer src="{{ url_for('static', filename='privacy.js') }}?v={{ master }}"></script>

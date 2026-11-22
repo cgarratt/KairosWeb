@@ -38,7 +38,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.7.4'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.7.5'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -2448,7 +2448,7 @@ def _deployed_asset_status():
         'venue_buy_orders': ('orders_inbox.py', ('spends=_buy_allocation(items,planned,crypto', 'venue_free_usdt')),
         'compras_template': ('templates/trade_sim.html', ('<th>% Peso</th>', 'renderO2Fibonacci', 'allocation-slider', 'data-o2-ui-version')),
         'o2_simulator': ('static/o2_sequential.js', ('classifyDrift', 'snapshots')),
-        'alerts_bell': ('static/alert_bell.js', ('alert-timeframe', '/api/alerts/read', 'event-bull', 'event-bear')),
+        'report_notices': ('static/report_notices.js', ('data-report-notice', 'Cerrar aviso')),
         'integral_donut': ('templates/portfolio_integral.html', ('data-capital-chart="donut"', 'integral-donut-sector')),
         'guest_redaction_v2036': ('templates/guest_portfolio.html', ('SALDOS OCULTOS', 'Requiere acceso de usuario')),
         'user_login_v2036': ('templates/portfolio_login.html', ('name="username"', 'name="password"', 'login_csrf')),

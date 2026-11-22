@@ -21,8 +21,8 @@
  let retryAt=0,busy=false;
  function updatePause(){const paused=retryAt>Date.now();btn.disabled=busy||paused;
    if(paused){const seconds=Math.ceil((retryAt-Date.now())/1000);
-     btn.textContent='En pausa · '+Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');
-   }else if(!busy){btn.textContent='↻ Actualizar Spot';}
+     btn.setAttribute('aria-label','Actualizar Spot en '+seconds+' segundos');
+   }else if(!busy){btn.setAttribute('aria-label','Actualizar Spot');}
  }
  function show(data){const raw=data?.retry_at_utc;
    retryAt=0;
@@ -36,12 +36,12 @@
  }
  fetch('/api/market-status',{credentials:'same-origin',cache:'no-store'}).then(r=>r.json()).then(show).catch(()=>{label.textContent='Spot: estado N/D'});
  updatePause();setInterval(updatePause,1000);
- btn.addEventListener('click',async()=>{if(busy||retryAt>Date.now())return;busy=true;btn.disabled=true;btn.textContent='Actualizando…';
+ btn.addEventListener('click',async()=>{if(busy||retryAt>Date.now())return;busy=true;btn.disabled=true;btn.setAttribute('aria-label','Actualizando Spot');btn.setAttribute('aria-busy','true');
    try{const r=await fetch('/api/spot/refresh',{method:'POST',credentials:'same-origin',headers:{'X-Kairos-Csrf':btn.dataset.csrf,'Content-Type':'application/json'},body:'{}'});
      const data=await r.json();show(data);if(!r.ok||data.status!=='OK'){if(retryAt<=Date.now())label.textContent='Actualización fallida · '+(data.diagnostic?.code||data.status);return;}
      window.location.reload();
    }catch(_){label.textContent='Actualización fallida · red';}
-   finally{busy=false;updatePause();}
+   finally{busy=false;btn.removeAttribute('aria-busy');updatePause();}
  });
 })();
 

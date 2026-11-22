@@ -61,7 +61,7 @@
 {% block content %}
 <div class="grid" id="orders-inbox" data-snapshot-id="{{ snapshot or '' }}" data-management-ready="{{ 'false' if managed_orders and managed_orders.error else 'true' }}">
 <section class="panel span-12 hero"><div><h2>Órdenes recomendadas</h2><p>Solo BUY O2/O4 y SELL O3/O5 · No aplica → Propuesta · Confirmación con imagen en KairosGPT · Ejecución validada en Web</p></div><div class="badge info">SIN ÓRDENES REMOTAS</div></section>
-{% if error %}<section class="panel span-12"><h3>DATA ERROR</h3><p>{{ error }}</p><p>Etapa: {{ error_stage or 'N/D' }} · Referencia: {{ error_id or 'N/D' }}</p></section>{% else %}
+{% if error %}<section data-report-notice class="panel span-12"><h3>DATA ERROR</h3><p>{{ error }}</p><p>Etapa: {{ error_stage or 'N/D' }} · Referencia: {{ error_id or 'N/D' }}</p></section>{% else %}
 <section class="panel span-12">
   <div class="orders-kpi" aria-label="Resumen de estados">
     <div><small>Propuestas nuevas</small><strong>{{ inbox.candidates|length }}</strong></div>
@@ -98,7 +98,7 @@
 </section>
 {% endif %}
 
-{% if managed_orders and managed_orders.error %}<section class="panel span-12"><p class="order-workflow-warning">{{ managed_orders.error }}</p></section>{% endif %}
+{% if managed_orders and managed_orders.error %}<section data-report-notice class="panel span-12"><p class="order-workflow-warning">{{ managed_orders.error }}</p></section>{% endif %}
 <dialog id="order-manager" class="orders-manager-dialog"><form id="order-manager-form">
 <h3>Revisar datos de ejecución</h3><p id="order-manager-summary"></p>
 <input type="hidden" name="action" value="EJECUTADA">

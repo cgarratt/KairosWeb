@@ -23,7 +23,7 @@
   <ul>{% for row in rows %}<li><strong>{{ row.token }}</strong><span data-private="money">{{ '{:,.2f} USDT'.format(row.value) }}</span></li>{% endfor %}</ul>
 </section>
 {% else %}
-<section class="panel" role="alert"><h2>Valoración no disponible</h2><p>{{ issue }}</p></section>
+<section data-report-notice class="panel" role="alert"><h2>Valoración no disponible</h2><p>{{ issue }}</p></section>
 {% endif %}
 </main>
 {% endblock %}
