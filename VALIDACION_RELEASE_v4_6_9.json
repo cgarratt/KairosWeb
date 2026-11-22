@@ -1,0 +1,19 @@
+{
+  "status": "PASS_LOCAL",
+  "views": [
+    "portafolio",
+    "balancer",
+    "compras",
+    "ventas",
+    "ordenes",
+    "forecast"
+  ],
+  "active_assets": 10,
+  "market_contract_pairs": 12,
+  "portfolio_total_reconciled": true,
+  "spot_fixture": "SYNTHETIC",
+  "history_fixture": "UNAVAILABLE",
+  "order_adapter": "STUB",
+  "master_modified": false,
+  "deployed": false
+}

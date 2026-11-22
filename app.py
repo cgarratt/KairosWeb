@@ -38,7 +38,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.6.8'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.6.9'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1004,7 +1004,7 @@ def core_dashboard(prices):
         'liquidity_floor_usdt':total_value*approved_numeric('STRUCTURAL_USDT_TARGET'),
         'liquidity_headroom_usdt':liquidity-total_value*approved_numeric('STRUCTURAL_USDT_TARGET'),
         'custody_summary':custody_summary(prices),
-        'profitability': portfolio_profitability(rows),
+        'profitability': portfolio_profitability(_active_rows(rows)),
         'bsi_historical':historical_bsi(prices),
         'forecast_sensitivity':forecast_sensitivity(rows,liquidity)
     }
@@ -1067,7 +1067,23 @@ def bar_card(title, subtitle, items):
     maxv = max([abs(i.get('value',0)) for i in items] or [1])
     return {'title':title,'subtitle':subtitle,'max':maxv or 1,'items':items}
 
+def _active_rows(rows):
+    return [row for row in rows if not (
+        row['tier'] == 'RETIRADO' and
+        row['units'] == row['target'] == row.get('reserved_sell_units', 0) == 0
+    )]
+
+
+def _active_dashboard(dashboard):
+    rows = _active_rows(dashboard['rows'])
+    tokens = {row['token'] for row in rows}
+    bsi = dashboard['bsi_historical']
+    return {**dashboard, 'rows': rows,
+            'bsi_historical': {**bsi, 'rows': [row for row in bsi['rows'] if row['token'] in tokens]}}
+
+
 def build_mode_payload(slug, d, observed):
+    d = _active_dashboard(d)
     rows = sorted(d['rows'], key=lambda x: x['value'], reverse=True)
     band=relative_band(PARAMETERS)
     under = top_n(rows, key=lambda r: r['drift_pp'], n=6, reverse=False, predicate=lambda r: r['drift_pp'] < -band*r['target']-1e-9)
@@ -1555,10 +1571,7 @@ def balancer_report(d, observed):
     Commitments cannot be inferred from this static snapshot; don't label theoretical
     capacity as real executable cash.
     """
-    active_rows = (row for row in d['rows']
-                   if not (row['tier'] == 'RETIRADO' and
-                           row['units'] == row['target'] == row.get('reserved_sell_units', 0) == 0))
-    rows = sorted(active_rows, key=lambda row: row['value'], reverse=True)
+    rows = sorted(_active_rows(d['rows']), key=lambda row: row['value'], reverse=True)
     p=d['total_value']; cash=d['usdt_total']; crypto=d['crypto_value']
     trading=d['trading_reserve']
     reserves=budgets_from_master(g.kairos_state['parameters'],cash,trading,p,
@@ -1692,9 +1705,13 @@ def integral_portfolio_page():
         stage = 'PORTFOLIO_VALUATION'
         # All-or-nothing rendering: no totals/graphs from a partially constructed valuation.
         candidate_rows = live['rows']
-        candidate_pnl = summarize_unrealized(candidate_rows)
+        active = _active_dashboard(live)
+        active_tokens = {row['token'] for row in active['rows']}
+        candidate_pnl = summarize_unrealized(active['rows'])
         candidate_allocation = portfolio_allocation(candidate_rows,live['usdt_total'])
-        candidate_categories = category_allocation(candidate_rows)
+        candidate_allocation['items'] = [item for item in candidate_allocation['items']
+                                         if item['token'] == 'USDT' or item['token'] in active_tokens]
+        candidate_categories = [tier for tier in category_allocation(candidate_rows) if tier['tokens']]
         capital_candidate = current_capital_distribution(
             candidate_rows, live['usdt_total'], live['trading_reserve'],
             portfolio_total=live['total_value'])
@@ -1706,9 +1723,9 @@ def integral_portfolio_page():
                           'total':capital_candidate['total'],'source':market_source()+' MCP + Google Sheets PUBLICADO'}
         spot_breakdown,spot_observed,pnl_report = candidate_spot,observed,candidate_pnl
         capital_distribution=capital_candidate
-        allocation,categories,portfolio_rows=candidate_allocation,candidate_categories,candidate_rows
+        allocation,categories,portfolio_rows=candidate_allocation,candidate_categories,active['rows']
         btc_reference_price,btc_total=live['btc_usdt_spot'],live['total_btc_equivalent']
-        bsi_archive=live['bsi_historical']
+        bsi_archive=active['bsi_historical']
         pri=executive_risk_index(candidate_rows,live['usdt_total'])
     except Exception as exc:
         origin='MARKET_SPOT_MCP' if stage=='MARKET_SPOT_MCP' else 'PORTFOLIO_CALCULATION'
@@ -1764,6 +1781,8 @@ def orders_inbox_page():
     stage='MASTER y Spot MCP'
     try:
         observed,d=load_live_dashboard()  # MUST remain fail-closed.
+        d = _active_dashboard(d)
+        active_tokens = {row['token'] for row in d['rows']}
         stage='Balance de portafolio'
         bal=balancer_report(d,observed)
         stage='Estructura semanal MCP'
@@ -1785,7 +1804,8 @@ def orders_inbox_page():
         stage='Ensamblaje de propuestas'
         from orders_inbox import build_order_inbox
         from wave_macro_context import published_wave_levels
-        wave_levels=published_wave_levels(g.kairos_state['wave_pivots'])
+        wave_levels=published_wave_levels({token: record for token, record in g.kairos_state['wave_pivots'].items()
+                                           if token in active_tokens})
         inbox=build_order_inbox(d,buy,bal,wave_levels=wave_levels)
         inbox['candidates']=[x for x in inbox['candidates'] if _cycle_order_allowed(x.get('side'),x.get('stage'))]
         from orders_inbox import annotate_authorized_coverage
@@ -1887,7 +1907,9 @@ def mode_page(slug):
                 payload['current']['requested_percent']=override
         # All four simulation modes receive the same read-only wave reference.
         # A slider can modify a scenario, never the Master-confirmed wave price.
-        payload['wave_pivots']=g.kairos_state['wave_pivots']
+        active_tokens = {row['token'] for row in _active_rows(dashboard['rows'])}
+        payload['wave_pivots'] = {token: record for token, record in g.kairos_state['wave_pivots'].items()
+                                  if token in active_tokens}
         from wave_macro_context import published_wave_levels
         payload['wave_levels']=published_wave_levels(payload['wave_pivots'])
         payload['confirmed_pivot_count']=sum(1 for rec in payload['wave_pivots'].values()
@@ -2411,7 +2433,7 @@ def _deployed_asset_status():
         'remember_ui_v2038': ('templates/portfolio_login.html', ('name="remember_me"', 'Mantener sesión iniciada', '30 días')), 
         'auth_gate_v2036': ('app.py', ("@app.route('/login'", 'PORTFOLIO_AUTH_REQUIRED', "@app.route('/logout'")),
         'portfolio_layout_v2022': ('templates/portfolio_integral.html', ('data-layout-row="1"','data-layout-row="2"','data-layout-row="3"','data-layout-row="4"')),
-        'allocation_legend_v2032': ('templates/portfolio_integral.html', ('data-token-columns="6+6"', 'data-allocation-cash="USDT"', 'data-allocation-column=', 'port-alloc-columns')),
+        'allocation_legend_v2032': ('templates/portfolio_integral.html', ('data-token-columns=', 'data-allocation-cash="USDT"', 'data-allocation-column=', 'port-alloc-columns')),
         'balancer_sell_units_v2033': ('templates/balancer.html', ('<th>Unidades</th>', "'{:,.2f}'.format(r.units)", 'data-private="units"')),
         'health_three_tiers_v2030': ('app.py', ("@app.route('/api/health/diagnostics')", 'operational_providers', 'functional_modules')),
         'health_diagnostics_ui_v2030': ('templates/settings.html', ('id="health-deep-panel"', 'id="health-check-all"')),
@@ -2575,7 +2597,7 @@ def portfolio():
         return jsonify({'status':'OK', 'source':market_source()+' MCP + Google Sheets PUBLICADO',
                     'snapshot_id':g.kairos_state['control']['snapshot_id'],
                     'unreconciled_fills':g.kairos_state.get('unreconciled_fills', []),
-                    'config_source':'12_PARAMETROS_KAIROS', 'observed_at':observed, **dashboard})
+                    'config_source':'12_PARAMETROS_KAIROS', 'observed_at':observed, **_active_dashboard(dashboard)})
     except Exception as exc:
         diag = diagnostic_error(exc, 'portfolio')
         return jsonify({'status':'DATA_ERROR','reason':diag['message'],'diagnostic':diag,**market_cache_status()}), 503

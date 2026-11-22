@@ -1,7 +1,5 @@
-# KairosWeb 4.6.8
+# KairosWeb 4.6.9
 
-Balancer excluye de sus simulaciones y de la comparación de custodia las filas RETIRADO sin saldo, objetivo ni reserva SELL. La raíz redirige a Portafolio incluso en modo de solo lectura.
+Las vistas activas se derivan de las posiciones publicadas. Los activos RETIRADO sin unidades, objetivo ni SELL reservado se excluyen de los gráficos, propuestas y selectores actuales. Se conservan la cobertura MCP de 12 pares y los registros históricos de Sheets.
 
-Extraer los archivos en la raíz del repositorio de KairosWeb conectado a Render. Conservar las variables del servicio. Tras desplegar, comprobar /health y abrir Balancer desde una sesión autenticada.
-
-Prueba local con lectura del MASTER y precios sintéticos. Publicación y prueba autenticada en Render pendientes.
+Descomprimir en la raíz del repositorio de KairosWeb conectado a Render y conservar las variables del servicio. Verificar /health y las seis pantallas desde una sesión autenticada.

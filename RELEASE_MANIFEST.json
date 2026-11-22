@@ -1,15 +1,15 @@
 {
   "product": "KairosWeb",
-  "version": "4.6.8",
-  "base": "4.6.7",
+  "version": "4.6.9",
+  "base": "4.6.8",
   "status": "SOURCE_RELEASE",
   "deployed": false,
   "github_published": false,
   "master_modified": false,
   "schema_version": "5.0.0",
-  "validation": "VALIDACION_RELEASE_v4_6_8.json",
-  "scope": "BALANCER_RETIRED_ASSETS",
-  "web_compatible": "4.6.8",
+  "validation": "VALIDACION_RELEASE_v4_6_9.json",
+  "scope": "ACTIVE_ASSETS_CURRENT_VIEWS",
+  "web_compatible": "4.6.9",
   "gpt_compatible": "1.3.22",
   "release_notes": "README.md"
 }

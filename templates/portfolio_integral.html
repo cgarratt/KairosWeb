@@ -214,15 +214,16 @@
  {# All 13 components remain visible. USDT is not counted as one of the 12 crypto tokens. #}
  {% set cash_items=allocation['items']|selectattr('token','equalto','USDT')|list %}
  {% set crypto_items=allocation['items']|rejectattr('token','equalto','USDT')|list %}
- <div class="port-allocation-legend" aria-label="Allocation completo: USDT y doce tokens en dos columnas">
+ {% set split=(crypto_items|length + 1)//2 %}
+ <div class="port-allocation-legend" aria-label="Distribución de USDT y tokens activos">
   <div class="port-alloc-cash" data-allocation-cash="USDT" aria-label="Liquidez física USDT">
    {% for it in cash_items %}
    <div class="port-legend-item"><span class="port-legend-name"><i class="dot" style="background:{{ it.color }}"></i>{{ coin_tag(it.token) }}</span><strong>{{ '%.2f%%'|format(it.pct) }}</strong><strong data-private="money">{{ '{:,.0f}'.format(it.value) }}</strong></div>
    {% endfor %}
   </div>
-  <div class="port-alloc-columns" data-token-columns="6+6">
-   {% for group in [crypto_items[:6],crypto_items[6:]] %}
-   <div class="port-alloc-column" data-allocation-column="{{ loop.index }}" aria-label="Tokens {{ 1 if loop.first else 7 }} a {{ 6 if loop.first else 12 }}">
+  <div class="port-alloc-columns" data-token-columns="{{ split }}+{{ crypto_items|length - split }}">
+   {% for group in [crypto_items[:split],crypto_items[split:]] %}
+   <div class="port-alloc-column" data-allocation-column="{{ loop.index }}">
     <div class="port-legend-item heading"><span>Token</span><span>%</span><span>USDT</span></div>
     {% for it in group %}
     <div class="port-legend-item" data-allocation-legend-token="{{ it.token }}"><span class="port-legend-name"><i class="dot" style="background:{{ it.color }}"></i>{{ coin_tag(it.token) }}</span><strong>{{ '%.2f%%'|format(it.pct) }}</strong><strong data-private="money">{{ '{:,.0f}'.format(it.value) }}</strong></div>
@@ -265,9 +266,9 @@
 <!-- Fila 3: category chart / portfolio weights chart -->
 <div class="port-pair" data-layout-row="3">
  <article class="port-card" data-category-chart="tier"><div class="port-card-head"><div><h3>Distribución por categoría</h3><p class="sub">Peso actual vs. objetivo · manga cripto (sin USDT)</p></div><div class="port-chart-key"><span><i style="background:#267ce5"></i>Actual</span><span><i style="background:#cad6e6"></i>Objetivo</span></div></div>
- {% if categories %}<div class="port-tier-chart">{% for c in categories %}<div class="port-tier-col"><strong>{{ '%.2f%%'|format(c.actual) }} / {{ '%.0f%%'|format(c.target) }}</strong><div class="port-tier-bars"><div class="port-tier-bar" style="height:{{ c.actual/80*100 }}%" title="{{ c.tier }} actual {{ '%.2f'|format(c.actual) }}%"></div><div class="port-tier-bar target" style="height:{{ c.target/80*100 }}%" title="{{ c.tier }} objetivo {{ '%.2f'|format(c.target) }}%"></div></div><small>{{ 'Tier '~c.tier[1:] }}</small></div>{% endfor %}</div><p class="port-foot">T1: BTC, ETH, SOL, LINK, HYPE · T2: HBAR, SUI, ONDO, PUMP, PLUME · T3: VIRTUAL, PEPE</p>
+ {% if categories %}<div class="port-tier-chart">{% for c in categories %}<div class="port-tier-col"><strong>{{ '%.2f%%'|format(c.actual) }} / {{ '%.0f%%'|format(c.target) }}</strong><div class="port-tier-bars"><div class="port-tier-bar" style="height:{{ c.actual/80*100 }}%" title="{{ c.tier }} actual {{ '%.2f'|format(c.actual) }}%"></div><div class="port-tier-bar target" style="height:{{ c.target/80*100 }}%" title="{{ c.tier }} objetivo {{ '%.2f'|format(c.target) }}%"></div></div><small>{{ 'Tier '~c.tier[1:] }}</small></div>{% endfor %}</div><p class="port-foot">{% for c in categories %}{{ c.tier }}: {{ c.tokens }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
  {% else %}<div class="port-empty">Sin cotizaciones completas para la distribución por categoría.</div>{% endif %}</article>
- <article class="port-card" data-composition-chart="tokens"><div class="port-card-head"><div><h3>Composición del portafolio</h3><p class="sub">Peso actual vs. objetivo · 12 tokens (sin USDT)</p></div><div class="port-chart-key"><span><i style="background:#267ce5"></i>Actual</span><span><i style="background:#cad6e6"></i>Objetivo</span></div></div>
+ <article class="port-card" data-composition-chart="tokens"><div class="port-card-head"><div><h3>Composición del portafolio</h3><p class="sub">Peso actual vs. objetivo · {{ portfolio_rows|length }} tokens activos (sin USDT)</p></div><div class="port-chart-key"><span><i style="background:#267ce5"></i>Actual</span><span><i style="background:#cad6e6"></i>Objetivo</span></div></div>
  {% if portfolio_rows %}<div class="port-token-scroller"><div class="port-token-chart">{% for r in portfolio_rows %}<div class="port-token-col" title="{{ r.token }}: {{ r.status }} · {{ '%+.2f'|format(r.drift_pp) }} pp"><strong>{{ '%.1f'|format(r.weight*100) }}%</strong><div class="port-token-bars"><div class="port-token-bar" style="height:{{ r.weight*100/30*100 }}%" title="{{ r.token }} actual {{ '%.2f'|format(r.weight*100) }}%"></div><div class="port-token-bar target" style="height:{{ r.target*100/30*100 }}%" title="{{ r.token }} objetivo {{ '%.2f'|format(r.target*100) }}%"></div></div><small>{{ coin_tag(r.token) }}</small></div>{% endfor %}</div></div><p class="port-foot">Objetivos de 02_POSICIONES; desviaciones comparadas contra la manga cripto.</p>
  {% else %}<div class="port-empty">Sin cotizaciones completas para comparar los 12 tokens.</div>{% endif %}</article>
 </div>
