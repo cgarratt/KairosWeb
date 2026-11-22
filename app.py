@@ -38,7 +38,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.6.6'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.6.7'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -282,7 +282,8 @@ def bind_published_sheet():
     if request.path in independent or request.path in ('/login','/logout','/admin/login','/api/admin/session') or request.path=='/settings' or request.path.startswith('/static/'):
         return None
     try:
-        g.kairos_state=get_state(force=request.method != 'GET')
+        valuation_only = request.endpoint in ('integral_portfolio_page', 'portfolio', 'spot_refresh')
+        g.kairos_state=get_state(force=request.method != 'GET', valuation_only=valuation_only)
         return None
     except Exception as exc:
         incident=uuid.uuid4().hex[:10]
@@ -1642,6 +1643,22 @@ def home():
     # Single canonical dashboard/portfolio view. Legacy bookmarks still work.
     return redirect(url_for('integral_portfolio_page'), code=302)
 
+def _published_valuation(dashboard, observed):
+    state = g.kairos_state
+    cash_verified = state['validation']['Total USDT conciliado'] == 'OK'
+    return {
+        'status': 'SOLO_LECTURA',
+        'source': market_source(),
+        'observed_at': observed,
+        'snapshot_id': state['control']['snapshot_id'],
+        'fecha_corte': state['control']['fecha_corte'],
+        'crypto_value': dashboard['crypto_value'],
+        'usdt_publicado': dashboard['usdt_total'],
+        'cash_status': state['validation']['Total USDT conciliado'],
+        'total_value': dashboard['total_value'] if cash_verified else None,
+        'unreconciled_fills': state['unreconciled_fills'],
+    }
+
 @app.route('/mode/portafolio')
 def integral_portfolio_page():
     # Both donuts describe the same current Spot-valued physical patrimony.
@@ -1665,6 +1682,9 @@ def integral_portfolio_page():
     stage = 'MARKET_SPOT_MCP'
     try:
         observed, live = load_live_dashboard()
+        if g.kairos_state['read_only_valuation']:
+            return render_template('portfolio_read_only.html', master=APP_VERSION,
+                                   valuation=_published_valuation(live, observed))
         stage = 'PORTFOLIO_VALUATION'
         # All-or-nothing rendering: no totals/graphs from a partially constructed valuation.
         candidate_rows = live['rows']
@@ -2392,6 +2412,7 @@ def _deployed_asset_status():
         'health_three_tiers_v2030': ('app.py', ("@app.route('/api/health/diagnostics')", 'operational_providers', 'functional_modules')),
         'health_diagnostics_ui_v2030': ('templates/settings.html', ('id="health-deep-panel"', 'id="health-check-all"')),
         'health_diagnostics_js_v2030': ('static/mcp_settings.js', ('/api/health/diagnostics', 'health-check-output')),
+        'portfolio_read_only': ('templates/portfolio_read_only.html', ('Portafolio · Solo lectura', 'unreconciled_fills', 'Pendiente de conciliación de caja')),
         'portfolio_error_contract_v2030': ('templates/portfolio_integral.html', ('id="portfolio-diagnostic"','portfolio_diagnostic')),
         'homologation_contract_v2030': ('google_sheets_master.py', ('HOMOLOGATION_RANGE', 'assess_homologation(', 'SNAPSHOT_REFERENCE_STALE')),
         'homologation_ledger_v2031': ('kairos_sheets_features.py', ('HOMOLOGATION_TAB', '_certificate_append(', 'homologate_current_snapshot(')),
@@ -2545,8 +2566,11 @@ def health():
 def portfolio():
     try:
         observed, dashboard = load_live_dashboard()
+        if g.kairos_state['read_only_valuation']:
+            return jsonify(_published_valuation(dashboard, observed))
         return jsonify({'status':'OK', 'source':market_source()+' MCP + Google Sheets PUBLICADO',
                     'snapshot_id':g.kairos_state['control']['snapshot_id'],
+                    'unreconciled_fills':g.kairos_state.get('unreconciled_fills', []),
                     'config_source':'12_PARAMETROS_KAIROS', 'observed_at':observed, **dashboard})
     except Exception as exc:
         diag = diagnostic_error(exc, 'portfolio')
@@ -2658,6 +2682,7 @@ def spot_refresh():
     try:
         observed, _ = load_live_dashboard(force=True)
         return jsonify({'status':'OK','observed_at':observed, **market_cache_status(),
+                        'unreconciled_fills':g.kairos_state.get('unreconciled_fills', []),
                         'history':'SEPARATE_EXPLICIT_ACTION'})
     except Exception as exc:
         diag=diagnostic_error(exc,'spot:manual-refresh')

@@ -1,0 +1,16 @@
+{
+  "status": "PASS_LOCAL",
+  "checks": [
+    "public_health",
+    "guest_api_401",
+    "published_master_read_only",
+    "four_unlinked_fills_visible",
+    "cash_total_withheld",
+    "inconsistent_cash_rejected",
+    "manual_spot_refresh",
+    "orders_purchases_balancer_fail_closed"
+  ],
+  "market_fixture": "SYNTHETIC",
+  "master_modified": false,
+  "deployed": false
+}

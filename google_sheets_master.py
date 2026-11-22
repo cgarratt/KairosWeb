@@ -95,7 +95,7 @@ def homologation_certificate(state, snapshot_id, published_utc, certified_utc):
     snap=state['snapshot']
     if len(state['tokens'])!=12 or abs(sum(state['targets'].values())-1)>1e-7:
         raise SheetDataError('homologation: invalid token universe/targets')
-    if set(state['custody_policy'])!={'T1','T2','T3'}:
+    if _required_custody_tiers(state['tiers'], state['targets'], snap['holdings_total']).difference(state['custody_policy']):
         raise SheetDataError('homologation: incomplete custody policy')
     if any(k not in state['validation'] or state['validation'][k]!='OK'
            for k in ('12 tokens Kairos presentes','Targets cripto suman 100%',
@@ -180,7 +180,11 @@ def assess_homologation(control, rows, liquidity, history_rows=None, qf=0):
             'issues':issues,'read_only':True,'source':'13_CONTROL_HOMOLOGACION'}
 
 
-def parse_master(raw):
+def _required_custody_tiers(tiers, targets, holdings):
+    return {tier for symbol, tier in tiers.items() if targets[symbol] > 0 or holdings[symbol] > 0}
+
+
+def parse_master(raw, *, valuation_only=False):
     """Build the v4 dashboard-compatible data shape from live Sheet data only."""
     blocks=_map_rows(raw)
     ctrl={str(r[0]):_cell(r,1) for r in blocks['control'][1:] if r and r[0]}
@@ -263,7 +267,9 @@ def parse_master(raw):
         vals=[_number(_cell(r,i),f'{r[0]} custody fraction') for i in (1,2,3)]
         if not _almost(sum(vals),1.0) or _cell(r,4)!='OK':raise SheetDataError('04_CUSTODIA: invalid tier split')
         custody_targets[r[0]]=vals
-    if set(custody_targets)!=set(('T1','T2','T3')):raise SheetDataError('04_CUSTODIA: missing tiers')
+    missing_tiers = _required_custody_tiers(tiers, targets, holdings).difference(custody_targets)
+    if missing_tiers:
+        raise SheetDataError('04_CUSTODIA: missing tiers ' + ', '.join(sorted(map(str, missing_tiers))))
     # Open orders are allowed when individually documented and reserved below.
     # A declared count is not evidence of exchange execution.
     declared_open=_number(int(str(ctrl.get('ordenes_activas_declaradas','0'))), 'declared open orders') if str(ctrl.get('ordenes_activas_declaradas','0')).isdigit() else None
@@ -281,6 +287,8 @@ def parse_master(raw):
     # already include their effects. Never add fills to the snapshot again.
     _order_keys=set();_order_records={};_fill_keys=set()
     _fill_forms_by_order={};historical_orders=0;historical_fills=0;pending_ledger=[]
+    unreconciled_fills = []
+    verified_fill_orders = set()
     for section in ('orders','fills'):
         for rownum,r in enumerate(blocks[section][1:],start=5):
             if not any(v not in (None,'') for v in r):continue
@@ -366,8 +374,11 @@ def parse_master(raw):
                              and order['side']==side and order['token']==token
                              and order['linked_reconciled'] and order['evidence']
                              and str(_cell(r,14,'') or '').strip())
+                unlinked_history = bool(valuation_only and aggregate and order is None
+                                        and str(_cell(r,14,'') or '').strip())
                 if not (venue and order_id and token in SYMBOLS.union({'PUMP'}) and side in ('BUY','SELL')
-                        and ((aggregate and confirmed in ('SI','TRUE','CONCILIADO','VERIFICADO') and closed_link)
+                        and ((aggregate and confirmed in ('SI','TRUE','CONCILIADO','VERIFICADO')
+                              and (closed_link or unlinked_history))
                              or (trade_id and confirmed in ('TRUE','CONCILIADO','VERIFICADO')))):
                     raise SheetDataError(f'fills: operational or unverified entry at row {rownum}; reconcile before use')
                 gross=_number(_cell(r,6),f'fills row {rownum} gross qty')
@@ -386,7 +397,7 @@ def parse_master(raw):
                 elif not aggregate:
                     raise SheetDataError(f'fills: missing UTC timestamp at row {rownum}; reconcile before use')
                 if aggregate:
-                    if not _almost(_number(order['qty_executed'],f'orders qty matched row {rownum}'),gross,eps=1e-8):
+                    if not unlinked_history and not _almost(_number(order['qty_executed'],f'orders qty matched row {rownum}'),gross,eps=1e-8):
                         raise SheetDataError(f'fills: aggregate quantity does not match linked order at row {rownum}')
                     fee=_cell(r,7,0)
                     if str(_cell(r,8,''))==token and not _almost(gross-_number(fee,'fee'),net,eps=1e-7):
@@ -398,7 +409,12 @@ def parse_master(raw):
                 forms.add(form)
                 key=('AGG',venue,order_id) if aggregate else ('TRADE',venue,order_id,trade_id)
                 if key in _fill_keys:raise SheetDataError(f'fills: duplicate evidence key at row {rownum}')
-                _fill_keys.add(key);historical_fills+=1
+                _fill_keys.add(key)
+                if unlinked_history:
+                    unreconciled_fills.append({'row': rownum, 'venue': venue, 'token': token})
+                    continue
+                verified_fill_orders.add((venue,order_id))
+                historical_fills+=1
     # Confirmed manual orders are tracked separately in 26_ORDENES_GESTION.
     # Never credit a stated execution to physical custody or balances until
     # 05_ORDENES/06_FILLS and the next published snapshot are reconciled.
@@ -423,7 +439,7 @@ def parse_master(raw):
         active=latest_orders(events_from_rows(blocks['order_workflow']))
         for entry in active:
             if entry['estado'] not in ('CONFIRMADA','PARCIAL','EJECUTADA'):continue
-            if (entry['venue'],str(entry['exchange_order_id'])) in _fill_forms_by_order:
+            if (entry['venue'],str(entry['exchange_order_id'])) in verified_fill_orders:
                 continue  # only actual filled evidence in canonical 05 AND 06 releases funds
             token=str(entry['token']);side=str(entry['lado'])
             qty=_number(entry['unidades_previstas'],'workflow qty')
@@ -499,7 +515,16 @@ def parse_master(raw):
     historical_date_refs=sorted(set(re.findall(r'\b(\d{1,2}/\d{1,2})(?:/\d{4})?\b', ' '.join(historical_notes))))
     historical_reference_label=(' / '.join(historical_date_refs) + ' (año no indicado en la hoja)') if historical_date_refs else 'N/D (fecha no publicada)'
     validation={r[0]:_cell(r,1) for r in blocks['validation'][1:] if r and r[0]}
-    for key in ('12 tokens Kairos presentes','Targets cripto suman 100%','Custodia suma unidades','Total USDT conciliado','Reserva QF sin duplicar'):
+    universe_ok = validation.get('12 tokens Kairos presentes') == 'OK'
+    if not universe_ok and validation.get('10 tokens activos y 2 retirados') == 'OK':
+        universe_ok = sum(tiers[s] == 'RETIRADO' and targets[s] == holdings[s] == 0 for s in SYMBOLS) == 2
+    if not universe_ok:
+        raise SheetDataError('11_VALIDACIONES: 12 tokens Kairos presentes not OK')
+    validation['12 tokens Kairos presentes'] = 'OK'
+    cash_validation = validation.get('Total USDT conciliado')
+    if cash_validation != 'OK' and not (valuation_only and cash_validation == 'PENDIENTE_COMISION_BTC'):
+        raise SheetDataError('11_VALIDACIONES: Total USDT conciliado not OK')
+    for key in ('Targets cripto suman 100%','Custodia suma unidades','Reserva QF sin duplicar'):
         if validation.get(key)!='OK':raise SheetDataError(f'11_VALIDACIONES: {key} not OK')
     if validation.get('Estado publicación')!='PUBLICADO':raise SheetDataError('11_VALIDACIONES: publication mismatch')
     homologation=assess_homologation(ctrl,blocks['homologation'],liquidity,blocks['homologation_history'],qf)
@@ -522,7 +547,10 @@ def parse_master(raw):
             'integral':{'historical_capital_usdt':_number(meta.get('Capital inicial histórico'),'capital historical'),
                         'source_note':'Google Sheets 08_INTEGRAL: valores históricos, no precios actuales',
                             'reference_date_label':historical_reference_label,'segments':segments},
-            'validation':validation,'homologation':homologation, 'workflow_pending':workflow_pending,'historical_ledger_counts':{'orders':historical_orders,'fills':historical_fills},'pending_ledger_count':len(pending_ledger)}
+            'validation':validation,'homologation':None if unreconciled_fills or cash_validation != 'OK' else homologation,
+            'read_only_valuation':bool(unreconciled_fills or cash_validation != 'OK'),
+            'unreconciled_fills':unreconciled_fills, 'workflow_pending':workflow_pending,
+            'historical_ledger_counts':{'orders':historical_orders,'fills':historical_fills},'pending_ledger_count':len(pending_ledger)}
 
 
 def _remote_data():
@@ -605,14 +633,15 @@ def public_failure_code(exc):
     return 'GOOGLE_SHEETS_CONTRACT_INVALID'
 
 
-def get_state(*,force=False):
+def get_state(*,force=False,valuation_only=False):
     """Return a validated immutable-by-convention state; never fall back on stale/JSON."""
     ttl=min(300,max(10,int(os.getenv('KAIROS_SHEETS_CACHE_SECONDS','60'))))
     with _LOCK:
         if not force and _CACHE['state'] is not None and time.monotonic()-_CACHE['loaded_at']<ttl:
             return _CACHE['state']
-        state=parse_master(_remote_data())
-        _CACHE.update(state=state,loaded_at=time.monotonic())
+        state=parse_master(_remote_data(),valuation_only=valuation_only)
+        if not state['read_only_valuation']:
+            _CACHE.update(state=state,loaded_at=time.monotonic())
         return state
 
 

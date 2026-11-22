@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block title %}Kairos | Portafolio de solo lectura{% endblock %}
+{% block content %}
+<section class="card" aria-labelledby="valuation-title">
+  <h2 id="valuation-title">Portafolio · Solo lectura</h2>
+  <p>Snapshot {{ valuation.snapshot_id }} · Corte {{ valuation.fecha_corte }}</p>
+  <p>{{ valuation.source }} · Observación <time datetime="{{ valuation.observed_at }}">{{ valuation.observed_at }}</time></p>
+  <dl>
+    <dt>Valor cripto Spot</dt>
+    <dd data-private="money">{{ '{:,.2f}'.format(valuation.crypto_value) }} USDT</dd>
+    <dt>USDT físico publicado</dt>
+    <dd data-private="money">{{ '{:,.2f}'.format(valuation.usdt_publicado) }} USDT</dd>
+    <dt>Patrimonio total</dt>
+    {% if valuation.total_value is not none %}
+    <dd data-private="money">{{ '{:,.2f}'.format(valuation.total_value) }} USDT</dd>
+    {% else %}
+    <dd>Pendiente de conciliación de caja · {{ valuation.cash_status }}</dd>
+    {% endif %}
+  </dl>
+  {% if valuation.unreconciled_fills %}
+  <h3>Fills históricos pendientes</h3>
+  <ul>
+    {% for fill in valuation.unreconciled_fills %}
+    <li>{{ fill.venue }} · {{ fill.token }} · 06_FILLS fila {{ fill.row }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <p>Las funciones que requieren conciliación siguen bloqueadas.</p>
+</section>
+{% endblock %}
