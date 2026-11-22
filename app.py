@@ -38,7 +38,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.6.7'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.6.8'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -279,7 +279,7 @@ def bind_published_sheet():
     independent={'/health','/api/mcp-status','/api/mcp-config-check','/api/mcp-diagnostics',
                  '/api/alerts/unread','/api/alerts/read','/api/alerts/read-all',
                  '/api/history/refresh','/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status', '/api/mcp-refresh', '/api/health/diagnostics'}
-    if request.path in independent or request.path in ('/login','/logout','/admin/login','/api/admin/session') or request.path=='/settings' or request.path.startswith('/static/'):
+    if request.path in independent or request.path in ('/','/login','/logout','/admin/login','/api/admin/session') or request.path=='/settings' or request.path.startswith('/static/'):
         return None
     try:
         valuation_only = request.endpoint in ('integral_portfolio_page', 'portfolio', 'spot_refresh')
@@ -1555,7 +1555,10 @@ def balancer_report(d, observed):
     Commitments cannot be inferred from this static snapshot; don't label theoretical
     capacity as real executable cash.
     """
-    rows=sorted(d['rows'],key=lambda r:r['value'],reverse=True)
+    active_rows = (row for row in d['rows']
+                   if not (row['tier'] == 'RETIRADO' and
+                           row['units'] == row['target'] == row.get('reserved_sell_units', 0) == 0))
+    rows = sorted(active_rows, key=lambda row: row['value'], reverse=True)
     p=d['total_value']; cash=d['usdt_total']; crypto=d['crypto_value']
     trading=d['trading_reserve']
     reserves=budgets_from_master(g.kairos_state['parameters'],cash,trading,p,
@@ -1576,10 +1579,11 @@ def balancer_report(d, observed):
         ('PUMPFUN' if r['token']=='PUMP' else r['token']): {
             'tier':r['tier'], 'units':r['units'], 'hodl':r['hodl_units'],
             'core':r['core_units'], 'exchange':r['exchange_units']
-        } for r in d['rows']
+        } for r in rows
     }
     custody_comparison = compare_custody(custody_positions, g.kairos_state['custody_policy'], min_transfer_fraction=.05,
-        reserved_exchange={('PUMPFUN' if r['token']=='PUMP' else r['token']):r.get('reserved_sell_units',0) for r in d['rows']})
+        reserved_exchange={('PUMPFUN' if r['token']=='PUMP' else r['token']):r['reserved_sell_units']
+                           for r in rows if r.get('reserved_sell_units',0)>0})
     buy_candidates=[r for r in rows if r['drift_pp'] < -band*r['target']-1e-9]
     sell_candidates=[r for r in rows if r['drift_pp'] > band*r['target']+1e-9 and r['token']!='BTC']
     from orders_inbox import allocate_infra_buys, overweight_sell_plan

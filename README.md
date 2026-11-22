@@ -1,7 +1,7 @@
-# KairosWeb 4.6.7
+# KairosWeb 4.6.8
 
-Portafolio de solo lectura para snapshots publicados con fills históricos aún sin orden vinculada. La lectura conserva los controles de saldos, posiciones y custodia. Los fills no certificados se muestran como pendientes y no liberan compromisos. El total queda pendiente si la caja no está conciliada.
+Balancer excluye de sus simulaciones y de la comparación de custodia las filas RETIRADO sin saldo, objetivo ni reserva SELL. La raíz redirige a Portafolio incluso en modo de solo lectura.
 
-Descomprimir en la raíz del repositorio privado de KairosWeb y desplegar con el `render.yaml` incluido. Conservar variables de entorno y verificar `/health` (versión 4.6.7, HTTP 200), inicio de sesión, Portafolio y Actualizar Spot. Confirmar el bloqueo de Compras, Balancer y Órdenes mientras corresponda. Si el despliegue falla, volver al commit anterior.
+Extraer los archivos en la raíz del repositorio de KairosWeb conectado a Render. Conservar las variables del servicio. Tras desplegar, comprobar /health y abrir Balancer desde una sesión autenticada.
 
-El ZIP se probó en local con una lectura del MASTER y un lote de precios sintético. No modifica Sheets ni despliega Render por sí mismo.
+Prueba local con lectura del MASTER y precios sintéticos. Publicación y prueba autenticada en Render pendientes.

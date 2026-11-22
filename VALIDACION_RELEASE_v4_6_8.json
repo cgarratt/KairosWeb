@@ -1,0 +1,16 @@
+{
+  "status": "PASS_LOCAL",
+  "checks": {
+    "/": 302,
+    "/mode/portafolio": 200,
+    "/mode/balancer": 200,
+    "/mode/ventas": 200,
+    "/mode/ordenes": 200,
+    "/mode/compras": 200,
+    "/mode/forecast": 200
+  },
+  "market_fixture": "SYNTHETIC",
+  "order_adapter": "STUB",
+  "master_modified": false,
+  "deployed": false
+}
