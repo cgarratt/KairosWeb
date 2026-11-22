@@ -1,0 +1,16 @@
+{
+  "status": "PASS_LOCAL",
+  "checks": [
+    "guest_redirect",
+    "anonymous_portfolio_api_denied",
+    "manifest",
+    "icons",
+    "service_worker_no_store",
+    "authenticated_pwa_with_test_valuation",
+    "retired_assets_hidden",
+    "login_logout_destinations",
+    "javascript_syntax"
+  ],
+  "ios_verified": false,
+  "deployed": false
+}

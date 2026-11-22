@@ -1,5 +1,7 @@
-# KairosWeb 4.6.9
+# KairosWeb 4.7.1
 
-Las vistas activas se derivan de las posiciones publicadas. Los activos RETIRADO sin unidades, objetivo ni SELL reservado se excluyen de los gráficos, propuestas y selectores actuales. Se conservan la cobertura MCP de 12 pares y los registros históricos de Sheets.
+Configuración de objetivos usa los tiers activos y los objetivos publicados por token. Conserva el piloto PWA en /pwa/.
 
-Descomprimir en la raíz del repositorio de KairosWeb conectado a Render y conservar las variables del servicio. Verificar /health y las seis pantallas desde una sesión autenticada.
+Extraer en la raíz del repositorio de KairosWeb conectado a Render. Tras desplegar, comprobar /health, Configuración → Objetivos de gestión y /pwa/.
+
+Configuración y prevalidación probadas localmente con una lectura del MASTER. Sin escrituras a Sheets ni despliegue remoto.

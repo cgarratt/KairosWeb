@@ -3,7 +3,7 @@
   const fmt=window.KairosFormatting;
   const names={portfolio_goals:'Objetivos de gestión del portafolio',units:'Maestro de unidades',targets:'Objetivos y Tiers',tier_custody:'Custodia por Tier',
     liquidity:'Liquidez por venue',capital_targets:'Objetivos de liquidez y ReservaTrading (%)',parameters:'Parámetros',pivots:'Pivotes y referencias',mcp:'Estado de conexiones MCP'};
-  const desc={portfolio_goals:'Una sola vista: Cripto vs Liquidez, Tier 1/2/3, objetivos de USDT/Reservas y HODL/Core/Exchange. Los cuatro grupos se validan y publican en la misma revisión, sin modificar saldos físicos.',units:'02_POSICIONES · Unidades HODL, Core y Exchange; inversión remanente. Total y costo medio se calculan automáticamente.',
+  const desc={portfolio_goals:'Una sola vista: Cripto vs Liquidez, tiers activos, objetivos de USDT/Reservas y HODL/Core/Exchange. Los cuatro grupos se validan y publican en la misma revisión, sin modificar saldos físicos.',units:'02_POSICIONES · Unidades HODL, Core y Exchange; inversión remanente. Total y costo medio se calculan automáticamente.',
     targets:'02_POSICIONES · Objetivos de los 12 activos; la suma debe ser 100%.',
     tier_custody:'04_CUSTODIA · Porcentajes simulados por Tier; no realiza traspasos reales.',
     liquidity:'03_LIQUIDEZ · Saldos USDT reales por venue; Quantfury se cuenta una sola vez. Para porcentajes objetivo abre «Objetivos de liquidez y ReservaTrading (%)».',
@@ -399,28 +399,29 @@
   // Balancer liquidity policy. No write occurs until admin preview + publication.
   const GOAL_GROUPS = [
     {id:'portfolio',title:'1. Portafolio global',caption:'Porcentaje del patrimonio objetivo. No representa caja física.',fields:[['crypto','Cripto'],['liquidity','Liquidez total']]},
-    {id:'tiers',title:'2. Capas cripto',caption:'Distribución de la manga cripto entre T1, T2 y T3.',fields:[['T1','Tier 1'],['T2','Tier 2'],['T3','Tier 3']]},
+    {id:'tiers',title:'2. Capas cripto',caption:'Distribución de la manga cripto entre los tiers activos.'},
     {id:'liquidity_mix',title:'3. Distribución de liquidez objetivo',caption:'Porcentajes dentro de la Liquidez total, no sobre patrimonio ni el saldo Quantfury.',fields:[['usdt','USDT operativos'],['balancer','Reserva Balancer (objetivo)'],['trading','ReservaTrading (objetivo)']]},
   ];
   function goalRead(key){const input=body.querySelector(`[data-goal="${key}"]`);if(!input)throw Error('Falta el campo '+key);
     const text=input.value.trim().replace(',','.');if(!/^(?:\d+)(?:\.\d+)?$/.test(text))throw Error('Porcentaje inválido: '+key);
     const v=Number(text);if(!Number.isFinite(v)||v<0||v>100)throw Error('Porcentaje fuera de 0–100: '+key);return v/100;
   }
+  const goalTiers = () => Object.keys(state?.sections?.portfolio_goals?.tiers || {});
   function collectGoals(){
     const p={group:'portfolio',crypto:goalRead('portfolio.crypto'),liquidity:goalRead('portfolio.liquidity')};
-    const t={group:'tiers',T1:goalRead('tiers.T1'),T2:goalRead('tiers.T2'),T3:goalRead('tiers.T3')};
+    const t={group:'tiers',...Object.fromEntries(goalTiers().map(tier=>[tier,goalRead('tiers.'+tier)]))};
     const l={group:'liquidity',usdt:goalRead('liquidity_mix.usdt'),balancer:goalRead('liquidity_mix.balancer'),trading:goalRead('liquidity_mix.trading')};
-    const c=['T1','T2','T3'].map(tier=>({group:'custody',tier,hodl:goalRead('custody.'+tier+'.hodl'),core:goalRead('custody.'+tier+'.core'),exchange:goalRead('custody.'+tier+'.exchange')}));
-    for(const [name,vals] of [['Cripto/Liquidez',[p.crypto,p.liquidity]],['Tiers',[t.T1,t.T2,t.T3]],['Liquidez/Reservas',[l.usdt,l.balancer,l.trading]],...c.map(x=>['Custodia '+x.tier,[x.hodl,x.core,x.exchange]])]){
+    const c=goalTiers().map(tier=>({group:'custody',tier,hodl:goalRead('custody.'+tier+'.hodl'),core:goalRead('custody.'+tier+'.core'),exchange:goalRead('custody.'+tier+'.exchange')}));
+    for(const [name,vals] of [['Cripto/Liquidez',[p.crypto,p.liquidity]],['Tiers',goalTiers().map(tier=>t[tier])],['Liquidez/Reservas',[l.usdt,l.balancer,l.trading]],...c.map(x=>['Custodia '+x.tier,[x.hodl,x.core,x.exchange]])]){
       if(Math.abs(vals.reduce((a,b)=>a+b,0)-1)>1e-8)throw Error(name+' debe sumar exactamente 100%.');
     }
     if(body.querySelector('[data-goal="reserve_caps.balancer"]')){l.balancer_cap=goalRead('reserve_caps.balancer');l.trading_cap=goalRead('reserve_caps.trading');}
     l.balancer_min_o2_o4=goalRead('balancer_min_o2_o4_fraction');
     const base=state.sections.portfolio_goals.token_targets;
     const tokenTargets=base.map(r=>({token:r.token,tier:r.tier,target:goalRead('token.'+r.token)}));
-    const tierTotals=Object.fromEntries(['T1','T2','T3'].map(tier=>[tier,tokenTargets.filter(r=>r.tier===tier).reduce((a,r)=>a+r.target,0)]));
-    for(const tier of ['T1','T2','T3'])if(Math.abs(tierTotals[tier]-t[tier])>1e-8)throw Error('Objetivos '+tier+' deben sumar '+(t[tier]*100).toFixed(2)+'%.');
-    if(Math.abs(tokenTargets.reduce((a,r)=>a+r.target,0)-1)>1e-8)throw Error('Los 12 objetivos deben sumar 100%.');
+    const tierTotals=Object.fromEntries(goalTiers().map(tier=>[tier,tokenTargets.filter(r=>r.tier===tier).reduce((a,r)=>a+r.target,0)]));
+    for(const tier of goalTiers())if(Math.abs(tierTotals[tier]-t[tier])>1e-8)throw Error('Objetivos '+tier+' deben sumar '+(t[tier]*100).toFixed(2)+'%.');
+    if(Math.abs(tokenTargets.reduce((a,r)=>a+r.target,0)-1)>1e-8)throw Error('Los objetivos activos deben sumar 100%.');
     return [p,t,l,...c,{group:'token_targets',targets:tokenTargets}];
   }
   function goalInput(key,value,label){const holder=el('label','goal-field');holder.append(el('span','',label));
@@ -428,14 +429,14 @@
     inp.setAttribute('aria-label',label);inp.addEventListener('input',updateGoalTotals);holder.append(inp);return holder;
   }
   function updateGoalTotals(){totals.replaceChildren();const summaries=[];let valid=true;
-    for(const [label,keys] of [['Cripto + Liquidez',['portfolio.crypto','portfolio.liquidity']],['Tiers',['tiers.T1','tiers.T2','tiers.T3']],['Liquidez y reservas',['liquidity_mix.usdt','liquidity_mix.balancer','liquidity_mix.trading']],
-      ...['T1','T2','T3'].map(t=>['Custodia '+t,['custody.'+t+'.hodl','custody.'+t+'.core','custody.'+t+'.exchange']])]){
+    for(const [label,keys] of [['Cripto + Liquidez',['portfolio.crypto','portfolio.liquidity']],['Tiers',goalTiers().map(tier=>'tiers.'+tier)],['Liquidez y reservas',['liquidity_mix.usdt','liquidity_mix.balancer','liquidity_mix.trading']],
+      ...goalTiers().map(t=>['Custodia '+t,['custody.'+t+'.hodl','custody.'+t+'.core','custody.'+t+'.exchange']])]){
       try{const total=keys.reduce((acc,k)=>acc+goalRead(k),0)*100;const ok=Math.abs(total-100)<1e-6;valid=valid&&ok;summaries.push({label,total,ok});}
       catch(_){valid=false;summaries.push({label,total:NaN,ok:false});}
     }
     if(state?.sections?.portfolio_goals?.token_targets){
       const base=state.sections.portfolio_goals.token_targets;
-      for(const tier of ['T1','T2','T3']){
+      for(const tier of goalTiers()){
         try{const subtotal=base.filter(r=>r.tier===tier).reduce((a,r)=>a+goalRead('token.'+r.token),0)*100;
           const expected=goalRead('tiers.'+tier)*100;
           const ok=Math.abs(subtotal-expected)<1e-6;valid=valid&&ok;
@@ -466,13 +467,13 @@
       }catch(_){valid=false;}
     }
     if(m&&valid&&state){
-      const entries=collectGoals(),g=entries[0],t=entries[1],liq=entries[2],cus=entries.slice(3);
-      const targets=entries[6].targets.map(r=>({token:r.token,percent:100*r.target}));
-      const h=Object.fromEntries(cus.map(r=>[r.tier,r]));const protectedShare=['T1','T2','T3'].reduce((sum,tier)=>sum+t[tier]*(h[tier].hodl+h[tier].core),0);
+      const entries=collectGoals(),g=entries[0],t=entries[1],liq=entries[2],cus=entries.slice(3,-1);
+      const targets=entries.at(-1).targets.map(r=>({token:r.token,percent:100*r.target}));
+      const h=Object.fromEntries(cus.map(r=>[r.tier,r]));const protectedShare=goalTiers().reduce((sum,tier)=>sum+t[tier]*(h[tier].hodl+h[tier].core),0);
       const totals=[g.crypto*protectedShare,g.crypto*(1-protectedShare),g.liquidity*(liq.usdt+liq.balancer),g.liquidity*liq.trading];
       m.replaceChildren(el('strong','',`Vista previa: HODL/Core ${(totals[0]*100).toFixed(2)}%, Exchange ${(totals[1]*100).toFixed(2)}%, Liquidez/Reserva Balancer ${(totals[2]*100).toFixed(2)}%, ReservaTrading ${(totals[3]*100).toFixed(2)}% del patrimonio objetivo.`),
       el('p','settings-hint','Objetivos por token derivados (manga cripto): '+targets.map(x=>x.token+' '+x.percent.toFixed(2)+'%').join(' · ')));
-    }else if(m)m.textContent='Completa las validaciones de Tier, custodia y los 12 tokens para generar la vista previa.';
+    }else if(m)m.textContent='Completa las validaciones de Tier, custodia y los tokens activos para generar la vista previa.';
     save.disabled=!state?.is_admin||!state?.write_configured||!valid;
   }
   function drawGoals(){
@@ -480,7 +481,7 @@
     for(const group of GOAL_GROUPS){
       const card=el('section','goal-card');card.append(el('h4','',group.title),el('p','settings-hint',group.caption));
       const row=el('div','goal-grid');const values=group.id==='portfolio'?g.portfolio:group.id==='tiers'?g.tiers:g.liquidity_mix;
-      group.fields.forEach(([key,label])=>row.append(goalInput(group.id+'.'+key,values[key],label+' (%)')));
+      (group.id==='tiers'?goalTiers().map(tier=>[tier,'Tier '+tier.slice(1)]):group.fields).forEach(([key,label])=>row.append(goalInput(group.id+'.'+key,values[key],label+' (%)')));
       card.append(row);body.append(card);
     }
     const assignment=el('section','goal-card');assignment.append(el('h4','','Reservas y topes del portafolio'),
@@ -494,14 +495,14 @@
     }
     assignment.append(goalInput('balancer_min_o2_o4_fraction',g.balancer_min_o2_o4_fraction,'Umbral liquidez sin QF (% del portafolio)'),el('p','settings-hint','Se compara (liquidez total − QF) / valor actual del portafolio, antes de descontar reservas y compromisos. Por debajo del umbral, Balancer libera su reserva no comprometida; en igualdad o por encima conserva la asignación normal. Las órdenes confirmadas siguen protegidas y no se cancelan.'));
     const cust=el('section','goal-card');cust.append(el('h4','','4. Custodia por Tier'),el('p','settings-hint','Cada Tier suma 100% entre HODL, Core y Exchange. Son metas, no transferencias.'));
-    ['T1','T2','T3'].forEach(t=>{
+    goalTiers().forEach(t=>{
       const row=el('div','goal-grid');row.append(el('strong','goal-tier',t));
       ['hodl','core','exchange'].forEach(k=>row.append(goalInput('custody.'+t+'.'+k,g.custody[t][k],k==='hodl'?'HODL (%)':k==='core'?'Core (%)':'Exchange (%)')));
       cust.append(row);
     });body.append(cust);
     const tokens=el('section','goal-card');tokens.append(el('h4','','5. Pesos objetivo por Token'),
-      el('p','settings-hint','Los 12 tokens suman 100% de la manga cripto. Cada grupo debe coincidir exactamente con el objetivo de su Tier; no se cambia la clasificación T1/T2/T3.'));
-    for(const tier of ['T1','T2','T3']){
+      el('p','settings-hint','Los pesos de los tokens activos suman 100% de la manga cripto. Cada grupo debe coincidir con el objetivo de su Tier.'));
+    for(const tier of goalTiers()){
       const card=el('section','goal-token-tier-card');
       const head=el('div','goal-token-tier-head');
       const heading=el('div','goal-token-tier-heading');

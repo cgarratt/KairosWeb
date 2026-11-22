@@ -38,7 +38,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.6.9'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.7.1'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -185,9 +185,11 @@ def _portfolio_authorized():
 def authenticate():
     path = request.path
     # Static assets and Render liveness are public. API values remain private.
-    if path == '/health' or path.startswith('/static/') or path in ('/login', '/logout', '/api/modes'):
+    if path == '/health' or path.startswith('/static/') or path in ('/login', '/logout', '/api/modes', '/pwa/sw.js'):
         return None
     if not _portfolio_authorized():
+        if path in ('/pwa', '/pwa/'):
+            return redirect(url_for('portfolio_login', next='pwa'))
         if path in ('/', '/mode/portafolio'):
             return render_template('guest_portfolio.html', master=APP_VERSION)
         if path.startswith('/mode/'):
@@ -206,8 +208,9 @@ def authenticate():
 
 @app.route('/login', methods=['GET', 'POST'])
 def portfolio_login():
-    destination = 'settings' if request.args.get('next') == 'settings' else 'portfolio'
-    target = url_for('admin_login') if destination == 'settings' else url_for('integral_portfolio_page')
+    destinations = {'settings': 'admin_login', 'pwa': 'pwa_home', 'portfolio': 'integral_portfolio_page'}
+    destination = request.args.get('next', 'portfolio')
+    target = url_for(destinations.get(destination, 'integral_portfolio_page'))
     if _portfolio_authorized():
         return redirect(target)
     if not app.secret_key or not os.getenv('KAIROS_WEB_PASSWORD') or not os.getenv('KAIROS_WEB_USER'):
@@ -257,12 +260,13 @@ def portfolio_login():
 
 @app.route('/logout', methods=['GET', 'POST'])
 def portfolio_logout():
+    target = url_for('pwa_home' if request.args.get('next') == 'pwa' else 'integral_portfolio_page')
     # A GET never changes authentication state (prevents cross-site logout links).
     if request.method == 'GET':
-        return redirect(url_for('integral_portfolio_page'))
+        return redirect(target)
     # Guests or expired sessions have nothing to log out from.
     if not _portfolio_authorized():
-        return redirect(url_for('integral_portfolio_page'), code=303)
+        return redirect(target, code=303)
     # HTML forms send csrf as a POST field, not the X-Kairos-Csrf API header.
     # Keep a dedicated logout token to avoid stale tabs after admin CSRF rotation;
     # support existing v2.0.36 sessions during a rolling deployment.
@@ -271,7 +275,7 @@ def portfolio_logout():
     if not _same_origin() or not valid_logout_csrf(saved, given):
         return jsonify({'status':'FORBIDDEN', 'reason':'LOGOUT_CSRF_OR_ORIGIN'}), 403
     session.clear()  # Both user and admin levels are invalidated.
-    return redirect(url_for('integral_portfolio_page'), code=303)
+    return redirect(target, code=303)
 
 @app.before_request
 def bind_published_sheet():
@@ -279,7 +283,7 @@ def bind_published_sheet():
     independent={'/health','/api/mcp-status','/api/mcp-config-check','/api/mcp-diagnostics',
                  '/api/alerts/unread','/api/alerts/read','/api/alerts/read-all',
                  '/api/history/refresh','/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status', '/api/mcp-refresh', '/api/health/diagnostics'}
-    if request.path in independent or request.path in ('/','/login','/logout','/admin/login','/api/admin/session') or request.path=='/settings' or request.path.startswith('/static/'):
+    if request.path in independent or request.path in ('/','/login','/logout','/admin/login','/api/admin/session','/pwa/','/pwa','/pwa/sw.js') or request.path=='/settings' or request.path.startswith('/static/'):
         return None
     try:
         valuation_only = request.endpoint in ('integral_portfolio_page', 'portfolio', 'spot_refresh')
@@ -1675,6 +1679,25 @@ def _published_valuation(dashboard, observed):
         'total_value': dashboard['total_value'] if cash_verified else None,
         'unreconciled_fills': state['unreconciled_fills'],
     }
+
+@app.get('/pwa/sw.js')
+def pwa_worker():
+    return app.send_static_file('pwa/sw.js')
+
+
+@app.get('/pwa/')
+def pwa_home():
+    try:
+        g.kairos_state = get_state(valuation_only=True)
+        observed, dashboard = load_live_dashboard()
+        valuation = _published_valuation(dashboard, observed)
+        rows = _active_rows(dashboard['rows'])
+    except Exception as exc:
+        diagnostic = diagnostic_error(exc, 'pwa:portfolio')
+        return render_template('pwa.html', version=APP_VERSION, valuation=None, rows=[],
+                               issue=diagnostic['code']), 503
+    return render_template('pwa.html', version=APP_VERSION, valuation=valuation, rows=rows, issue=None)
+
 
 @app.route('/mode/portafolio')
 def integral_portfolio_page():

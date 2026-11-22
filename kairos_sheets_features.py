@@ -471,9 +471,15 @@ def _ensure_one(value, prefix):
 def portfolio_goals_data(raw):
     """Single sourced management objectives, never a proxy for physical balances."""
     pos=[r for r in raw[SHEETS['positions']][1:] if r and r[0] in ('BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMPFUN','PLUME','VIRTUAL','PEPE')]
-    tiers={tier:sum(float(r[3]) for r in pos if r[2]==tier) for tier in ('T1','T2','T3')}
+    active = [r for r in pos if not (r[2] == 'RETIRADO' and r[3] == r[7] == 0)]
+    active_tiers = sorted({r[2] for r in active})
+    if not active_tiers or any(tier not in ('T1', 'T2', 'T3') for tier in active_tiers):
+        raise SettingsError('02_POSICIONES: Tier activo inválido')
+    tiers = {tier: sum(float(r[3]) for r in active if r[2] == tier) for tier in active_tiers}
     custody={r[0]:{'hodl':float(r[1]),'core':float(r[2]),'exchange':float(r[3])}
-             for r in raw[SHEETS['custody']][1:] if r and r[0] in ('T1','T2','T3')}
+             for r in raw[SHEETS['custody']][1:] if r and r[0] in tiers}
+    if custody.keys() != tiers.keys():
+        raise SettingsError('04_CUSTODIA: falta la política de un Tier activo')
     base={r[0]:float(r[1]) for r in raw[SHEETS['integral']] if r and r[0] in ('Capital inicial histórico',)+CAPITAL_TARGET_SEGMENTS}
     capital=base['Capital inicial histórico']
     if capital<=0:raise SettingsError('08_INTEGRAL: capital histórico inválido')
@@ -501,7 +507,7 @@ def portfolio_goals_data(raw):
     return {'balancer_min_o2_o4_fraction':min_o2,'balancer_min_o2_o4_published':'BALANCER_MIN_O2_O4_PORTFOLIO_FRACTION' in params,
             'portfolio':{'crypto':crypto,'liquidity':liquidity},'tiers':tiers,
             'liquidity_mix':liq,'custody':custody,'liquidity_mix_published':complete,
-            'token_targets':[{'token':r[0],'tier':r[2],'target':float(r[3])} for r in pos],
+            'token_targets':[{'token':r[0],'tier':r[2],'target':float(r[3])} for r in active],
             'capital_historical_reference':capital,
             'usdt_operating_actual':operating, 'usdt_physical_actual':physical,
             'balancer_assigned_usdt':assignment,
@@ -521,8 +527,11 @@ def _goal_sum(name,values):
         raise SettingsError(name+': los porcentajes deben sumar 100%')
 
 
-def _goal_entries(entries):
-    if len(entries)!=7:raise SettingsError('Objetivos: se requieren 7 grupos completos, incluidos 12 tokens')
+def _goal_entries(entries, published):
+    expected = {row['token']: row['tier'] for row in published['token_targets']}
+    active_tiers = tuple(published['tiers'])
+    if len(entries) != 4 + len(active_tiers):
+        raise SettingsError('Objetivos: faltan grupos del portafolio o de los tiers activos')
     groups={};custody={};token_targets=None
     for e in entries:
         g=e.get('group')
@@ -530,14 +539,14 @@ def _goal_entries(entries):
             token_targets=e.get('targets')
         elif g=='custody':
             t=e.get('tier')
-            if t not in ('T1','T2','T3') or t in custody:raise SettingsError('Custodia: Tier ausente o duplicado')
+            if t not in active_tiers or t in custody:raise SettingsError('Custodia: Tier ausente o duplicado')
             custody[t]={f:_goal_fraction(e.get(f),t+' '+f) for f in ('hodl','core','exchange')}
         elif g in ('portfolio','tiers','liquidity') and g not in groups:groups[g]=e
         else:raise SettingsError('Grupo de objetivos desconocido o duplicado')
-    if set(groups)!=set(('portfolio','tiers','liquidity')) or set(custody)!=set(('T1','T2','T3')):
+    if set(groups)!=set(('portfolio','tiers','liquidity')) or set(custody)!=set(active_tiers):
         raise SettingsError('Faltan grupos de objetivos o custodias')
     portfolio={f:_goal_fraction(groups['portfolio'].get(f),'Portafolio '+f) for f in ('crypto','liquidity')}
-    tiers={t:_goal_fraction(groups['tiers'].get(t), 'Peso '+t) for t in ('T1','T2','T3')}
+    tiers={t:_goal_fraction(groups['tiers'].get(t), 'Peso '+t) for t in active_tiers}
     liquid={f:_goal_fraction(groups['liquidity'].get(f),'Liquidez '+f) for f in ('usdt','balancer','trading')}
     _goal_sum('Cripto vs Liquidez',list(portfolio.values()))
     _goal_sum('Distribución por Tier',list(tiers.values()))
@@ -552,11 +561,8 @@ def _goal_entries(entries):
         for k in cap_keys:_goal_fraction(groups['liquidity'][k],k)
     if 'balancer_min_o2_o4' in groups['liquidity']:
         _goal_fraction(groups['liquidity']['balancer_min_o2_o4'],'Umbral mínimo O2/O4')
-    expected={'BTC':'T1','ETH':'T1','SOL':'T1','LINK':'T1','HYPE':'T1',
-              'HBAR':'T2','SUI':'T2','ONDO':'T2','PUMPFUN':'T2','PLUME':'T2',
-              'VIRTUAL':'T3','PEPE':'T3'}
-    if not isinstance(token_targets,list) or len(token_targets)!=12:
-        raise SettingsError('Se requieren exactamente 12 objetivos por token')
+    if not isinstance(token_targets, list) or len(token_targets) != len(expected):
+        raise SettingsError('Se requiere un objetivo por cada token activo')
     targets={}
     for entry in token_targets:
         if not isinstance(entry,dict):raise SettingsError('Objetivo token inválido')
@@ -567,7 +573,7 @@ def _goal_entries(entries):
     for tier,share in tiers.items():
         if abs(sum(targets[t] for t in expected if expected[t]==tier)-share)>1e-8:
             raise SettingsError('Los objetivos de '+tier+' deben sumar exactamente '+str(share*100)+'%')
-    _goal_sum('Objetivos de 12 tokens',list(targets.values()))
+    _goal_sum('Objetivos de tokens activos',list(targets.values()))
     return portfolio,tiers,liquid,custody,targets
 
 
@@ -595,7 +601,7 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
         seen.add(k);_set(b,name,row,col,value);updates.append((name,row,col,value))
     positions={r[0]:i for i,r in enumerate(b[SHEETS['positions']]) if r and r[0] in ('BTC','ETH','SOL','LINK','HYPE','HBAR','SUI','ONDO','PUMPFUN','PLUME','VIRTUAL','PEPE')}
     if category=='portfolio_goals':
-        portfolio, tier_shares,liq_mix,custody_shares,token_targets=_goal_entries(entries)
+        portfolio, tier_shares,liq_mix,custody_shares,token_targets=_goal_entries(entries, portfolio_goals_data(raw))
         liquid_entry=next(e for e in entries if e['group']=='liquidity')
         for field,key in [('balancer_cap','BALANCER_MAX_PORTFOLIO_FRACTION'),
                           ('trading_cap','TRADING_MAX_PORTFOLIO_FRACTION')]:
@@ -623,10 +629,11 @@ def prepare_changes(raw, category, entries, *, evidence, as_of_date=None):
                 if value!=_get(b,'parameters',row,2):
                     change('parameters',row,2,value)
                     change('parameters',row,7,'KairosWeb Settings · '+evidence.strip()[:100])
-        # Publish the 12 explicitly approved weights. Never redistribute them.
-        for token,row in positions.items():
-            if abs(float(_get(b,'positions',row,3))-token_targets[token])>1e-11:
-                change('positions',row,3,token_targets[token])
+        # Preserve the zero weights for retired assets.
+        for token, target in token_targets.items():
+            row = positions[token]
+            if abs(float(_get(b,'positions',row,3))-target)>1e-11:
+                change('positions',row,3,target)
         for tier,parts in custody_shares.items():
             row=_find_row(b,'custody',tier)
             for col,k in [(1,'hodl'),(2,'core'),(3,'exchange')]:

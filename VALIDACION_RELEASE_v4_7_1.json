@@ -1,0 +1,12 @@
+{
+  "status": "PASS_LOCAL",
+  "checks": [
+    "settings_t1_t2_from_master",
+    "ten_active_targets",
+    "settings_prepare_changes",
+    "retired_targets_preserved",
+    "javascript_syntax"
+  ],
+  "master_modified": false,
+  "deployed": false
+}

@@ -1,0 +1,15 @@
+{
+  "id": "/pwa/",
+  "name": "Kairos Portafolio",
+  "short_name": "Kairos",
+  "lang": "es-PE",
+  "start_url": "/pwa/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0c1728",
+  "theme_color": "#0c1728",
+  "icons": [
+    {"src": "/static/pwa/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "/static/pwa/icon-512.png", "sizes": "512x512", "type": "image/png"}
+  ]
+}
