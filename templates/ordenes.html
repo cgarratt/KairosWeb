@@ -38,7 +38,7 @@
 .orders-tools label{font-weight:650;font-size:12px}
 .orders-tools select{max-width:180px;min-width:100px}
 #orders-list{min-width:850px}
-[data-theme="dark"] .order-state-green{color:#7ee7bc}[data-theme="dark"] .order-state-amber{color:#ffcf7b}[data-theme="dark"] .orders-source{color:#a2c9fb}[data-theme="dark"] .orders-source.source-balance{color:#dabaff}
+:is([data-theme="dark"],[data-theme="black"]) .order-state-green{color:#7ee7bc}:is([data-theme="dark"],[data-theme="black"]) .order-state-amber{color:#ffcf7b}:is([data-theme="dark"],[data-theme="black"]) .orders-source{color:#a2c9fb}:is([data-theme="dark"],[data-theme="black"]) .orders-source.source-balance{color:#dabaff}
 
 .orders-state-panel{border:1px solid var(--line,#cbd8e8);border-radius:14px;padding:16px;margin-top:12px}
 .order-management-help{font-size:13px;line-height:1.6;color:var(--muted,#7991b2)}
@@ -61,7 +61,6 @@
 {% block content %}
 <div class="grid" id="orders-inbox" data-snapshot-id="{{ snapshot or '' }}" data-management-ready="{{ 'false' if managed_orders and managed_orders.error else 'true' }}">
 <section class="panel span-12 hero"><div><h2>Órdenes recomendadas</h2><p>Solo BUY O2/O4 y SELL O3/O5 · No aplica → Propuesta · Confirmación con imagen en KairosGPT · Ejecución validada en Web</p></div><div class="badge info">SIN ÓRDENES REMOTAS</div></section>
-{% if managed_orders and managed_orders.error %}<section class="panel span-12"><p class="order-workflow-warning">{{ managed_orders.error }}</p></section>{% endif %}
 {% if error %}<section class="panel span-12"><h3>DATA ERROR</h3><p>{{ error }}</p><p>Etapa: {{ error_stage or 'N/D' }} · Referencia: {{ error_id or 'N/D' }}</p></section>{% else %}
 <section class="panel span-12">
   <div class="orders-kpi" aria-label="Resumen de estados">
@@ -99,6 +98,7 @@
 </section>
 {% endif %}
 
+{% if managed_orders and managed_orders.error %}<section class="panel span-12"><p class="order-workflow-warning">{{ managed_orders.error }}</p></section>{% endif %}
 <dialog id="order-manager" class="orders-manager-dialog"><form id="order-manager-form">
 <h3>Revisar datos de ejecución</h3><p id="order-manager-summary"></p>
 <input type="hidden" name="action" value="EJECUTADA">

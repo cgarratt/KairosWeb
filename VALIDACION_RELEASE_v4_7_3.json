@@ -1,0 +1,13 @@
+{
+  "status": "PASS_LOCAL",
+  "checks": [
+    "health",
+    "pwa_auth_redirect",
+    "six_module_navigation",
+    "diagnostics_after_portfolio",
+    "template_compile",
+    "theme_javascript_syntax"
+  ],
+  "ios_verified": false,
+  "deployed": false
+}

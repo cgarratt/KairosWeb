@@ -2,13 +2,13 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% block title %}Kairos v4{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='kairos-horizon.svg') }}">
   <link rel="manifest" href="{{ url_for('static', filename='pwa/manifest.webmanifest') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='pwa/icon-180.png') }}">
   <meta name="theme-color" content="#103d88">
-  <script>document.documentElement.dataset.balances="hidden";document.documentElement.dataset.privacyBoot="pending";try{document.documentElement.dataset.theme=localStorage.getItem("kairosweb-theme")==="dark"?"dark":"light";}catch(e){document.documentElement.dataset.theme="light";}</script>
+  <script>document.documentElement.dataset.balances="hidden";document.documentElement.dataset.privacyBoot="pending";try{const theme=localStorage.getItem("kairosweb-theme");document.documentElement.dataset.theme=theme==="black"||theme==="dark"?theme:"light";}catch(e){document.documentElement.dataset.theme="light";}</script>
   <style>
     :root{--bg:#f4f8fc;--panel:#ffffff;--line:#dbe6f2;--text:#102443;--muted:#607792;--blue:#103d88;--blue2:#3293df;--green:#1fa67a;--red:#c4465a;--amber:#d58d18;--soft:#eef4fb;--shadow:0 10px 24px rgba(14,28,61,.08)}
     *{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:linear-gradient(180deg,#f8fbff 0%,var(--bg) 100%);color:var(--text)}a{text-decoration:none;color:inherit}
@@ -74,6 +74,7 @@
   <link rel="stylesheet" href="{{ url_for('static',filename='alerts_settings.css') }}?v={{ master }}">
   <link rel="stylesheet" href="{{ url_for('static',filename='theme.css') }}?v={{ master }}">
   <style>.navigation-row{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}.navigation-row .global-nav{min-width:0;max-width:100%;margin-bottom:0}.spot-refresh-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-left:auto;padding-bottom:10px}.spot-refresh-btn{white-space:nowrap;cursor:pointer}.spot-refresh-btn:disabled{opacity:.65;cursor:wait}.spot-observed{font-size:12px;color:var(--muted);text-align:right;white-space:nowrap}.right-tools{flex-wrap:wrap}@media(max-width:680px){.navigation-row{gap:4px}.navigation-row .global-nav{width:100%}.spot-refresh-wrap{align-items:flex-end}}</style>
+  <link rel="stylesheet" href="{{ url_for('static',filename='pwa/navigation.css', v=master) }}">
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -126,11 +127,12 @@
     </div>
     <div class="navigation-row">
     <nav class="global-nav" aria-label="Navegación Kairos">
-      {% if portfolio_authenticated %}
-      <a class="global-nav-link {{ 'active' if request.endpoint == 'pwa_home' else '' }}" href="{{ url_for('pwa_home') }}">Inicio móvil</a>
-      {% endif %}
+      {% set icons = {'portafolio':'M4 20V10h4v10m2 0V4h4v16m2 0v-6h4v6M3 20h18','balancer':'M3 7h18M3 17h18M8 4v6m8 4v6','compras':'M12 4v14m-5-5 5 5 5-5M4 20h16','ventas':'M12 18V4m-5 5 5-5 5 5M4 20h16','ordenes':'M6 3h12v18H6zM9 8h6m-6 4h6m-6 4h4','forecast':'M3 3v18h18M6 16l5-5 4 2 5-7m-5 0h5v5'} %}
       {% for mode in nav_modes %}
-      <a class="global-nav-link {{ 'active' if request.path == '/mode/' ~ mode.slug else '' }}" href="/mode/{{ mode.slug }}" title="{{ mode.description }}">{{ mode.name }}</a>
+      {% set active = request.path == '/mode/' ~ mode.slug or (request.endpoint == 'pwa_home' and mode.slug == 'portafolio') %}
+      <a class="global-nav-link{% if active %} active{% endif %}" href="{{ url_for('integral_portfolio_page') if mode.slug == 'portafolio' else '/mode/' ~ mode.slug }}" {% if active %}aria-current="page"{% endif %}>
+        <svg class="mobile-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ icons.get(mode.slug, 'M4 12h16') }}"/></svg><span>{{ mode.name }}</span>
+      </a>
       {% endfor %}
     </nav>
       {% if portfolio_authenticated %}<div class="spot-refresh-wrap"><button type="button" class="btn spot-refresh-btn" id="spot-refresh" data-csrf="{{ session.get('csrf_token','') }}" title="Consultar nuevamente precios Spot MCP">↻ Actualizar Spot</button><span id="spot-observed" class="spot-observed" aria-live="polite">Spot: consultando estado…</span></div>{% endif %}
