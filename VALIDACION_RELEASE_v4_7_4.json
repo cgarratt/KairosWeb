@@ -1,0 +1,7 @@
+{
+  "status": "PASS_LOCAL",
+  "health_http": 200,
+  "release_assets_consistent": true,
+  "mobile_navigation_links": 6,
+  "deployed": false
+}

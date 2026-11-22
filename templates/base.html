@@ -130,7 +130,7 @@
       {% set icons = {'portafolio':'M4 20V10h4v10m2 0V4h4v16m2 0v-6h4v6M3 20h18','balancer':'M3 7h18M3 17h18M8 4v6m8 4v6','compras':'M12 4v14m-5-5 5 5 5-5M4 20h16','ventas':'M12 18V4m-5 5 5-5 5 5M4 20h16','ordenes':'M6 3h12v18H6zM9 8h6m-6 4h6m-6 4h4','forecast':'M3 3v18h18M6 16l5-5 4 2 5-7m-5 0h5v5'} %}
       {% for mode in nav_modes %}
       {% set active = request.path == '/mode/' ~ mode.slug or (request.endpoint == 'pwa_home' and mode.slug == 'portafolio') %}
-      <a class="global-nav-link{% if active %} active{% endif %}" href="{{ url_for('integral_portfolio_page') if mode.slug == 'portafolio' else '/mode/' ~ mode.slug }}" {% if active %}aria-current="page"{% endif %}>
+      <a class="global-nav-link{% if active %} active{% endif %}" href="/mode/{{ mode.slug }}" {% if active %}aria-current="page"{% endif %}>
         <svg class="mobile-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ icons.get(mode.slug, 'M4 12h16') }}"/></svg><span>{{ mode.name }}</span>
       </a>
       {% endfor %}
