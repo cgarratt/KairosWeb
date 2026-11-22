@@ -1,0 +1,14 @@
+{
+  "status": "PASS_LOCAL",
+  "checks": [
+    "pwa_navigation",
+    "manifest_scope",
+    "private_session",
+    "spot_control",
+    "alerts_control",
+    "privacy_control",
+    "health_version"
+  ],
+  "deployed": false,
+  "ios_verified": false
+}

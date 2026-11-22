@@ -1,49 +1,29 @@
-<!doctype html>
-<html lang="es-PE">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0c1728">
-<title>Kairos · Portafolio</title>
-<link rel="manifest" href="{{ url_for('static', filename='pwa/manifest.webmanifest') }}">
-<link rel="apple-touch-icon" href="{{ url_for('static', filename='pwa/icon-180.png') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='pwa/mobile.css', v=version) }}">
-</head>
-<body>
-<main>
-<header>
-  <img src="{{ url_for('static', filename='pwa/icon-180.png') }}" alt="">
-  <strong>Kairos</strong>
-  <form method="post" action="{{ url_for('portfolio_logout', next='pwa') }}">
-    <input type="hidden" name="csrf" value="{{ session.get('logout_csrf') or session.get('csrf_token','') }}">
-    <button type="submit">Cerrar sesión</button>
-  </form>
-</header>
-<h1>Portafolio</h1>
-<div class="actions">
-  <button type="button" id="spot-refresh" data-csrf="{{ session.get('csrf_token','') }}">Actualizar Spot</button>
-  <small id="spot-observed" aria-live="polite"></small>
-</div>
+{% extends 'base.html' %}
+{% block title %}Kairos · Inicio{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='pwa/mobile.css', v=master) }}">
+<script src="{{ url_for('static', filename='pwa/install.js', v=master) }}" defer></script>
+{% endblock %}
+{% block content %}
+<main class="pwa-home">
+<h2>Resumen del portafolio</h2>
 {% if valuation %}
-<section class="card" aria-label="Valoración">
+<section class="panel" aria-label="Valoración">
   <dl>
     <dt>Patrimonio total</dt>
-    <dd class="primary">{{ '{:,.2f} USDT'.format(valuation.total_value) if valuation.total_value is not none else 'Pendiente de conciliación' }}</dd>
-    <dt>Cripto Spot</dt><dd>{{ '{:,.2f} USDT'.format(valuation.crypto_value) }}</dd>
-    <dt>USDT físico publicado</dt><dd>{{ '{:,.2f} USDT'.format(valuation.usdt_publicado) }}</dd>
+    <dd data-private="money" class="primary">{{ '{:,.2f} USDT'.format(valuation.total_value) if valuation.total_value is not none else 'Pendiente de conciliación' }}</dd>
+    <dt>Cripto Spot</dt><dd data-private="money">{{ '{:,.2f} USDT'.format(valuation.crypto_value) }}</dd>
+    <dt>USDT físico publicado</dt><dd data-private="money">{{ '{:,.2f} USDT'.format(valuation.usdt_publicado) }}</dd>
   </dl>
   <p>{{ valuation.source }} · Corte {{ valuation.fecha_corte }}</p>
   {% if valuation.unreconciled_fills %}<p>{{ valuation.unreconciled_fills|length }} fills históricos pendientes.</p>{% endif %}
 </section>
-<section class="card">
+<section class="panel">
   <h2>Posiciones</h2>
-  <ul>{% for row in rows %}<li><strong>{{ row.token }}</strong><span>{{ '{:,.2f} USDT'.format(row.value) }}</span></li>{% endfor %}</ul>
+  <ul>{% for row in rows %}<li><strong>{{ row.token }}</strong><span data-private="money">{{ '{:,.2f} USDT'.format(row.value) }}</span></li>{% endfor %}</ul>
 </section>
 {% else %}
-<section class="card" role="alert"><h2>Valoración no disponible</h2><p>{{ issue }}</p></section>
+<section class="panel" role="alert"><h2>Valoración no disponible</h2><p>{{ issue }}</p></section>
 {% endif %}
 </main>
-<script src="{{ url_for('static', filename='spot_refresh.js', v=version) }}" defer></script>
-<script src="{{ url_for('static', filename='pwa/install.js', v=version) }}" defer></script>
-</body>
-</html>
+{% endblock %}

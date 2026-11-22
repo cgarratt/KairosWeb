@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Kairos v4{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='kairos-horizon.svg') }}">
+  <link rel="manifest" href="{{ url_for('static', filename='pwa/manifest.webmanifest') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='pwa/icon-180.png') }}">
   <meta name="theme-color" content="#103d88">
   <script>document.documentElement.dataset.balances="hidden";document.documentElement.dataset.privacyBoot="pending";try{document.documentElement.dataset.theme=localStorage.getItem("kairosweb-theme")==="dark"?"dark":"light";}catch(e){document.documentElement.dataset.theme="light";}</script>
   <style>
@@ -115,7 +117,7 @@
         {% if portfolio_authenticated %}<a class="tool-icon {{ 'active' if request.path == '/settings' else '' }}" href="{{ url_for('settings_page') }}" aria-label="Configuración de Kairos" title="Configuración y mantenimiento del Master">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 3 .6 2.1c.6.2 1.1.5 1.6.9L14 5l2 2-1 2.3c.4.5.7 1 .9 1.6L18 11v3l-2.1.6c-.2.6-.5 1.1-.9 1.6l1 2.3-2 2-2.3-1c-.5.4-1 .7-1.6.9L9.5 22h-3l-.6-2.1c-.6-.2-1.1-.5-1.6-.9l-2.3 1-2-2 1-2.3c-.4-.5-.7-1-.9-1.6L-2 14v-3l2.1-.6c.2-.6.5-1.1.9-1.6L0 6.5l2-2 2.3 1c.5-.4 1-.7 1.6-.9L6.5 3Z" transform="translate(3,0)"/><circle cx="11" cy="12.5" r="3"/></svg>
         </a>
-        <form method="post" action="{{ url_for('portfolio_logout') }}" class="session-exit">
+        <form method="post" action="{{ url_for('portfolio_logout', next='pwa') if request.endpoint == 'pwa_home' else url_for('portfolio_logout') }}" class="session-exit">
           <input type="hidden" name="csrf" value="{{ portfolio_csrf }}">
           <button type="submit" class="btn">Cerrar sesión</button>
         </form>
@@ -124,6 +126,9 @@
     </div>
     <div class="navigation-row">
     <nav class="global-nav" aria-label="Navegación Kairos">
+      {% if portfolio_authenticated %}
+      <a class="global-nav-link {{ 'active' if request.endpoint == 'pwa_home' else '' }}" href="{{ url_for('pwa_home') }}">Inicio móvil</a>
+      {% endif %}
       {% for mode in nav_modes %}
       <a class="global-nav-link {{ 'active' if request.path == '/mode/' ~ mode.slug else '' }}" href="/mode/{{ mode.slug }}" title="{{ mode.description }}">{{ mode.name }}</a>
       {% endfor %}

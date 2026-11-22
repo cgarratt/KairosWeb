@@ -38,7 +38,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.7.1'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.7.2'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1694,9 +1694,9 @@ def pwa_home():
         rows = _active_rows(dashboard['rows'])
     except Exception as exc:
         diagnostic = diagnostic_error(exc, 'pwa:portfolio')
-        return render_template('pwa.html', version=APP_VERSION, valuation=None, rows=[],
+        return render_template('pwa.html', master=APP_VERSION, valuation=None, rows=[],
                                issue=diagnostic['code']), 503
-    return render_template('pwa.html', version=APP_VERSION, valuation=valuation, rows=rows, issue=None)
+    return render_template('pwa.html', master=APP_VERSION, valuation=valuation, rows=rows, issue=None)
 
 
 @app.route('/mode/portafolio')
