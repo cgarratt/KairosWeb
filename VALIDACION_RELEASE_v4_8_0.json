@@ -1,0 +1,16 @@
+{
+  "status": "PASS_LOCAL",
+  "health_http": 200,
+  "checks": [
+    "mobile_auth_redirect",
+    "mobile_navigation",
+    "web_navigation",
+    "balancer_template",
+    "orders_token_filter",
+    "cancellation_render",
+    "forecast_templates",
+    "forecast_js_syntax"
+  ],
+  "deployed": false,
+  "ios_verified": false
+}

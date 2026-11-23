@@ -58,7 +58,7 @@
 {% endblock %}
 {% block content %}
 <div class="grid">
-{% include '_wave_confirmed.html' %}
+{% if not request.path.startswith('/pwa/') %}{% include '_wave_confirmed.html' %}{% endif %}
 <section class="panel span-12"><div class="fc-hero"><div><h2>Forecast · Ondas y retrocesos</h2><p class="sub">Tabla de referencias O2 y simulador Cycle Low → O5. Compras O2 y O4: hasta USDT físico menos ReservaTrading QF; ventas O3/O5: tramos Fibonacci configurables. Datos históricos de referencia + escenarios hipotéticos. No representa pronósticos certificados.</p></div><span class="badge info">SIMULACIÓN · SIN ÓRDENES</span></div>
 
 <p class="footer-note">Referencia de niveles: {{ payload.o2_source }} · Cotizaciones Spot observadas: {{ payload.generated_at }} · Unidades snapshot: {{ payload.snapshot_note }}</p></section>
@@ -82,7 +82,7 @@
 <section class="panel span-12" id="cycle-strategy">
 <h2>Simulación integral O2 → O5 · Compras, ventas y acumulación BTC</h2>
 <p class="sub">Escenario hipotético no ejecutable: BTC NEVER SELL, HODL Tier 1 protegido; Core y Exchange restantes liquidables en Post-O5. Los porcentajes BTC/USDT de O3 y O5 se leen del Master PUBLICADO y no son editables en esta simulación. Los tramos Fibonacci continúan siendo hipotéticos, no órdenes.</p>
-<div class="fc-controls"><div class="fc-field"><label for="o2-budget">Presupuesto compras O2 · % de caja no QF</label><select id="o2-budget"><option value="0">0%</option><option value="0.25">25%</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="1" selected>100%</option></select></div>
+{% if request.path.startswith('/pwa/') %}<details><summary>Ajustar escenario</summary>{% endif %}<div class="fc-controls"><div class="fc-field"><label for="o2-budget">Presupuesto compras O2 · % de caja no QF</label><select id="o2-budget"><option value="0">0%</option><option value="0.25">25%</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="1" selected>100%</option></select></div>
 <div class="fc-field"><label for="o3-sell">Plan O3 · % del pool elegible</label><select id="o3-sell"><option value="0">0%</option><option value="0.25">25%</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="1" selected>100%</option></select></div>
 <div class="fc-field"><label for="o4-budget">Presupuesto compras O4 · % de caja no QF</label><select id="o4-budget"><option value="0">0%</option><option value="0.25">25%</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="1" selected>100%</option></select></div>
 <div class="fc-field"><label for="o5-sell">Plan O5 · % del pool elegible</label><select id="o5-sell"><option value="0">0%</option><option value="0.25">25%</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="1" selected>100%</option></select></div>
@@ -92,14 +92,17 @@
 <div id="sale-level-controls" class="fc-controls"></div><p class="footer-note">Niveles locales compartidos con la simulación independiente. No modifica Google Sheets ni pivotes publicados.</p>
 <div class="fc-stage-config"><h3>Distribución por niveles Fibonacci · simulación independiente de Google Sheets</h3><p class="sub">Cada onda tiene 4 porcentajes que deben sumar exactamente 100%; un nivel no alcanzado conserva su presupuesto o unidades.</p><div class="fc-weight-grid" id="forecast-weights"></div><div id="weights-validation" class="fc-warning" role="status"></div></div>
 <div class="fc-warning">O3 sin pesos publicados utiliza el escenario solicitado 20/20/30/30; no implica publicación en MASTER. Valores iniciales para simulación; las modificaciones aquí NO se guardan en Google Sheets. Los precios proceden de anclas semanales publicadas o candidatas no certificadas; las compras utilizan cuatro tramos O2C1–O2C4 y O4C1–O4C4. O3 vende hasta Exchange libre y el máximo del Tier, sin límite por porcentaje de USDT. O5 usa Core únicamente al habilitarlo expresamente en esta simulación. O3 prioriza ventas sobreponderadas desde Exchange libre. O4 destina primero el USDT a los infraponderados y luego distribuye excedentes por targets; un balance perfecto puede ser imposible cuando BTC/HODL están protegidos o faltan niveles. Capital QF separado. Se excluyen comisiones; los compromisos BUY/SELL publicados quedan protegidos. Ninguna orden se transmite.</div>
+{% if request.path.startswith('/pwa/') %}</details>{% endif %}
 <div class="fc-metrics"><div class="fc-kpi"><small>Patrimonio proyectado Post-O5</small><b id="o5-total">—</b></div><div class="fc-kpi"><small>BTC al cierre Post-O5</small><b id="o5-btc">—</b></div><div class="fc-kpi"><small>USDT total Post-O5</small><b id="o5-cash">—</b></div><div class="fc-kpi"><small>HODL bloqueado / Cripto</small><b id="o5-hodl">—</b></div></div>
-<h3 style="margin-top:18px">Evolución del portafolio por onda</h3>
-<div class="fc-tables"><table><thead><tr><th>Indicador</th><th>Inicio</th><th>O2</th><th>O3</th><th>O4</th><th>O5</th></tr></thead><tbody id="cycle-summary"></tbody></table></div>
+<h3 style="margin-top:18px">Evolución del portafolio por onda</h3>{% if request.path.startswith('/pwa/') %}<p>El selector de token solo cambia el gráfico. O1 es una referencia de valoración previa a las operaciones hipotéticas.</p>{% endif %}
+<div class="fc-tables"><table><thead><tr><th>Indicador</th><th>{{ 'Inicio Spot' if request.path.startswith('/pwa/') else 'Inicio' }}</th>{% if request.path.startswith('/pwa/') %}<th>O1 · Referencia</th>{% endif %}<th>O2</th><th>O3</th><th>O4</th><th>O5</th></tr></thead><tbody id="cycle-summary"></tbody></table></div>
+{% if request.path.startswith('/pwa/') %}<details><summary>Detalle de custodia y composición final</summary>{% endif %}
 <h3 style="margin-top:22px">Custodia, valorización y desvíos al cierre de cada onda (O2 a O5)</h3>
 <p class="sub">Pesos actuales comparados con targets de la manga cripto (ex-USDT); tolerancia ±1 pp. Las restricciones BTC NEVER SELL, HODL protegido y caja QF pueden impedir alcanzar el objetivo. Fotografías hipotéticas, sin movimientos reales.</p>
 <div id="wave-custody-snapshots"></div>
 <h3 style="margin-top:20px">Composición final Post-O5</h3>
 <div class="fc-tables"><table><thead><tr><th>Token</th><th>HODL (u.)</th><th>Core (u.)</th><th>Exchange (u.)</th><th>Total unidades</th><th>Precio O5</th><th>Valor USDT</th></tr></thead><tbody id="cycle-assets"></tbody><tfoot id="cycle-assets-total"></tfoot></table></div>
+{% if request.path.startswith('/pwa/') %}</details>{% endif %}
 <p class="footer-note" id="cycle-note"></p>
 </section>
 
@@ -244,7 +247,16 @@ function runCycle(){
  if(protectedHodl.size!==5)throw Error('Protección HODL T1 incompleta');
  let cash=cash0,btcFromSales=0,planUsed={o2:0,o4:0,o3:0,o5:0};
  const history=[],custodyShots=[];
+ {% if request.path.startswith('/pwa/') %}
+ const wavePx=(a,step)=>{
+   if(step===-1)return a.spot;
+   const px=a.prices?.[step];
+   if(!(px>0))throw Error(a.token+' · Precio O'+step+' no disponible');
+   return px;
+ };
+ {% else %}
  const wavePx=(a,step)=>a.prices?.[step]>0?a.prices[step]:a.spot;
+ {% endif %}
  function valuation(step){let crypto=0,blocked=0;for(const a of assets){const px=wavePx(a,step);crypto+=(a.hodl+a.core+a.ex)*px;blocked+=a.hodl*px;}return {crypto,cash,total:crypto+cash,btc:btc.hodl+btc.core+btc.ex,blocked};}
  function custodyShot(name,step){return {name,cash,assets:assets.map(a=>({token:a.token,hodl:a.hodl,core:a.core,ex:a.ex,price:wavePx(a,step)}))};}
  function rebalanceCustody(){for(const a of assets){const total=a.hodl+a.core+a.ex;if(total<=0)continue;
@@ -269,6 +281,9 @@ function runCycle(){
  }
  function stageSales(stage,upto,fraction){runWave(stage,upto,fraction);}
  const preO2=valuation(-1);history.push(preO2);
+ {% if request.path.startswith('/pwa/') %}
+ history.push(assets.every(a => a.prices?.[1] > 0) ? valuation(1) : null);
+ {% endif %}
  const cryptoValue=Number(fc.current.crypto_value);
  const O2percent=Number($('forecast-deploy').value)/25;
  stagePurchases('o2',Number($('o2-choice').value));
@@ -283,6 +298,7 @@ function runCycle(){
  const preLiquidationValue=valuation(5).total;
  // Terminal Post-O5 is a separate hypothetical liquidation at the selected O5 price.
  // It appears ONLY in the final composition table, never as a duplicated custody panel.
+ {% if not request.path.startswith('/pwa/') %}
  let finalProceeds=0;
  for(const a of assets){if(a.token==='BTC')continue;
    const px=wavePx(a,5);if(!(px>0))continue;
@@ -291,6 +307,7 @@ function runCycle(){
  const btcPrice=wavePx(btc,5),btcShare=btcShareO5;
  if(!(btcPrice>0))throw Error('No hay precio BTC válido para cierre');
  btc.ex+=finalProceeds*btcShare/btcPrice;btcFromSales+=finalProceeds*btcShare/btcPrice;cash+=finalProceeds*(1-btcShare);
+ {% endif %}
  const last=valuation(5);
  if(Math.abs(last.total-preLiquidationValue)>Math.max(0.02,preLiquidationValue*1e-9))throw Error('Diferencia de conciliación Post-O5');
  for(const [token,qty] of protectedHodl){if(assets.find(a=>a.token===token).hodl+1e-9<qty)throw Error('Protección HODL T1 incumplida: '+token);}
@@ -299,7 +316,7 @@ function runCycle(){
  $('o5-total').textContent=money(last.total);$('o5-btc').textContent=last.btc.toFixed(8)+' BTC';$('o5-cash').textContent=money(last.cash);
  $('o5-hodl').textContent=last.crypto>0?(100*last.blocked/last.crypto).toFixed(1)+'%':'N/D';
  const entries=[['Cripto',x=>x.crypto],['USDT (incl. Trading)',x=>x.cash],['Patrimonio',x=>x.total],['BTC (unidades)',x=>x.btc]];
- $('cycle-summary').innerHTML=entries.map(([name,get])=>`<tr><td><b>${name}</b></td>${history.map(h=>`<td>${name.includes('unidades')?get(h).toFixed(8):money(get(h))}</td>`).join('')}</tr>`).join('');
+ $('cycle-summary').innerHTML=entries.map(([name,get])=>`<tr><td><b>${name}</b></td>${history.map(h=>h===null?'<td>N/D</td>':`<td>${name.includes('unidades')?get(h).toFixed(8):money(get(h))}</td>`).join('')}</tr>`).join('');
  $('wave-custody-snapshots').innerHTML=custodyShots.map(shot=>{let crypto=0;const body=shot.assets.map(a=>{const qty=a.hodl+a.core+a.ex,v=qty*a.price;crypto+=v;const cr=shot.assets.reduce((sum,x)=>sum+(x.hodl+x.core+x.ex)*x.price,0);const target=assets.find(x=>x.token===a.token).target;const actual=cr>0?100*v/cr:0;const drift=actual-target*100;return `<tr><td>${logo(a.token)}</td><td>${a.hodl.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${a.core.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${a.ex.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${qty.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${price(a.price)}</td><td>${money(v)}</td><td>${actual.toFixed(2)}%</td><td>${(100*target).toFixed(2)}%</td><td style="color:${Math.abs(drift)>1?'#f3ad70':'#38c99c'}">${drift>=0?'+':''}${drift.toFixed(2)} pp</td></tr>`;}).join('');return `<details class="forecast-custody-snapshot" style="margin:12px 0;border:1px solid var(--border,#dce7f6);border-radius:12px;padding:12px"><summary style="font-weight:800;cursor:pointer">${shot.name} · Cripto ${money(crypto)} · USDT ${money(shot.cash)} · Patrimonio ${money(crypto+shot.cash)}</summary><div class="fc-tables"><table><thead><tr><th>Token</th><th>HODL (u.)</th><th>Core (u.)</th><th>Exchange (u.)</th><th>Total unidades</th><th>Precio</th><th>Valor USDT</th><th>Peso actual</th><th>Target</th><th>Desvío</th></tr></thead><tbody>${body}</tbody><tfoot><tr><td colspan="6">TOTAL CRIPTO</td><td>${money(crypto)}</td><td colspan="3"></td></tr><tr><td colspan="6">LIQUIDEZ USDT</td><td>${money(shot.cash)}</td><td colspan="3"></td></tr><tr><td colspan="6">PATRIMONIO</td><td>${money(crypto+shot.cash)}</td><td colspan="3"></td></tr></tfoot></table></div></details>`;}).join('');
  $('cycle-assets').innerHTML=assets.map(a=>{const px=wavePx(a,5),u=a.hodl+a.core+a.ex;return `<tr><td>${logo(a.token)}</td><td>${a.hodl.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${a.core.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${a.ex.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${u.toLocaleString('en-US',{maximumFractionDigits:6})}</td><td>${price(px)}</td><td>${money(u*px)}</td></tr>`;}).join('');
  $('cycle-assets-total').innerHTML=`<tr><td colspan="6">TOTAL CRIPTO</td><td>${money(last.crypto)}</td></tr><tr><td colspan="6">LIQUIDEZ USDT (incl. Trading)</td><td>${money(last.cash)}</td></tr><tr><td colspan="6">PATRIMONIO POST-O5</td><td>${money(last.total)}</td></tr>`;

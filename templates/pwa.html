@@ -6,12 +6,13 @@
 {% endblock %}
 {% block content %}
 <main class="pwa-home">
-<h2>Resumen del portafolio</h2>
+<h2>Portafolio</h2>
 {% if valuation %}
 <section class="panel" aria-label="Valoración">
   <dl>
     <dt>Patrimonio total</dt>
     <dd data-private="money" class="primary">{{ '{:,.2f} USDT'.format(valuation.total_value) if valuation.total_value is not none else 'Pendiente de conciliación' }}</dd>
+    <dt>Resultado no realizado</dt><dd data-private="money">{{ '{:,.2f} USDT'.format(pnl.total_usdt) if pnl and pnl.total_usdt is not none else 'N/D' }}</dd>
     <dt>Cripto Spot</dt><dd data-private="money">{{ '{:,.2f} USDT'.format(valuation.crypto_value) }}</dd>
     <dt>USDT físico publicado</dt><dd data-private="money">{{ '{:,.2f} USDT'.format(valuation.usdt_publicado) }}</dd>
   </dl>

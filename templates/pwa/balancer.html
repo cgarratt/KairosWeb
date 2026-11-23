@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Kairos · Balancer{% endblock %}
+{% block content %}
+<main class="pwa-content">
+<h2>Balancer</h2>
+<section class="panel"><h3>Ventas sugeridas</h3>
+<table><thead><tr><th>Token</th><th>Ingreso condicional (USDT)</th></tr></thead><tbody>
+{% for r in payload.sells %}<tr><td>{{ r.token }}</td><td data-private="money">{{ '%.2f'|format(r.value) }}</td></tr>
+{% else %}<tr><td colspan="2">Sin ventas sugeridas</td></tr>{% endfor %}
+</tbody></table></section>
+<section class="panel"><h3>Compras sugeridas</h3>
+<div class="pwa-scroll"><table><thead><tr><th>Token</th><th>USDT disponibles</th><th>USDT con ventas</th></tr></thead><tbody>
+{% for r in payload.buys %}<tr><td>{{ r.token }}</td><td data-private="money">{{ '%.2f'|format(r.value) }}</td><td data-private="money">{{ '%.2f'|format(payload.buy_with_sales[loop.index0].value) }}</td></tr>
+{% else %}<tr><td colspan="3">Sin compras sugeridas</td></tr>{% endfor %}
+</tbody></table></div><p>Las compras con ventas dependen de su ejecución y conciliación.</p></section>
+<section class="panel"><h3>Peso después del rebalanceo</h3><p>Compras y ventas son escenarios independientes.</p>
+<div class="pwa-chart">{% for r in chart if r.buy is defined or r.sell is defined %}<div><strong>{{ r.token }}</strong>
+{% for label, value in [('Actual',r.actual),('Objetivo',r.target),('Tras compras',r.buy),('Tras ventas',r.sell)] %}
+<div class="pwa-bar"><span>{{ label }}</span>{% if value is defined %}<meter min="0" max="100" value="{{ value }}" aria-label="{{ r.token }} · {{ label }}"></meter><span>{{ '%.1f'|format(value) }}%</span>{% else %}<span>N/D</span>{% endif %}</div>
+{% endfor %}</div>{% else %}<p>Sin escenarios para comparar.</p>{% endfor %}</div></section>
+<section class="panel"><h3>Transferencias sugeridas</h3><table><thead><tr><th>Token</th><th>Unidades</th><th>Desde Exchange a</th></tr></thead><tbody>
+{% for r in payload.custody_comparison.transfers %}<tr><td>{{ 'PUMP' if r.token=='PUMPFUN' else r.token }}</td><td data-private="units">{{ r.units }}</td><td>{{ r.destination }}</td></tr>
+{% else %}<tr><td colspan="3">Sin transferencias sugeridas</td></tr>{% endfor %}
+</tbody></table></section>
+</main>
+{% endblock %}

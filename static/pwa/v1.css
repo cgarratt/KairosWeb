@@ -1,0 +1,16 @@
+/* Shared colors and controls, mobile-specific layout. */
+body.kairos-pwa { font-size: calc(14px + 1pt); }
+.kairos-pwa .pwa-content { max-width: 720px; margin-inline: auto; }
+.kairos-pwa .panel { margin-bottom: 12px; }
+.kairos-pwa .pwa-scroll { overflow-x: auto; }
+.kairos-pwa th,.kairos-pwa td { font-size: calc(13px + 1pt); padding: 8px; }
+.kairos-pwa td { white-space: nowrap; }
+.kairos-pwa .pwa-chart { display: grid; gap: 14px; }
+.kairos-pwa .pwa-chart p { margin: 0; }
+.kairos-pwa .pwa-bar { display: grid; grid-template-columns: 8em 1fr 4em; gap: 8px; align-items: center; }
+.kairos-pwa meter { width: 100%; }
+@media (max-width:820px) {
+  .kairos-pwa .navigation-row .global-nav { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .kairos-pwa .navigation-row .global-nav .global-nav-link { font-size: calc(12px + 1pt); }
+  .kairos-pwa .right-tools .btn,.kairos-pwa .spot-observed { font-size: calc(12px + 1pt); }
+}

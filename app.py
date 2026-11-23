@@ -38,7 +38,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.7.5'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.8.0'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -188,7 +188,7 @@ def authenticate():
     if path == '/health' or path.startswith('/static/') or path in ('/login', '/logout', '/api/modes', '/pwa/sw.js'):
         return None
     if not _portfolio_authorized():
-        if path in ('/pwa', '/pwa/'):
+        if path == '/pwa' or path.startswith('/pwa/'):
             return redirect(url_for('portfolio_login', next='pwa'))
         if path in ('/', '/mode/portafolio'):
             return render_template('guest_portfolio.html', master=APP_VERSION)
@@ -1696,7 +1696,8 @@ def pwa_home():
         diagnostic = diagnostic_error(exc, 'pwa:portfolio')
         return render_template('pwa.html', master=APP_VERSION, valuation=None, rows=[],
                                issue=diagnostic['code']), 503
-    return render_template('pwa.html', master=APP_VERSION, valuation=valuation, rows=rows, issue=None)
+    pnl = summarize_unrealized(rows) if not g.kairos_state['read_only_valuation'] else None
+    return render_template('pwa.html', master=APP_VERSION, valuation=valuation, rows=rows, pnl=pnl, issue=None)
 
 
 @app.route('/mode/portafolio')
@@ -1782,6 +1783,7 @@ def _cycle_order_allowed(side, stage):
                 re.fullmatch(r'O(?:3|5)V[1-4]',stage) if side=='SELL' else False)
 
 
+@app.get('/pwa/ordenes')
 @app.route('/mode/ordenes')
 def orders_inbox_page():
     """Separate market/snapshot gate from independent balance and weekly sources.
@@ -1837,6 +1839,16 @@ def orders_inbox_page():
         zero_weight_purchase_states(buy,managed_orders.get('records',[]))
         from orders_inbox import classify_purchase_views
         classify_purchase_views(buy,inbox['candidates'],managed_orders.get('records',[]))
+        if request.path.startswith('/pwa/'):
+            selected = request.args.get('token', '').upper()
+            if selected not in active_tokens:
+                selected = ''
+            cancelled = [r for r in managed_orders.get('canonical_rows', [])[1:]
+                         if len(r) > 11 and str(r[11]).upper() in ('CANCELLED', 'CANCELED')]
+            return render_template('pwa/orders.html', master=APP_VERSION, tokens=sorted(active_tokens),
+                                   selected=selected, coverage=inbox['coverage'], levels=wave_levels,
+                                   candidates=inbox['candidates'], records=managed_orders.get('records', []),
+                                   cancelled=cancelled, issue=managed_orders.get('error') or structural_note)
         from orders_inbox import visible_order_rows
         inbox['candidates'],visible_records=visible_order_rows(inbox['candidates'],managed_orders.get('records',[]))
         managed_orders=dict(managed_orders,records=visible_records)
@@ -1904,8 +1916,12 @@ def manage_order_lifecycle():
         return jsonify({'status':'DATA_ERROR','error_id':incident,'reason':'No se pudo certificar la escritura. Consulta el historial antes de volver a intentar: la operación podría haberse registrado.'}),503
 
 
+@app.get('/pwa/<slug>')
 @app.route('/mode/<slug>')
 def mode_page(slug):
+    mobile = request.path.startswith('/pwa/')
+    if mobile and slug not in ('balancer', 'forecast'):
+        abort(404)
     if slug == 'resumen':
         return redirect('/')
     mode = MODES_BY_SLUG.get(slug)
@@ -1937,6 +1953,14 @@ def mode_page(slug):
         payload['wave_levels']=published_wave_levels(payload['wave_pivots'])
         payload['confirmed_pivot_count']=sum(1 for rec in payload['wave_pivots'].values()
                for wave in rec['waves'].values() if wave['status']=='CONFIRMADO')
+        if mobile and slug == 'balancer':
+            chart = {r['token']: {'token': r['token'], 'actual': r['weight'] * 100,
+                                 'target': r['target'] * 100}
+                     for r in _active_rows(dashboard['rows'])}
+            for key in ('buy', 'sell'):
+                for row in payload[key + '_chart']:
+                    chart[row['token']][key] = row['post']
+            return render_template('pwa/balancer.html', master=APP_VERSION, payload=payload, chart=chart.values())
         return render_template('balancer.html' if slug=='balancer' else 'trade_sim.html' if slug in ('compras','ventas') else 'forecast.html' if slug=='forecast' else 'tradingbot.html' if slug=='tradingbot' else 'mode.html', mode=mode, payload=payload, error=None, diagnostic=None, master=APP_VERSION)
     except HTTPException:
         raise
