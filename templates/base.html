@@ -102,9 +102,8 @@
         <div><h1>Kairos v4</h1><p>v{{ master }}</p></div>
       </div>
       <div class="right-tools">
-        <div class="text-size-controls" role="group" aria-label="Tamaño del texto" hidden>
-          <button type="button" class="tool-icon" data-text-step="-1" aria-label="Reducir tamaño del texto" title="Reducir tamaño del texto">A−</button>
-          <button type="button" class="tool-icon" data-text-step="1" aria-label="Aumentar tamaño del texto" title="Aumentar tamaño del texto">A+</button>
+        <div class="text-size-controls" hidden>
+          <button type="button" class="tool-icon" data-text-cycle>A±</button>
           <span class="text-size-status" role="status"></span>
         </div>
         {% if portfolio_authenticated %}
@@ -132,7 +131,7 @@
     <nav class="global-nav" aria-label="Navegación Kairos">
       {% set icons = {'portafolio':'M4 20V10h4v10m2 0V4h4v16m2 0v-6h4v6M3 20h18','balancer':'M3 7h18M3 17h18M8 4v6m8 4v6','compras':'M12 4v14m-5-5 5 5 5-5M4 20h16','ventas':'M12 18V4m-5 5 5-5 5 5M4 20h16','ordenes':'M6 3h12v18H6zM9 8h6m-6 4h6m-6 4h4','forecast':'M3 3v18h18M6 16l5-5 4 2 5-7m-5 0h5v5'} %}
       {% if request.path.startswith('/pwa/') %}
-      {% for slug, label, path in [('portafolio','Portafolio','/pwa/'),('balancer','Balancer','/pwa/balancer'),('ordenes','Órdenes','/pwa/ordenes'),('forecast','Forecast','/pwa/forecast')] %}
+      {% for slug, label, path in [('portafolio','Portafolio','/pwa/'),('balancer','Balancer','/pwa/balancer'),('ordenes','Órdenes','/pwa/ordenes')] %}
       <a class="global-nav-link{% if request.path == path %} active{% endif %}" href="{{ path }}" {% if request.path == path %}aria-current="page"{% endif %}><svg class="mobile-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ icons[slug] }}"/></svg><span>{{ label }}</span></a>
       {% endfor %}
       {% else %}

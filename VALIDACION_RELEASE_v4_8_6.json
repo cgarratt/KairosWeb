@@ -1,0 +1,13 @@
+{
+  "status": "PASS_LOCAL",
+  "health_http": 200,
+  "checks": [
+    "three_item_pwa_navigation",
+    "legacy_pwa_forecast_redirect",
+    "web_forecast_navigation",
+    "weekly_retracement_confirmed_only",
+    "archive_integrity"
+  ],
+  "deployed": false,
+  "ios_verified": false
+}

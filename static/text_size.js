@@ -8,36 +8,33 @@
     const saved = scales.indexOf(Number(localStorage.getItem(storageKey)));
     if (saved >= 0) index = saved;
   } catch {
-    // The controls work for the current page when storage is unavailable.
+    // The button works for the current page when storage is unavailable.
   }
 
-  const apply = () => {
+  function applyScale() {
     document.documentElement.style.setProperty('--kairos-text-scale', scales[index] / 100);
-  };
-  apply();
+  }
+  applyScale();
 
   document.addEventListener('DOMContentLoaded', () => {
     const controls = document.querySelector('.text-size-controls');
     if (!controls) return;
 
-    const decrease = controls.querySelector('[data-text-step="-1"]');
-    const increase = controls.querySelector('[data-text-step="1"]');
+    const button = controls.querySelector('[data-text-cycle]');
     const status = controls.querySelector('[role="status"]');
+    const nextIndex = () => (index + 1) % scales.length;
 
-    function updateControls() {
-      decrease.disabled = index === 0;
-      increase.disabled = index === scales.length - 1;
+    function updateLabel() {
+      const label = 'Ajustar tamaño del texto. Actual: ' + scales[index]
+        + ' %. Siguiente: ' + scales[nextIndex()] + ' %.';
+      button.setAttribute('aria-label', label);
+      button.title = label;
     }
 
-    function change(step) {
-      const next = index + step;
-      if (next < 0 || next >= scales.length) return;
-
-      index = next;
-      apply();
-      updateControls();
-      if (document.activeElement === decrease && decrease.disabled) increase.focus();
-      if (document.activeElement === increase && increase.disabled) decrease.focus();
+    button.addEventListener('click', () => {
+      index = nextIndex();
+      applyScale();
+      updateLabel();
       status.textContent = 'Tamaño del texto: ' + scales[index] + ' %.';
       try {
         localStorage.setItem(storageKey, scales[index]);
@@ -45,11 +42,9 @@
         // Keep the active setting for this page.
       }
       window.dispatchEvent(new Event('kairos:text-size'));
-    }
+    });
 
-    decrease.addEventListener('click', () => change(-1));
-    increase.addEventListener('click', () => change(1));
-    updateControls();
+    updateLabel();
     controls.hidden = false;
   });
 })();

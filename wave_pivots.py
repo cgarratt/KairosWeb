@@ -79,43 +79,137 @@ def locked_values(pivots):
     return {w:details['price'] for w,details in pivots['waves'].items() if details['status']=='CONFIRMADO'}
 
 
-def weekly_retracement(record, spot, observed, token):
-    """Describe the last confirmed leg and a provisional, same-currency breakout."""
+def _observed_utc(value):
     from datetime import datetime, timezone
-    from wave_structure import BUY_RATIOS
 
-    result = {'pivots': [], 'levels': [], 'spot_endpoint': None,
-              'currency': 'USDC' if token == 'HYPE' else 'USDT'}
-    if not record or not record['timeline_valid']:
-        result['issue'] = ('Cronología semanal inválida en el MASTER.' if record
-                           else 'Sin pivotes semanales publicados.')
-        return result
+    instant = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    if instant.tzinfo is None:
+        raise ValueError('Fecha sin zona horaria')
+    return instant.astimezone(timezone.utc)
+
+
+def _valid_price(price):
+    return type(price) in (int, float) and math.isfinite(price) and price > 0
+
+
+def weekly_reference_points(record, archived):
+    """Select dated MASTER references. The former O1 can precede the new cycle."""
+    if not record:
+        return []
+    if not record['timeline_valid']:
+        raise WavePivotError('Cronología semanal inválida en el MASTER.')
     cycle_low = {'price': record['cycle_low'], 'date': record['cl_date'], 'status': record['cl_status']}
-    confirmed = []
-    for name, pivot in (('cl', cycle_low), *record['waves'].items()):
-        price = pivot['price']
-        if (pivot['status'] == 'CONFIRMADO' and pivot['date'] and
-                type(price) in (int, float) and math.isfinite(price) and price > 0):
-            confirmed.append(dict(pivot, name=name.upper()))
-    result['pivots'] = sorted(confirmed, key=lambda pivot: pivot['date'])[-2:]
-    if len(result['pivots']) < 2:
-        result['issue'] = 'Se requieren dos pivotes semanales confirmados para calcular retrocesos.'
+    points = [dict(pivot, name=name.upper(), source='07_PIVOTES')
+              for name, pivot in (('cl', cycle_low), *record['waves'].items())
+              if pivot['status'] in PIVOT_STATES and pivot['date'] and _valid_price(pivot['price'])]
+    points = sorted(points, key=lambda pivot: pivot['date'])[-2:]
+    if len(points) == 1 and points[0]['name'] == 'CL' and archived:
+        old_price = archived.get('o1')
+        try:
+            old_date = date_iso(archived.get('o1_date'))
+        except WavePivotError:
+            old_date = None
+        if (old_date and old_date < points[0]['date'] and _valid_price(old_price)
+                and old_price > points[0]['price']):
+            points.insert(0, {'name': 'O1 anterior', 'price': old_price, 'date': old_date,
+                              'status': 'PROPUESTO · ARCHIVADO',
+                              'source': '07_PIVOTES · Archivo · ' + archived['market']})
+    return points
+
+
+def closed_days_after(history, anchor_day, today, source, token):
+    """Validate exact UTC coverage from the day after the last dated pivot."""
+    from datetime import time, timedelta
+
+    first = date.fromisoformat(anchor_day) + timedelta(days=1)
+    if first >= today:
+        return []
+    if (history.get('status') != 'OK' or history.get('source') != source
+            or history.get('interval') != '1d' or history.get('closed_only') is not True):
+        raise ValueError('Serie diaria incompatible')
+    if token == 'HYPE':
+        if history.get('pair') != 'HYPE/USDC':
+            raise ValueError('Par histórico incompatible')
+    elif history.get('symbol') != token + 'USDT':
+        raise ValueError('Par histórico incompatible')
+
+    days = []
+    expected = first
+    for bar in history['records']:
+        opening = _observed_utc(bar['open_utc'])
+        if opening.date() < first:
+            continue
+        closing = _observed_utc(bar['close_utc'])
+        if (opening.date() != expected or opening.time() != time.min
+                or closing != opening + timedelta(days=1) or closing.date() > today
+                or bar.get('source', source) != source):
+            raise ValueError('Serie diaria incompleta o discontinua')
+        values = [bar[key] for key in ('open', 'high', 'low', 'close')]
+        if any(isinstance(value, bool) for value in values):
+            raise ValueError('Extremos diarios inválidos')
+        open_price, high, low, close_price = map(float, values)
+        if (not all(_valid_price(value) for value in (open_price, high, low, close_price))
+                or not low <= min(open_price, close_price) <= max(open_price, close_price) <= high):
+            raise ValueError('Extremos diarios inválidos')
+        days.append({'date': expected.isoformat(), 'low': low, 'high': high})
+        expected += timedelta(days=1)
+    if expected != today:
+        raise ValueError('Faltan cierres diarios desde el pivote')
+    return days
+
+
+def weekly_retracement(points, days, spot, observed, token, source):
+    """Build read-only two-point retracements and directional extensions."""
+    from wave_structure import BUY_RATIOS, SELL_RATIOS
+
+    result = {'pivots': points, 'levels': [], 'extensions': [], 'breakout': None,
+              'currency': 'USDC' if token == 'HYPE' else 'USDT'}
+    if len(points) < 2:
+        result['issue'] = 'Se requieren dos referencias semanales con precio y fecha UTC.'
+        return result
+    start, end = points
+    low, high = sorted((start, end), key=lambda pivot: pivot['price'])
+    if low['price'] == high['price']:
+        result['issue'] = 'Las dos referencias tienen el mismo precio.'
         return result
 
-    start, end = result['pivots']
-    low, high = sorted((start['price'], end['price']))
-    if low == high:
-        result['issue'] = 'Los dos pivotes tienen el mismo precio.'
+    peaks = {}
+    last_side = None
+    for day in days or []:
+        below = day['low'] < low['price']
+        above = day['high'] > high['price']
+        if below and ('low' not in peaks or day['low'] < peaks['low']['price']):
+            peaks['low'] = {'price': day['low'], 'date': day['date']}
+        if above and ('high' not in peaks or day['high'] > peaks['high']['price']):
+            peaks['high'] = {'price': day['high'], 'date': day['date']}
+        if below or above:
+            last_side = 'both' if below and above else 'low' if below else 'high'
+    if _valid_price(spot) and observed:
+        spot_day = _observed_utc(observed).date().isoformat()
+        if spot_day > end['date'] and (not days or spot_day > days[-1]['date']):
+            side = 'low' if spot < low['price'] else 'high' if spot > high['price'] else None
+            if side:
+                last_side = side
+                if side not in peaks or (spot < peaks[side]['price'] if side == 'low' else spot > peaks[side]['price']):
+                    peaks[side] = {'price': spot, 'date': observed, 'from_spot': True}
+    if last_side == 'both':
+        result['issue'] = 'Una misma vela diaria rompió ambos extremos. El orden de la ruptura es indeterminado.'
         return result
-    if type(spot) in (int, float) and math.isfinite(spot) and spot > 0:
-        instant = datetime.fromisoformat(observed.replace('Z', '+00:00'))
-        if instant.tzinfo and instant.astimezone(timezone.utc).date().isoformat() >= end['date']:
-            if spot > high or spot < low:
-                opposite = low if spot > high else high
-                start = next(pivot for pivot in (start, end) if pivot['price'] == opposite)
-                end = {'name': 'Spot', 'price': spot, 'date': observed}
-                result['spot_endpoint'] = end
-    result['start'], result['end'] = start, end
-    result['levels'] = [{'percent': ratio * 100, 'price': end['price'] + ratio * (start['price'] - end['price'])}
-                        for ratio in BUY_RATIOS]
+    if last_side:
+        start = low if last_side == 'high' else high
+        extreme = peaks[last_side]
+        end = dict(extreme, name='Máximo observado' if last_side == 'high' else 'Mínimo observado',
+                   source=source, status='PROVISIONAL')
+        result['breakout'] = end
+
+    def levels(ratios, origin, displacement):
+        output = []
+        for ratio in ratios:
+            value = origin + ratio * displacement
+            output.append({'percent': ratio * 100, 'price': value if _valid_price(value) else None})
+        return output
+
+    distance = end['price'] - start['price']
+    result.update(start=start, end=end, levels=levels(BUY_RATIOS, end['price'], -distance),
+                  extensions=levels(SELL_RATIOS, start['price'], distance))
     return result

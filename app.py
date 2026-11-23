@@ -39,7 +39,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.8.4'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.8.7'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -287,7 +287,7 @@ def bind_published_sheet():
     independent={'/health','/api/mcp-status','/api/mcp-config-check','/api/mcp-diagnostics',
                  '/api/alerts/unread','/api/alerts/read','/api/alerts/read-all',
                  '/api/history/refresh','/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status', '/api/mcp-refresh', '/api/health/diagnostics'}
-    if request.path in independent or request.path in ('/','/login','/logout','/admin/login','/api/admin/session','/pwa','/pwa/sw.js') or request.path=='/settings' or request.path.startswith('/static/'):
+    if request.endpoint == 'pwa_forecast_redirect' or request.path in independent or request.path in ('/','/login','/logout','/admin/login','/api/admin/session','/pwa','/pwa/sw.js') or request.path=='/settings' or request.path.startswith('/static/'):
         return None
     try:
         valuation_only = request.endpoint in ('pwa_home', 'integral_portfolio_page', 'portfolio', 'spot_refresh')
@@ -1806,6 +1806,82 @@ def _hype_usdc_quote():
     return price, timestamp.isoformat()
 
 
+def _pwa_weekly_simulation(token, spot, observed):
+    from wave_pivots import (WavePivotError, closed_days_after,
+                             weekly_reference_points, weekly_retracement)
+
+    record = g.kairos_state['wave_pivots'].get(token)
+    currency = 'USDC' if token == 'HYPE' else 'USDT'
+    source = 'Hyperliquid Spot' if token == 'HYPE' else market_source()
+    warnings = []
+    try:
+        points = weekly_reference_points(record, None)
+    except WavePivotError as exc:
+        return {'currency': currency, 'issue': str(exc)}
+    if len(points) == 1 and points[0]['name'] == 'CL':
+        from pivot_preload import ARCHIVE_A1, archive_candidates
+        from kairos_sheets_features import read_ranges
+
+        try:
+            archive = archive_candidates(read_ranges({'archive': ARCHIVE_A1})['archive'])
+            archive_token = 'PUMPFUN' if token == 'PUMP' else token
+            old = next((row for row in archive if row['token'] == archive_token), {})
+            market = old.get('market', '').upper()
+            if token == 'HYPE':
+                compatible = 'HYPERLIQUID' in market and 'USDC' in market
+            else:
+                compatible = 'USDC' not in market and any(venue in market for venue in ('BINANCE', 'KUCOIN'))
+            if compatible:
+                points = weekly_reference_points(record, old)
+        except Exception as exc:
+            app.logger.info('PWA historical pivots unavailable class=%s', type(exc).__name__)
+            warnings.append('Archivo de pivotes de 07_PIVOTES no disponible.')
+    if len(points) < 2:
+        return {**weekly_retracement(points, None, None, None, token, source), 'warnings': warnings}
+
+    now = datetime.now(timezone.utc)
+    latest = points[-1]['date']
+    if latest > now.date().isoformat():
+        return {'currency': currency, 'pivots': points, 'issue': 'Fecha de referencia futura en UTC.'}
+
+    days = None
+    try:
+        if latest >= (now.date() - timedelta(days=1)).isoformat():
+            history = {}
+        elif token == 'HYPE':
+            env = 'HYPERLIQUID_MCP_URL'
+            pause = _active_mcp_pause(env)
+            if pause:
+                raise pause
+            history = _accept_mcp_response(env, asyncio.run(call_mcp(env, 'get_hype_spot_ohlcv',
+                {'interval': '1d', 'start_date': latest, 'limit': 1500})))
+        else:
+            snapshot = _read_binance_snapshot()
+            by_source = snapshot.get('history_by_source', {}).get(source, {})
+            if snapshot.get('history_source') == source:
+                by_source = snapshot
+            history = by_source.get('histories', {}).get(token + 'USDT:1d', {})
+        days = closed_days_after(history, latest, now.date(), source, token)
+    except Exception as exc:
+        app.logger.info('PWA daily extremes unavailable class=%s', type(exc).__name__)
+        warnings.append('Histórico 1D incompleto o no disponible. Extremo del tramo sin verificar; '
+                        'si hay ruptura Spot, se muestra solo la cotización observada.')
+    if token == 'HYPE':
+        try:
+            spot, observed = _hype_usdc_quote()
+        except (requests.RequestException, ValueError, TypeError, KeyError, AttributeError, OSError, OverflowError):
+            spot, observed = None, None
+            warnings.append('Sin cotización HYPE/USDC vigente para evaluar el día abierto.')
+    if observed:
+        instant = datetime.fromisoformat(observed.replace('Z', '+00:00'))
+        age = (datetime.now(timezone.utc) - instant).total_seconds()
+        if not -30 <= age <= 180:
+            spot, observed = None, None
+            warnings.append('Cotización Spot fuera de vigencia para evaluar el día abierto.')
+    leg = weekly_retracement(points, days, spot, observed, token, source)
+    return {**leg, 'warnings': warnings, 'spot': spot, 'spot_observed': observed}
+
+
 @app.get('/pwa/ordenes')
 @app.route('/mode/ordenes')
 def orders_inbox_page():
@@ -1866,24 +1942,13 @@ def orders_inbox_page():
             selected = request.args.get('token', '').upper()
             if selected not in active_tokens:
                 selected = ''
-            from wave_pivots import weekly_retracement
             selected_row = next((r for r in d['rows'] if r['token'] == selected), None)
-            leg = None
-            hype_spot = None
-            if selected_row:
-                record = g.kairos_state['wave_pivots'].get(selected)
-                leg = weekly_retracement(record, None if selected == 'HYPE' else selected_row['price'],
-                                         observed, selected)
-                if selected == 'HYPE' and leg['levels']:
-                    try:
-                        hype_spot, time_utc = _hype_usdc_quote()
-                        leg = weekly_retracement(record, hype_spot, time_utc, selected)
-                    except (requests.RequestException, ValueError, TypeError, KeyError, AttributeError, OSError, OverflowError):
-                        pass
+            leg = (_pwa_weekly_simulation(selected, selected_row['price'], observed)
+                   if selected_row else None)
             cancelled = [r for r in managed_orders.get('canonical_rows', [])[1:]
                          if len(r) > 11 and str(r[11]).upper() in ('CANCELLED', 'CANCELED')]
             return render_template('pwa/orders.html', master=APP_VERSION, tokens=sorted(active_tokens),
-                                   selected=selected, selected_row=selected_row, leg=leg, hype_spot=hype_spot,
+                                   selected=selected, selected_row=selected_row, leg=leg,
                                    candidates=inbox['candidates'], records=managed_orders.get('records', []),
                                    cancelled=cancelled, issue=managed_orders.get('error') or structural_note)
         from orders_inbox import visible_order_rows
@@ -1953,12 +2018,18 @@ def manage_order_lifecycle():
         return jsonify({'status':'DATA_ERROR','error_id':incident,'reason':'No se pudo certificar la escritura. Consulta el historial antes de volver a intentar: la operación podría haberse registrado.'}),503
 
 
-@app.get('/pwa/<slug>')
+@app.get('/pwa/forecast')
+def pwa_forecast_redirect():
+    return redirect(url_for('pwa_home'))
+
+
+@app.get('/pwa/balancer')
+def pwa_balancer():
+    return mode_page('balancer')
+
 @app.route('/mode/<slug>')
 def mode_page(slug):
     mobile = request.path.startswith('/pwa/')
-    if mobile and slug not in ('balancer', 'forecast'):
-        abort(404)
     if slug == 'resumen':
         return redirect('/')
     mode = MODES_BY_SLUG.get(slug)
@@ -1970,12 +2041,6 @@ def mode_page(slug):
         diag = diagnostic_error(exc, f'mode:{slug}:market')
         return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master=APP_VERSION), 503
     try:
-        if mobile and slug == 'forecast':
-            rows = _active_rows(dashboard['rows'])
-            references = _weekly_context_for_positions('forecast', rows)
-            positions = [{'token': row['token'], 'units': row['units']} for row in rows]
-            return render_template('pwa/forecast.html', master=APP_VERSION, positions=positions,
-                                   pivot_rows=_forecast_pivot_rows(rows, references))
         payload = build_mode_payload(slug, dashboard, observed)
         if slug == 'ventas':
             override=request.args.get('usdt_pct')

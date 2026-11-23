@@ -1,0 +1,12 @@
+{
+  "status": "PASS_LOCAL",
+  "health_http": 200,
+  "checks": [
+    "jinja_templates_and_single_button",
+    "text_size_cycle_and_persistence",
+    "portfolio_spot_and_units_alignment",
+    "archive_paths_and_integrity"
+  ],
+  "deployed": false,
+  "ios_verified": false
+}

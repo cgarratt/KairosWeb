@@ -1,0 +1,14 @@
+{
+  "status": "PASS_LOCAL",
+  "health_http": 200,
+  "checks": [
+    "dated_proposed_and_archived_references",
+    "high_low_breakouts_and_extrema",
+    "closed_daily_coverage_and_market_identity",
+    "two_point_retracements_and_extensions",
+    "orders_template_and_health",
+    "archive_integrity"
+  ],
+  "deployed": false,
+  "ios_verified": false
+}
