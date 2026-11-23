@@ -39,7 +39,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.8.7'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.8.9'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -1807,8 +1807,8 @@ def _hype_usdc_quote():
 
 
 def _pwa_weekly_simulation(token, spot, observed):
-    from wave_pivots import (WavePivotError, closed_days_after,
-                             weekly_reference_points, weekly_retracement)
+    from wave_pivots import (PRE_RESET_PIVOTS_RANGE, WavePivotError, closed_days_after,
+                             pre_reset_o1, weekly_reference_points, weekly_retracement)
 
     record = g.kairos_state['wave_pivots'].get(token)
     currency = 'USDC' if token == 'HYPE' else 'USDT'
@@ -1819,23 +1819,16 @@ def _pwa_weekly_simulation(token, spot, observed):
     except WavePivotError as exc:
         return {'currency': currency, 'issue': str(exc)}
     if len(points) == 1 and points[0]['name'] == 'CL':
-        from pivot_preload import ARCHIVE_A1, archive_candidates
         from kairos_sheets_features import read_ranges
 
         try:
-            archive = archive_candidates(read_ranges({'archive': ARCHIVE_A1})['archive'])
-            archive_token = 'PUMPFUN' if token == 'PUMP' else token
-            old = next((row for row in archive if row['token'] == archive_token), {})
-            market = old.get('market', '').upper()
-            if token == 'HYPE':
-                compatible = 'HYPERLIQUID' in market and 'USDC' in market
-            else:
-                compatible = 'USDC' not in market and any(venue in market for venue in ('BINANCE', 'KUCOIN'))
-            if compatible:
-                points = weekly_reference_points(record, old)
+            rows = read_ranges({'backup': PRE_RESET_PIVOTS_RANGE})['backup']
+            points = weekly_reference_points(record, pre_reset_o1(rows, token))
+            if len(points) < 2:
+                warnings.append('Sin O1 previo compatible en 27_PIVOTES_ANTES_20261121.')
         except Exception as exc:
-            app.logger.info('PWA historical pivots unavailable class=%s', type(exc).__name__)
-            warnings.append('Archivo de pivotes de 07_PIVOTES no disponible.')
+            app.logger.info('PWA pre-reset pivots unavailable class=%s', type(exc).__name__)
+            warnings.append('No se pudo leer el respaldo 27_PIVOTES_ANTES_20261121.')
     if len(points) < 2:
         return {**weekly_retracement(points, None, None, None, token, source), 'warnings': warnings}
 
@@ -1939,7 +1932,7 @@ def orders_inbox_page():
         from orders_inbox import classify_purchase_views
         classify_purchase_views(buy,inbox['candidates'],managed_orders.get('records',[]))
         if request.path.startswith('/pwa/'):
-            selected = request.args.get('token', '').upper()
+            selected = request.args.get('token', 'BTC').upper()
             if selected not in active_tokens:
                 selected = ''
             selected_row = next((r for r in d['rows'] if r['token'] == selected), None)
@@ -1962,6 +1955,15 @@ def orders_inbox_page():
     except Exception as exc:
         incident=uuid.uuid4().hex[:10]
         app.logger.exception('Orders inbox DATA_ERROR id=%s stage=%s',incident,stage)
+        if request.path == '/pwa/ordenes':
+            tokens = sorted(g.kairos_state['wave_pivots'])
+            selected = request.args.get('token', 'BTC').upper()
+            selected = selected if selected in tokens else ''
+            leg = _pwa_weekly_simulation(selected, None, None) if selected else None
+            return render_template('pwa/orders.html', master=APP_VERSION, tokens=tokens,
+                                   selected=selected, leg=leg, candidates=[], cancelled=[],
+                                   records=managed_orders.get('records', []),
+                                   issue='No se pudo actualizar ' + stage + '. Las referencias publicadas se muestran por separado.'), 503
         # Do not leak raw MCP credentials, response bodies or sensitive traces.
         return render_template('ordenes.html',mode=mode,inbox=None,observed=None,
                                snapshot=g.kairos_state['control']['snapshot_id'],master=APP_VERSION,error='No se pudo verificar '+stage+'. Ninguna propuesta nueva mostrada.',

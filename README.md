@@ -1,9 +1,9 @@
-# KairosWeb 4.8.7 · PWA v1
+# KairosWeb 4.8.9 · PWA v1
 
 El icono del iPhone abre el Portafolio en `/pwa/`. La PWA incluye Portafolio, Balancer y Órdenes. Forecast se consulta desde la versión web.
 
 - **Balancer** muestra las unidades sugeridas y el ingreso condicional por token.
-- **Órdenes** muestra retrocesos y extensiones de simulación entre dos referencias semanales fechadas, incluso propuestas. Si solo está publicado el CL, puede usar un O1 anterior fechado del archivo de 07_PIVOTES. Para actualizar el extremo del escenario usa máximos o mínimos de velas diarias cerradas del mismo mercado y la cotización Spot vigente. Si falta cobertura, indica que el extremo está por verificar.
+- **Órdenes** muestra retrocesos y extensiones Fibonacci entre dos referencias semanales fechadas. Las extensiones 1.272, 1.618 y 2.618 se proyectan desde el primer punto en la dirección del tramo. Si solo existe el CL vigente, usa el O1 guardado en 27_PIVOTES_ANTES_20261121 cuando es compatible. BTC se selecciona al abrir. Si se verifica una ruptura, el extremo del tramo se actualiza de forma provisional.
 
 El acceso a la PWA usa el usuario y la contraseña de KairosWeb.
 
@@ -15,4 +15,4 @@ En Seguimiento del portafolio, Precio Spot aparece justo después de Token.
 
 1. Copia el contenido del ZIP a la raíz del repositorio conectado a KairosWeb.
 2. Publica la versión. Render instala las dependencias desde `requirements.txt`.
-3. Comprueba que `/health` muestra 4.8.7 y que puedes iniciar sesión en `/pwa/`.
+3. Comprueba que `/health` muestra 4.8.9 y que puedes iniciar sesión en `/pwa/`.

@@ -1,0 +1,10 @@
+{
+  "status": "PASS_LOCAL",
+  "checks": [
+    "12_actual_master_pivot_pairs",
+    "pwa_route_without_live_spot",
+    "four_two_point_retracements",
+    "archive_integrity"
+  ],
+  "deployed": false
+}

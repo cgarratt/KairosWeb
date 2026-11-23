@@ -1,0 +1,11 @@
+{
+  "status": "PASS_LOCAL",
+  "health_http": 200,
+  "checks": [
+    "ascending_and_descending_two_point_extensions",
+    "breakout_reference",
+    "orders_template",
+    "archive_integrity"
+  ],
+  "deployed": false
+}

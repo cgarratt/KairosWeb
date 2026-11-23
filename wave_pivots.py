@@ -112,9 +112,28 @@ def weekly_reference_points(record, archived):
         if (old_date and old_date < points[0]['date'] and _valid_price(old_price)
                 and old_price > points[0]['price']):
             points.insert(0, {'name': 'O1 anterior', 'price': old_price, 'date': old_date,
-                              'status': 'PROPUESTO · ARCHIVADO',
-                              'source': '07_PIVOTES · Archivo · ' + archived['market']})
+                              'status': archived['status'] + ' · ARCHIVADO',
+                              'source': archived['source']})
     return points
+
+
+PRE_RESET_PIVOTS_RANGE = "'27_PIVOTES_ANTES_20261121'!A4:W16"
+
+
+def pre_reset_o1(rows, token):
+    """Read the original O1 from the pre-reset backup, with its recorded state."""
+    if not rows or rows[0][:5] != ['Token', 'Cycle Low USDT', 'Fecha CL', 'O1 USDT', 'Fecha O1']:
+        raise WavePivotError('Encabezado del respaldo de pivotes inválido.')
+    symbol = 'PUMPFUN' if token == 'PUMP' else token
+    matches = [row for row in rows[1:] if row and row[0] == symbol]
+    if len(matches) != 1:
+        return None
+    row = matches[0]
+    status = normalized_status(cell(row, STATE_COLS['o1']))
+    if status not in PIVOT_STATES:
+        return None
+    return {'o1': cell(row, PRICE_COLS['o1']), 'o1_date': cell(row, DATE_COLS['o1']),
+            'status': status, 'source': '27_PIVOTES_ANTES_20261121'}
 
 
 def closed_days_after(history, anchor_day, today, source, token):
@@ -159,8 +178,8 @@ def closed_days_after(history, anchor_day, today, source, token):
 
 
 def weekly_retracement(points, days, spot, observed, token, source):
-    """Build read-only two-point retracements and directional extensions."""
-    from wave_structure import BUY_RATIOS, SELL_RATIOS
+    """Build read-only two-point retracements and extensions."""
+    from wave_structure import BUY_RATIOS
 
     result = {'pivots': points, 'levels': [], 'extensions': [], 'breakout': None,
               'currency': 'USDC' if token == 'HYPE' else 'USDT'}
@@ -211,5 +230,5 @@ def weekly_retracement(points, days, spot, observed, token, source):
 
     distance = end['price'] - start['price']
     result.update(start=start, end=end, levels=levels(BUY_RATIOS, end['price'], -distance),
-                  extensions=levels(SELL_RATIOS, start['price'], distance))
+                  extensions=levels((1.272, 1.618, 2.618), start['price'], distance))
     return result
