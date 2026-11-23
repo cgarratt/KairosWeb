@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block title %}Kairos · Forecast{% endblock %}
+{% block content %}
+<main class="pwa-content" id="pwa-forecast">
+<h2>Forecast</h2>
+<p>Simulación con las unidades publicadas de cada token.</p>
+<section class="panel">
+  <h3>Trayectoria por token</h3>
+  <label for="forecast-token">Token</label>
+  <select id="forecast-token">{% for p in positions %}<option value="{{ p.token }}">{{ p.token }}</option>{% endfor %}</select>
+  <p id="forecast-chart-status" role="status">Cargando trayectoria…</p>
+  <canvas id="forecast-chart" width="600" height="340" role="img" hidden></canvas>
+</section>
+<section class="panel">
+  <h3>Proyección O1–O5 por token</h3>
+  <div class="pwa-scroll">
+    <table><thead><tr><th>Token</th><th>O1</th><th>O2</th><th>O3</th><th>O4</th><th>O5</th></tr></thead><tbody id="forecast-projections"></tbody></table>
+  </div>
+</section>
+<script type="application/json" id="forecast-input">{{ {'positions': positions, 'pivots': pivot_rows}|tojson }}</script>
+</main>
+<script defer src="{{ url_for('static', filename='pivot_timeline.js', v=master) }}"></script>
+<script defer src="{{ url_for('static', filename='forecast_fibo_plan.js', v=master) }}"></script>
+<script defer src="{{ url_for('static', filename='pwa/forecast.js', v=master) }}"></script>
+{% endblock %}

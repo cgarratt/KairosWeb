@@ -78,6 +78,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='report_notices.css', v=master) }}">
   <script defer src="{{ url_for('static', filename='report_notices.js', v=master) }}"></script>
   {% if request.path.startswith('/pwa/') %}<link rel="stylesheet" href="{{ url_for('static', filename='pwa/v1.css', v=master) }}">{% endif %}
+  {% if request.endpoint == 'pwa_home' %}<script defer src="{{ url_for('static', filename='pwa/install.js', v=master) }}"></script>{% endif %}
   {% block head %}{% endblock %}
 </head>
 <body{% if request.path.startswith('/pwa/') %} class="kairos-pwa"{% endif %}>
@@ -113,7 +114,7 @@
         <button type="button" class="tool-icon spot-refresh-btn" id="spot-refresh" data-csrf="{{ session.get('csrf_token','') }}" aria-label="Actualizar Spot" title="Actualizar Spot" aria-describedby="spot-observed">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.4 6M20 5v6h-6"/></svg>
         </button>
-        <form method="post" action="{{ url_for('portfolio_logout', next='pwa') if request.endpoint == 'pwa_home' else url_for('portfolio_logout') }}" class="session-exit">
+        <form method="post" action="{{ url_for('portfolio_logout', next='pwa') if request.path.startswith('/pwa/') else url_for('portfolio_logout') }}" class="session-exit">
           <input type="hidden" name="csrf" value="{{ portfolio_csrf }}">
           <button type="submit" class="btn">Cerrar sesión</button>
         </form>
@@ -140,6 +141,7 @@
     </div>
     {% if portfolio_authenticated %}<p id="spot-observed" class="spot-observed" aria-live="polite">Spot: consultando estado…</p>{% endif %}
     {% block content %}{% endblock %}
+    {% if request.endpoint == 'pwa_home' %}<p><a class="btn" href="{{ url_for('pwa_passkey_settings') }}">Llave de acceso · Face ID</a></p>{% endif %}
   </div>
   {% if portfolio_authenticated %}<script defer src="{{ url_for('static', filename='spot_refresh.js') }}?v={{ master }}"></script>{% endif %}
   <script defer src="{{ url_for('static', filename='table_sort.js') }}"></script>

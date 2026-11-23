@@ -14,3 +14,7 @@ body.kairos-pwa { font-size: calc(14px + 1pt); }
   .kairos-pwa .navigation-row .global-nav .global-nav-link { font-size: calc(12px + 1pt); }
   .kairos-pwa .right-tools .btn,.kairos-pwa .spot-observed { font-size: calc(12px + 1pt); }
 }
+
+#forecast-chart { width: 100%; height: auto; }
+#forecast-projections td { min-width: 9.5rem; }
+#forecast-projections td div + div { margin-top: 0.35em; }

@@ -11,12 +11,16 @@ import uuid
 import logging
 import hashlib
 import hmac
+import requests
 from concurrent.futures import ThreadPoolExecutor
 import httpx
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
 from admin_origin import same_origin_allowed, valid_logout_csrf
+from pwa_passkeys import Passkeys, PasskeyUnavailable, enabled as passkeys_enabled, public_origin as passkey_origin
+from psycopg import Error as PasskeyStorageError
+from webauthn.helpers.exceptions import WebAuthnException
 
 from flask import Flask, Response, jsonify, render_template, request, abort, redirect, g, session, url_for
 from fastmcp import Client
@@ -38,7 +42,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.8.0'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.8.2'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -185,7 +189,7 @@ def _portfolio_authorized():
 def authenticate():
     path = request.path
     # Static assets and Render liveness are public. API values remain private.
-    if path == '/health' or path.startswith('/static/') or path in ('/login', '/logout', '/api/modes', '/pwa/sw.js'):
+    if path == '/health' or path.startswith('/static/') or path in ('/login', '/logout', '/api/modes', '/pwa/sw.js', '/pwa/passkey/exchange'):
         return None
     if not _portfolio_authorized():
         if path == '/pwa' or path.startswith('/pwa/'):
@@ -235,16 +239,8 @@ def portfolio_login():
             # Compare both credentials with constant-time checks; do not log them.
             if secrets.compare_digest(user, expected_user) and secrets.compare_digest(password, expected_password):
                 _login_rate_reset(ip)
-                session.clear()
                 remember = request.form.get('remember_me') == 'on'
-                session.permanent = remember
-                session['kairos_portfolio'] = True
-                session['portfolio_remember_me'] = remember
-                session['portfolio_credential_tag'] = _credential_tag('portfolio')
-                session['portfolio_login_at'] = time.time()
-                session['portfolio_seen_at'] = time.time()
-                session['csrf_token'] = secrets.token_urlsafe(32)
-                session['logout_csrf'] = secrets.token_urlsafe(32)
+                _start_portfolio_session(remember)
                 return redirect(target)
             error = 'Usuario o contraseña incorrectos.'
         _login_rate_fail(ip)
@@ -256,6 +252,85 @@ def portfolio_login():
     session['portfolio_login_csrf'] = token
     return render_template('portfolio_login.html', master=APP_VERSION, not_configured=False,
                            login_csrf=token, destination=destination, error=None)
+
+
+def _start_portfolio_session(remember):
+    session.clear()
+    session.permanent = remember
+    session['kairos_portfolio'] = True
+    session['portfolio_remember_me'] = remember
+    session['portfolio_credential_tag'] = _credential_tag('portfolio')
+    session['portfolio_login_at'] = session['portfolio_seen_at'] = time.time()
+    session['csrf_token'] = secrets.token_urlsafe(32)
+    session['logout_csrf'] = secrets.token_urlsafe(32)
+
+
+@app.get('/pwa/passkey')
+def pwa_passkey_settings():
+    return render_template('pwa/passkey.html', master=APP_VERSION,
+                           passkey_csrf=session.get('csrf_token', ''))
+
+
+@app.post('/pwa/passkey/exchange')
+def pwa_passkey_exchange():
+    origin = passkey_origin()
+    if not (passkeys_enabled() and app.secret_key and os.getenv('KAIROS_WEB_USER') and os.getenv('KAIROS_WEB_PASSWORD')):
+        return jsonify(message='El acceso con llave todavía no está habilitado.'), 503
+    if request.headers.get('Origin') != origin or request.host.lower() != urlsplit(origin).netloc:
+        return jsonify(message='Origen de acceso inválido.'), 403
+    request.max_content_length = 32768
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify(message='Solicitud inválida.'), 400
+    action, step = body.get('action'), body.get('step')
+    if action not in ('register', 'authenticate', 'revoke') or step not in ('options', 'verify'):
+        return jsonify(message='Solicitud inválida.'), 400
+    managing = action in ('register', 'revoke')
+    if managing and not _portfolio_authorized():
+        return jsonify(message='Inicia sesión para administrar tu llave.'), 401
+    csrf = session.get('csrf_token' if managing else 'portfolio_login_csrf')
+    supplied = request.headers.get('X-Kairos-Csrf', '')
+    if not csrf or not secrets.compare_digest(csrf.encode(), supplied.encode()):
+        return jsonify(message='Recarga la pantalla e inténtalo de nuevo.'), 403
+
+    rate_key = 'pwa-passkey:' + (request.remote_addr or 'unknown')
+    if step == 'options':
+        if not _login_rate_check(rate_key):
+            return jsonify(message='Demasiados intentos. Intenta más tarde.'), 429
+        _login_rate_fail(rate_key)
+    if managing and step == 'options':
+        password = body.get('password')
+        if not isinstance(password, str) or not secrets.compare_digest(
+                password.encode('utf-8'), os.environ['KAIROS_WEB_PASSWORD'].encode('utf-8')):
+            return jsonify(message='Contraseña incorrecta.'), 403
+
+    if action == 'revoke' and step != 'options':
+        return jsonify(message='Solicitud inválida.'), 400
+    binding = session.get('passkey_binding')
+    if step == 'options' and not binding:
+        binding = session['passkey_binding'] = secrets.token_urlsafe(32)
+    if not binding:
+        return jsonify(message='La solicitud caducó. Vuelve a intentarlo.'), 400
+    access = Passkeys(origin, _credential_tag('portfolio'), binding)
+    try:
+        if action == 'revoke':
+            access.revoke()
+        elif step == 'options':
+            return jsonify(access.options(action, os.environ['KAIROS_WEB_USER']))
+        else:
+            access.verify(action, body.get('credential'))
+    except PasskeyUnavailable as exc:
+        return jsonify(message=str(exc)), 400
+    except (WebAuthnException, ValueError, KeyError, TypeError):
+        return jsonify(message='La verificación de la llave de acceso falló.'), 403
+    except PasskeyStorageError as exc:
+        app.logger.error('Passkey storage unavailable class=%s', type(exc).__name__)
+        return jsonify(message='Almacenamiento de llaves temporalmente no disponible.'), 503
+    _login_rate_reset(rate_key)
+    if action == 'authenticate':
+        _start_portfolio_session(body.get('remember') is True)
+        return jsonify(redirect=url_for('pwa_home'))
+    return jsonify(status='OK')
 
 
 @app.route('/logout', methods=['GET', 'POST'])
@@ -283,10 +358,10 @@ def bind_published_sheet():
     independent={'/health','/api/mcp-status','/api/mcp-config-check','/api/mcp-diagnostics',
                  '/api/alerts/unread','/api/alerts/read','/api/alerts/read-all',
                  '/api/history/refresh','/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status', '/api/mcp-refresh', '/api/health/diagnostics'}
-    if request.path in independent or request.path in ('/','/login','/logout','/admin/login','/api/admin/session','/pwa/','/pwa','/pwa/sw.js') or request.path=='/settings' or request.path.startswith('/static/'):
+    if request.path in independent or request.path in ('/','/login','/logout','/admin/login','/api/admin/session','/pwa','/pwa/sw.js','/pwa/passkey','/pwa/passkey/exchange') or request.path=='/settings' or request.path.startswith('/static/'):
         return None
     try:
-        valuation_only = request.endpoint in ('integral_portfolio_page', 'portfolio', 'spot_refresh')
+        valuation_only = request.endpoint in ('pwa_home', 'integral_portfolio_page', 'portfolio', 'spot_refresh')
         g.kairos_state=get_state(force=request.method != 'GET', valuation_only=valuation_only)
         return None
     except Exception as exc:
@@ -1086,6 +1161,67 @@ def _active_dashboard(dashboard):
             'bsi_historical': {**bsi, 'rows': [row for row in bsi['rows'] if row['token'] in tokens]}}
 
 
+def _weekly_context_for_positions(slug, rows):
+    # Shared CL -> weekly O1 -> O2 Fibonacci source for every scenario.
+    # The historical C1/C2 archive is NEVER inverted to synthesize O1.
+    from concurrent.futures import ThreadPoolExecutor
+    from pivot_preload import archive_candidates, ARCHIVE_A1
+    from kairos_sheets_features import read_ranges
+    try:
+        archive=archive_candidates(read_ranges({'archive':ARCHIVE_A1})['archive'],g.kairos_state['parameters'])
+        archive_by_token={a['token']:a for a in archive}
+    except Exception:
+        archive_by_token={}
+    pub=g.kairos_state['wave_pivots']
+    def weekly_reference(row):
+        token=row['token']; source_token='PUMPFUN' if token=='PUMP' else token
+        if slug=='forecast':
+            from wave_macro_context import published_forecast_context
+            context=published_forecast_context(source_token,pub.get(token,{}))
+            if context is not None:return token,context
+        if slug=='compras':
+            from buy_weekly_policy import published_buy_impulse
+            if published_buy_impulse(pub.get(token,{})) is not None:
+                return token,resolve_long_term_buy(source_token,pub.get(token,{}),{})
+        try:
+            if source_token=='HYPE':
+                data=call_mcp_resilient('HYPERLIQUID_MCP_URL','get_hype_spot_ohlcv',
+                    {'interval':'1d','start_date':'2024-11-29','limit':750})
+            else:
+                # For proposed previews, retain the dated CL week even
+                # when 365-day history would begin after the CL.
+                from cl_review_history import fetch_closed_binance_history
+                candidate_cl=(pub.get(token,{}) or {}).get('cl_date') or (archive_by_token.get(source_token,{}) or {}).get('cl_date')
+                if candidate_cl:
+                    data=fetch_closed_binance_history(call_mcp_resilient,token,candidate_cl)
+                else:
+                    data=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
+                        {'symbol':token+'USDT','interval':'1d','limit':365})
+            return token,(resolve_long_term_buy(source_token,pub.get(token,{}),data,archive_by_token.get(source_token,{})) if slug=='compras'
+                else resolve_weekly_wave_context(source_token,pub.get(token,{}),
+                archive_by_token.get(source_token,{}),data))
+        except Exception:
+            return token,{'status':'MCP_DATA_ERROR','eligible':False,'levels':None,
+                'history':{'status':'DATA_ERROR'},'anchors':None, 'reason':'MCP_REQUERIDO_NO_DISPONIBLE'}
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        return dict(pool.map(weekly_reference, rows))
+
+def _forecast_pivot_rows(rows, weekly_context):
+    pivot_rows=[]
+    for r in rows:
+        ctx=weekly_context[r['token']]
+        anchors=ctx.get('anchors') or {}
+        pair=ctx.get('levels') or {}
+        w=g.kairos_state['wave_pivots'].get(r['token'],{})
+        pivot_rows.append({'token':r['token'],'c1':pair.get('c1'),'c2':pair.get('c2'),
+            'ref382':pair.get('ref382'),'ref786':pair.get('ref786'),
+            'cycle_low':anchors.get('CL'),'o1':anchors.get('O1'),
+            'o1_date':anchors.get('O1_date'),
+            'published_cl':w.get('cycle_low'),'published_cl_date':w.get('cl_date'),
+            'cl_status':w.get('cl_status','PROPUESTO'),'waves':w.get('waves',{}),
+            'anchor_state':ctx.get('status')})
+    return pivot_rows
+
 def build_mode_payload(slug, d, observed):
     d = _active_dashboard(d)
     rows = sorted(d['rows'], key=lambda x: x['value'], reverse=True)
@@ -1203,49 +1339,7 @@ def build_mode_payload(slug, d, observed):
              'crypto_value':d['crypto_value'], 'liquidity_reserves':reserves,
              'weekly_first_usdt':reserves['weekly_uncommitted'],'balancer_extension_usdt':reserves['balancer_uncommitted']}
     if slug in ('compras','forecast'):
-        # Shared CL -> weekly O1 -> O2 Fibonacci source for every scenario.
-        # The historical C1/C2 archive is NEVER inverted to synthesize O1.
-        from concurrent.futures import ThreadPoolExecutor
-        from pivot_preload import archive_candidates, ARCHIVE_A1
-        from kairos_sheets_features import read_ranges
-        try:
-            archive=archive_candidates(read_ranges({'archive':ARCHIVE_A1})['archive'],g.kairos_state['parameters'])
-            archive_by_token={a['token']:a for a in archive}
-        except Exception:
-            archive_by_token={}
-        pub=g.kairos_state['wave_pivots']
-        def weekly_reference(row):
-            token=row['token']; source_token='PUMPFUN' if token=='PUMP' else token
-            if slug=='forecast':
-                from wave_macro_context import published_forecast_context
-                context=published_forecast_context(source_token,pub.get(token,{}))
-                if context is not None:return token,context
-            if slug=='compras':
-                from buy_weekly_policy import published_buy_impulse
-                if published_buy_impulse(pub.get(token,{})) is not None:
-                    return token,resolve_long_term_buy(source_token,pub.get(token,{}),{})
-            try:
-                if source_token=='HYPE':
-                    data=call_mcp_resilient('HYPERLIQUID_MCP_URL','get_hype_spot_ohlcv',
-                        {'interval':'1d','start_date':'2024-11-29','limit':750})
-                else:
-                    # For proposed previews, retain the dated CL week even
-                    # when 365-day history would begin after the CL.
-                    from cl_review_history import fetch_closed_binance_history
-                    candidate_cl=(pub.get(token,{}) or {}).get('cl_date') or (archive_by_token.get(source_token,{}) or {}).get('cl_date')
-                    if candidate_cl:
-                        data=fetch_closed_binance_history(call_mcp_resilient,token,candidate_cl)
-                    else:
-                        data=call_mcp_resilient('BINANCE_MCP_URL','get_kairos_ohlcv',
-                            {'symbol':token+'USDT','interval':'1d','limit':365})
-                return token,(resolve_long_term_buy(source_token,pub.get(token,{}),data,archive_by_token.get(source_token,{})) if slug=='compras'
-                    else resolve_weekly_wave_context(source_token,pub.get(token,{}),
-                    archive_by_token.get(source_token,{}),data))
-            except Exception:
-                return token,{'status':'MCP_DATA_ERROR','eligible':False,'levels':None,
-                    'history':{'status':'DATA_ERROR'},'anchors':None, 'reason':'MCP_REQUERIDO_NO_DISPONIBLE'}
-        with ThreadPoolExecutor(max_workers=6) as pool:
-            weekly_context=dict(pool.map(weekly_reference,purchase_tokens))
+        weekly_context=_weekly_context_for_positions(slug, purchase_tokens)
         weekly_levels={token:(ctx.get('levels') or {}) for token,ctx in weekly_context.items()}
         weekly_histories={token:ctx.get('history',{'status':'N/D'}) for token,ctx in weekly_context.items()}
     if slug == 'compras':
@@ -1435,19 +1529,7 @@ def build_mode_payload(slug, d, observed):
         }
 
     if slug == 'forecast':
-        pivot_rows=[]
-        for r in purchase_tokens:
-            ctx=weekly_context[r['token']]
-            anchors=ctx.get('anchors') or {}
-            pair=ctx.get('levels') or {}
-            w=g.kairos_state['wave_pivots'].get(r['token'],{})
-            pivot_rows.append({'token':r['token'],'c1':pair.get('c1'),'c2':pair.get('c2'),
-                'ref382':pair.get('ref382'),'ref786':pair.get('ref786'),
-                'cycle_low':anchors.get('CL'),'o1':anchors.get('O1'),
-                'o1_date':anchors.get('O1_date'),
-                'published_cl':w.get('cycle_low'),'published_cl_date':w.get('cl_date'),
-                'cl_status':w.get('cl_status','PROPUESTO'),'waves':w.get('waves',{}),
-                'anchor_state':ctx.get('status')})
+        pivot_rows=_forecast_pivot_rows(purchase_tokens, weekly_context)
         # Both O3/O5 allocation pairs come from the currently PUBLICADO Sheet.
         # If either is pending, malformed or no longer totals 100%, fail closed.
         split_o3=(approved_numeric('O3_BTC_PROCEEDS_FRACTION'),approved_numeric('O3_USDT_PROCEEDS_FRACTION'))
@@ -1657,7 +1739,8 @@ def balancer_report(d, observed):
 
 @app.context_processor
 def common_nav():
-    return {'spot_source':market_source(), 'nav_modes':[m for m in MODE_DEFS if m['slug'] in ENABLED_MODE_SLUGS], 'portfolio_authenticated':_portfolio_authorized(), 'portfolio_csrf':(session.get('logout_csrf') or session.get('csrf_token','')) if _portfolio_authorized() else ''}
+    return {'spot_source':market_source(), 'nav_modes':[m for m in MODE_DEFS if m['slug'] in ENABLED_MODE_SLUGS], 'portfolio_authenticated':_portfolio_authorized(), 'portfolio_csrf':(session.get('logout_csrf') or session.get('csrf_token','')) if _portfolio_authorized() else '',
+            'passkeys_enabled':passkeys_enabled()}
 
 @app.route('/')
 def home():
@@ -1687,21 +1770,11 @@ def pwa_worker():
 
 @app.get('/pwa/')
 def pwa_home():
-    try:
-        g.kairos_state = get_state(valuation_only=True)
-        observed, dashboard = load_live_dashboard()
-        valuation = _published_valuation(dashboard, observed)
-        rows = _active_rows(dashboard['rows'])
-    except Exception as exc:
-        diagnostic = diagnostic_error(exc, 'pwa:portfolio')
-        return render_template('pwa.html', master=APP_VERSION, valuation=None, rows=[],
-                               issue=diagnostic['code']), 503
-    pnl = summarize_unrealized(rows) if not g.kairos_state['read_only_valuation'] else None
-    return render_template('pwa.html', master=APP_VERSION, valuation=valuation, rows=rows, pnl=pnl, issue=None)
+    return integral_portfolio_page(mobile=True)
 
 
 @app.route('/mode/portafolio')
-def integral_portfolio_page():
+def integral_portfolio_page(mobile=False):
     # Both donuts describe the same current Spot-valued physical patrimony.
     # Historic 08_INTEGRAL/Lost stays archival and is never added to the donut.
     capital_distribution = None
@@ -1735,7 +1808,9 @@ def integral_portfolio_page():
         candidate_allocation = portfolio_allocation(candidate_rows,live['usdt_total'])
         candidate_allocation['items'] = [item for item in candidate_allocation['items']
                                          if item['token'] == 'USDT' or item['token'] in active_tokens]
-        candidate_categories = [tier for tier in category_allocation(candidate_rows) if tier['tokens']]
+        candidate_categories = None
+        if not mobile:
+            candidate_categories = [tier for tier in category_allocation(candidate_rows) if tier['tokens']]
         capital_candidate = current_capital_distribution(
             candidate_rows, live['usdt_total'], live['trading_reserve'],
             portfolio_total=live['total_value'])
@@ -1750,7 +1825,8 @@ def integral_portfolio_page():
         allocation,categories,portfolio_rows=candidate_allocation,candidate_categories,active['rows']
         btc_reference_price,btc_total=live['btc_usdt_spot'],live['total_btc_equivalent']
         bsi_archive=active['bsi_historical']
-        pri=executive_risk_index(candidate_rows,live['usdt_total'])
+        if not mobile:
+            pri=executive_risk_index(candidate_rows,live['usdt_total'])
     except Exception as exc:
         origin='MARKET_SPOT_MCP' if stage=='MARKET_SPOT_MCP' else 'PORTFOLIO_CALCULATION'
         info=diagnostic_error(exc,'portfolio') if stage=='MARKET_SPOT_MCP' else None
@@ -1766,13 +1842,13 @@ def integral_portfolio_page():
                               'retry_at_utc':info.get('retry_at_utc') if info else None,
                               'last_valid_spot_utc':market_cache_status()['last_valid_observed_at'],
                               'message':info['message'] if info and (info.get('http_status') in (418,429) or info.get('code') in ('REFRESH_REQUIRED','BACKUP_UNAVAILABLE')) else 'Valoración actual no disponible. No se muestran cifras Spot parciales ni se reutiliza una cotización anterior.'}
-    return render_template('portfolio_integral.html', master=APP_VERSION,
+    return render_template('portfolio_integral.html', master=APP_VERSION, mobile=mobile,
                            capital_distribution=capital_distribution,
                            spot=spot_breakdown, spot_observed=spot_observed, pnl_report=pnl_report,
                            allocation=allocation, categories=categories, portfolio_rows=portfolio_rows,
                            btc_total=btc_total, btc_reference_price=btc_reference_price,
                            bsi_archive=bsi_archive, pri=pri, market_trend=market_trend, portfolio_diagnostic=portfolio_diagnostic,
-                           homologation=g.kairos_state.get('homologation'))
+                           homologation=g.kairos_state.get('homologation')), 503 if mobile and portfolio_diagnostic else 200
 
 def _cycle_order_allowed(side, stage):
     """Orders UI owns only weekly-cycle O2/O4 buys and O3/O5 sells."""
@@ -1781,6 +1857,25 @@ def _cycle_order_allowed(side, stage):
     stage=str(stage or '').upper().strip()
     return bool(re.fullmatch(r'O(?:2|4)C[1-4]',stage) if side=='BUY' else
                 re.fullmatch(r'O(?:3|5)V[1-4]',stage) if side=='SELL' else False)
+
+
+def _hype_usdc_quote():
+    """Latest native Spot trade. HYPE/USDT is unsuitable for this leg."""
+    coin = '@107'  # Native Hyperliquid Spot HYPE/USDC.
+    response = requests.post('https://api.hyperliquid.xyz/info', json={'type': 'recentTrades', 'coin': coin}, timeout=4.0)
+    response.raise_for_status()
+    trades = response.json()
+    if not isinstance(trades, list) or not trades:
+        raise ValueError('No hay trades recientes para HYPE/USDC')
+    if any(row.get('coin') != coin or type(row.get('time')) is not int for row in trades):
+        raise ValueError('Respuesta Spot HYPE/USDC incompatible')
+    latest = max(trades, key=lambda row: row['time'])
+    timestamp = datetime.fromtimestamp(latest['time'] / 1000, tz=timezone.utc)
+    age = (datetime.now(timezone.utc) - timestamp).total_seconds()
+    price = float(latest['px'])
+    if not -30 <= age <= 180 or not math.isfinite(price) or price <= 0:
+        raise ValueError('Cotización HYPE/USDC inválida o fuera de vigencia')
+    return price, timestamp.isoformat()
 
 
 @app.get('/pwa/ordenes')
@@ -1843,10 +1938,24 @@ def orders_inbox_page():
             selected = request.args.get('token', '').upper()
             if selected not in active_tokens:
                 selected = ''
+            from wave_pivots import weekly_retracement
+            selected_row = next((r for r in d['rows'] if r['token'] == selected), None)
+            leg = None
+            hype_spot = None
+            if selected_row:
+                record = g.kairos_state['wave_pivots'].get(selected)
+                leg = weekly_retracement(record, None if selected == 'HYPE' else selected_row['price'],
+                                         observed, selected)
+                if selected == 'HYPE' and leg['levels']:
+                    try:
+                        hype_spot, time_utc = _hype_usdc_quote()
+                        leg = weekly_retracement(record, hype_spot, time_utc, selected)
+                    except (requests.RequestException, ValueError, TypeError, KeyError, AttributeError, OSError, OverflowError):
+                        pass
             cancelled = [r for r in managed_orders.get('canonical_rows', [])[1:]
                          if len(r) > 11 and str(r[11]).upper() in ('CANCELLED', 'CANCELED')]
             return render_template('pwa/orders.html', master=APP_VERSION, tokens=sorted(active_tokens),
-                                   selected=selected, coverage=inbox['coverage'], levels=wave_levels,
+                                   selected=selected, selected_row=selected_row, leg=leg, hype_spot=hype_spot,
                                    candidates=inbox['candidates'], records=managed_orders.get('records', []),
                                    cancelled=cancelled, issue=managed_orders.get('error') or structural_note)
         from orders_inbox import visible_order_rows
@@ -1933,6 +2042,12 @@ def mode_page(slug):
         diag = diagnostic_error(exc, f'mode:{slug}:market')
         return render_template('mode.html', mode=mode, payload=None, error=diag['message'], diagnostic=diag, master=APP_VERSION), 503
     try:
+        if mobile and slug == 'forecast':
+            rows = _active_rows(dashboard['rows'])
+            references = _weekly_context_for_positions('forecast', rows)
+            positions = [{'token': row['token'], 'units': row['units']} for row in rows]
+            return render_template('pwa/forecast.html', master=APP_VERSION, positions=positions,
+                                   pivot_rows=_forecast_pivot_rows(rows, references))
         payload = build_mode_payload(slug, dashboard, observed)
         if slug == 'ventas':
             override=request.args.get('usdt_pct')

@@ -77,3 +77,45 @@ def fib_from_anchors(low,high):
 
 def locked_values(pivots):
     return {w:details['price'] for w,details in pivots['waves'].items() if details['status']=='CONFIRMADO'}
+
+
+def weekly_retracement(record, spot, observed, token):
+    """Describe the last confirmed leg and a provisional, same-currency breakout."""
+    from datetime import datetime, timezone
+    from wave_structure import BUY_RATIOS
+
+    result = {'pivots': [], 'levels': [], 'spot_endpoint': None,
+              'currency': 'USDC' if token == 'HYPE' else 'USDT'}
+    if not record or not record['timeline_valid']:
+        result['issue'] = ('Cronología semanal inválida en el MASTER.' if record
+                           else 'Sin pivotes semanales publicados.')
+        return result
+    cycle_low = {'price': record['cycle_low'], 'date': record['cl_date'], 'status': record['cl_status']}
+    confirmed = []
+    for name, pivot in (('cl', cycle_low), *record['waves'].items()):
+        price = pivot['price']
+        if (pivot['status'] == 'CONFIRMADO' and pivot['date'] and
+                type(price) in (int, float) and math.isfinite(price) and price > 0):
+            confirmed.append(dict(pivot, name=name.upper()))
+    result['pivots'] = sorted(confirmed, key=lambda pivot: pivot['date'])[-2:]
+    if len(result['pivots']) < 2:
+        result['issue'] = 'Se requieren dos pivotes semanales confirmados para calcular retrocesos.'
+        return result
+
+    start, end = result['pivots']
+    low, high = sorted((start['price'], end['price']))
+    if low == high:
+        result['issue'] = 'Los dos pivotes tienen el mismo precio.'
+        return result
+    if type(spot) in (int, float) and math.isfinite(spot) and spot > 0:
+        instant = datetime.fromisoformat(observed.replace('Z', '+00:00'))
+        if instant.tzinfo and instant.astimezone(timezone.utc).date().isoformat() >= end['date']:
+            if spot > high or spot < low:
+                opposite = low if spot > high else high
+                start = next(pivot for pivot in (start, end) if pivot['price'] == opposite)
+                end = {'name': 'Spot', 'price': spot, 'date': observed}
+                result['spot_endpoint'] = end
+    result['start'], result['end'] = start, end
+    result['levels'] = [{'percent': ratio * 100, 'price': end['price'] + ratio * (start['price'] - end['price'])}
+                        for ratio in BUY_RATIOS]
+    return result

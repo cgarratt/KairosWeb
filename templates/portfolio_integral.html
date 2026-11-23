@@ -151,6 +151,7 @@
  <div class="port-kpi"><small>Resultado no realizado</small><strong data-private="money" class="{{ 'negative' if pnl_report and pnl_report.total_usdt is not none and pnl_report.total_usdt < 0 else 'positive' if pnl_report and pnl_report.total_usdt is not none else '' }}">{{ '{:+,.2f}'.format(pnl_report.total_usdt) if pnl_report and pnl_report.total_usdt is not none else 'N/D' }}</strong><span>{{ ('%.2f%% sobre costo abierto'|format(pnl_report.total_pct)) if pnl_report and pnl_report.total_pct is not none else 'Requiere Spot y costos completos' }}</span></div>
  <div class="port-kpi"><small>Liquidez física</small><strong data-private="money">{{ '${:,.2f}'.format(spot.liquidity+spot.trading) if spot else 'N/D' }}</strong><span>QF incluido una sola vez</span></div>
  <div class="port-kpi"><small>Cripto invertido</small><strong data-private="money">{{ '${:,.2f}'.format(spot.total-spot.liquidity-spot.trading) if spot else 'N/D' }}</strong><span>Manga cripto · {{ '%.2f%%'|format((spot.total-spot.liquidity-spot.trading)/spot.total*100) if spot and spot.total else 'N/D' }} del patrimonio</span></div>
+ {% if not mobile %}
  <article class="port-kpi port-kpi-pri" data-indicator="pri-v1">
   <small>Portfolio Risk Index · PRI</small>
   {% if pri %}
@@ -164,6 +165,7 @@
   </details>
   {% else %}<strong>N/D</strong><span>Se requiere valoración Spot completa</span>{% endif %}
  </article>
+ {% endif %}
 </div>
 <!-- Fila 1: current capital by custody, current allocation 12 tokens + USDT -->
 <div class="port-pair" data-layout-row="1">
@@ -246,6 +248,7 @@
   {% else %}<p class="integral-pnl-info">Datos MCP no disponibles. No se calcula P&L con precios de capturas o archivos históricos.</p>{% endif %}
  </section>
 </div>
+{% if not mobile %}
 <!-- Fila 3: category chart / portfolio weights chart -->
 <div class="port-pair" data-layout-row="3">
  <article class="port-card" data-category-chart="tier"><div class="port-card-head"><div><h3>Distribución por categoría</h3><p class="sub">Peso actual vs. objetivo · manga cripto (sin USDT)</p></div><div class="port-chart-key"><span><i style="background:#267ce5"></i>Actual</span><span><i style="background:#cad6e6"></i>Objetivo</span></div></div>
@@ -255,6 +258,7 @@
  {% if portfolio_rows %}<div class="port-token-scroller"><div class="port-token-chart">{% for r in portfolio_rows %}<div class="port-token-col" title="{{ r.token }}: {{ r.status }} · {{ '%+.2f'|format(r.drift_pp) }} pp"><strong>{{ '%.1f'|format(r.weight*100) }}%</strong><div class="port-token-bars"><div class="port-token-bar" style="height:{{ r.weight*100/30*100 }}%" title="{{ r.token }} actual {{ '%.2f'|format(r.weight*100) }}%"></div><div class="port-token-bar target" style="height:{{ r.target*100/30*100 }}%" title="{{ r.token }} objetivo {{ '%.2f'|format(r.target*100) }}%"></div></div><small>{{ coin_tag(r.token) }}</small></div>{% endfor %}</div></div><p class="port-foot">Objetivos de 02_POSICIONES; desviaciones comparadas contra la manga cripto.</p>
  {% else %}<div class="port-empty">Sin cotizaciones completas para comparar los 12 tokens.</div>{% endif %}</article>
 </div>
+{% endif %}
 <!-- Fila 4: one executive token table; no duplicate history/BSI collapsible sections -->
 <div class="port-pair" data-layout-row="4" style="grid-template-columns:minmax(0,1fr)">
  <article class="port-card" data-portfolio-executive="12">

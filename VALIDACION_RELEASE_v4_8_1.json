@@ -1,0 +1,16 @@
+{
+  "status": "PASS_LOCAL",
+  "data": "fixtures",
+  "health_http": 200,
+  "checks": [
+    "manifest_identity_and_start_url",
+    "service_worker_and_authentication_routes",
+    "pwa_opens_full_portfolio",
+    "pwa_four_tab_navigation",
+    "pwa_excludes_pri_and_two_allocation_charts",
+    "web_retains_pri_and_charts",
+    "read_only_and_source_error_responses"
+  ],
+  "deployed": false,
+  "ios_verified": false
+}

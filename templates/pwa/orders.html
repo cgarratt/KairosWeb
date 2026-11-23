@@ -11,42 +11,48 @@
  <select id="ord-token" name="token"><option value="">Todos</option>{% for token in tokens %}<option value="{{ token }}" {% if selected==token %}selected{% endif %}>{{ token }}</option>{% endfor %}</select>
  <button type="submit" class="btn">Ver</button>
 </form>
+{% if selected_row %}
 <section class="panel">
-<h3>Spot y niveles Fibonacci</h3>
-{% for quote in coverage if not selected or quote.token == selected %}
-{% set ref = levels.get(quote.token, {}) %}
-<details {% if selected %}open{% endif %}><summary>{{ quote.token }} · Spot {{ number(quote.spot) }} USDT</summary>
-<div class="pwa-scroll"><table><thead><tr><th scope="row">Pivote</th>{% for name in ['CL','O1','O2','O3','O4','O5'] %}<th scope="col">{{ name }}</th>{% endfor %}</tr></thead><tbody><tr><th scope="row">Fecha UTC</th>{% for name in ['CL','O1','O2','O3','O4','O5'] %}<td>{{ ref.get('dates',{}).get(name) or 'N/D' }}</td>{% endfor %}</tr></tbody></table></div>
-<div class="pwa-scroll"><table><thead><tr><th>Onda</th><th>Nivel 1</th><th>Nivel 2</th><th>Nivel 3</th><th>Nivel 4</th></tr></thead><tbody>
-{% for wave in ['O2','O3','O4','O5'] %}
-{% set grid=ref.get('levels',{}).get(wave,{}) %}
-<tr><th scope="row">{{ wave }} {{ 'Retroceso' if wave in ('O2','O4') else 'Extensión' }}</th>
-{% for idx in range(1,5) %}<td>{{ number(grid.get(wave ~ ('C' if wave in ('O2','O4') else 'V') ~ idx)) }}</td>{% endfor %}</tr>
-{% endfor %}
-</tbody></table></div>
-</details>
-{% endfor %}
+<h3>Tramo semanal · {{ selected }}</h3>
+<p>Spot {{ number(selected_row.price) }} USDT · {{ spot_source }}</p>
+{% if leg.pivots %}
+<table><thead><tr><th>Pivote confirmado</th><th>Fecha UTC</th><th>Precio ({{ leg.currency }})</th></tr></thead><tbody>
+{% for pivot in leg.pivots %}<tr><td>{{ pivot.name }}</td><td>{{ pivot.date }}</td><td>{{ number(pivot.price) }}</td></tr>{% endfor %}
+</tbody></table>
+{% endif %}
+{% if leg.levels %}
+{% if leg.spot_endpoint %}
+<p>Ruptura de rango · {{ leg.start.name }} → Spot {{ number(leg.end.price) }} {{ leg.currency }} (extremo provisional).</p>
+{% endif %}
+<table><thead><tr><th>Retroceso Fibo</th><th>Precio ({{ leg.currency }})</th></tr></thead><tbody>
+{% for level in leg.levels %}<tr><td>{{ number(level.percent,1) }}%</td><td>{{ number(level.price) }}</td></tr>{% endfor %}
+</tbody></table>
+{% elif leg.issue %}<p>{{ leg.issue }}</p>{% endif %}
+{% if selected == 'HYPE' and leg.levels %}
+<p>Spot del tramo · {% if hype_spot is not none %}{{ number(hype_spot) }} USDC · Hyperliquid{% else %}N/D · Sin cotización HYPE/USDC vigente para evaluar ruptura.{% endif %}</p>
+{% endif %}
 </section>
+{% endif %}
 <section class="panel"><h3>Seguimiento</h3><p>Los importes de ventas propuestas son condicionales.</p>
-<div class="pwa-scroll"><table><thead><tr><th>Token</th><th>Lado</th><th>Tramo</th><th>Precio</th><th>Unidades</th><th>Importe</th><th>Estado</th></tr></thead><tbody>
+<div class="pwa-scroll"><table><thead><tr><th>Token</th><th>Lado</th><th>Precio</th><th>Unidades</th><th>Importe</th><th>Estado</th></tr></thead><tbody>
 {% set count = namespace(n=0) %}
 {% for r in records if not selected or r.token==selected %}
 {% set count.n = count.n + 1 %}
 {% set done = r.estado in ('EJECUTADA','PARCIAL') %}
-<tr><td>{{ r.token }}</td><td>{{ side(r.lado) }}</td><td>{{ r.tramo }}</td><td>N/D</td><td data-private="units">{{ number(r.unidades_ejecutadas if done else r.unidades_previstas) }}</td><td data-private="money">{{ number(r.importe_ejecutado if done else r.importe_previsto,2) }} {{ r.moneda_cotizada }}</td><td>{{ r.estado }}</td></tr>
+<tr><td>{{ r.token }}</td><td>{{ side(r.lado) }}</td><td>N/D</td><td data-private="units">{{ number(r.unidades_ejecutadas if done else r.unidades_previstas) }}</td><td data-private="money">{{ number(r.importe_ejecutado if done else r.importe_previsto,2) }} {{ r.moneda_cotizada }}</td><td>{{ r.estado }}</td></tr>
 {% endfor %}
 {% for r in candidates if (not selected or r.token==selected) and r.display_status=='PROPUESTA' %}
 {% set same = namespace(found=false) %}{% for item in records if item.token==r.token and item.lado==r.side and item.tramo==r.stage and item.venue==r.venue %}{% set same.found=true %}{% endfor %}
 {% if not same.found %}
 {% set count.n = count.n + 1 %}
-<tr><td>{{ r.token }}</td><td>{{ side(r.side) }}</td><td>{{ r.stage }}</td><td>{{ number(r.limit) }}</td><td data-private="units">{{ number(r.quantity) }}</td><td data-private="money">{{ number(r.usdt,2) }} {{ r.quote_currency }}</td><td>PROPUESTA</td></tr>
+<tr><td>{{ r.token }}</td><td>{{ side(r.side) }}</td><td>{{ number(r.limit) }}</td><td data-private="units">{{ number(r.quantity) }}</td><td data-private="money">{{ number(r.usdt,2) }} {{ r.quote_currency }}</td><td>PROPUESTA</td></tr>
 {% endif %}
 {% endfor %}
 {% for r in cancelled if not selected or r[2]==selected or (r[2]=='PUMPFUN' and selected=='PUMP') %}
 {% set count.n = count.n + 1 %}
-<tr><td>{{ 'PUMP' if r[2]=='PUMPFUN' else r[2] }}</td><td>{{ side(r[3]) }}</td><td>{{ r[5] or '—' }}</td><td>{{ number(r[6]) }}</td><td>—</td><td>—</td><td>CANCELADA</td></tr>
+<tr><td>{{ 'PUMP' if r[2]=='PUMPFUN' else r[2] }}</td><td>{{ side(r[3]) }}</td><td>{{ number(r[6]) }}</td><td>—</td><td>—</td><td>CANCELADA</td></tr>
 {% endfor %}
-{% if not count.n %}<tr><td colspan="7">Sin propuestas ni órdenes registradas para esta selección.</td></tr>{% endif %}
+{% if not count.n %}<tr><td colspan="6">Sin propuestas ni órdenes registradas para esta selección.</td></tr>{% endif %}
 </tbody></table></div></section>
 </main>
 {% endblock %}

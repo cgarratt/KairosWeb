@@ -12,6 +12,13 @@
     <label class="remember-choice" style="display:flex;align-items:center;gap:8px;margin:10px 0 16px"><input type="checkbox" name="remember_me" value="on" checked> Mantener sesión iniciada en este dispositivo (30 días de inactividad)</label>
     <button class="btn primary" type="submit">Iniciar sesión</button>
   </form>{% endif %}
+  {% if destination == 'pwa' and passkeys_enabled and not not_configured %}
+  <div data-passkeys data-endpoint="{{ url_for('pwa_passkey_exchange') }}" data-csrf="{{ login_csrf }}">
+    <button type="button" class="btn" data-passkey-action="authenticate">Entrar con llave de acceso</button>
+    <p data-passkey-status role="status"></p>
+  </div>
+  <script defer src="{{ url_for('static', filename='pwa/passkeys.js', v=master) }}"></script>
+  {% endif %}
   <p style="margin-top:18px"><a class="btn" href="{{ url_for('integral_portfolio_page') }}">Continuar como invitado · Saldos ocultos</a></p>
 </section>
 {% endblock %}

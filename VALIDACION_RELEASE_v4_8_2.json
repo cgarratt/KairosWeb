@@ -1,0 +1,15 @@
+{
+  "status": "PASS_LOCAL",
+  "health_http": 200,
+  "checks": [
+    "balancer_sell_quantity_route",
+    "orders_single_token_route_two_confirmed_pivots_above_below_and_no_breakout",
+    "hype_usdc_native_trade_schema_and_quote_age",
+    "forecast_active_token_route_and_hold_projections",
+    "forecast_javascript_token_selection_and_missing_pivots",
+    "postgresql_virtual_passkey_registration_authentication_revocation",
+    "passkey_rejects_invalid_origin_missing_user_verification_and_replay"
+  ],
+  "deployed": false,
+  "ios_verified": false
+}

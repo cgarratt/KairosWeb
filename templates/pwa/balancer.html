@@ -4,10 +4,10 @@
 <main class="pwa-content">
 <h2>Balancer</h2>
 <section class="panel"><h3>Ventas sugeridas</h3>
-<table><thead><tr><th>Token</th><th>Ingreso condicional (USDT)</th></tr></thead><tbody>
-{% for r in payload.sells %}<tr><td>{{ r.token }}</td><td data-private="money">{{ '%.2f'|format(r.value) }}</td></tr>
-{% else %}<tr><td colspan="2">Sin ventas sugeridas</td></tr>{% endfor %}
-</tbody></table></section>
+<div class="pwa-scroll"><table><thead><tr><th>Token</th><th>Unidades a vender</th><th>Ingreso condicional (USDT)</th></tr></thead><tbody>
+{% for r in payload.sells %}<tr><td>{{ r.token }}</td><td data-private="units">{{ ('%.8f'|format(r.units)).rstrip('0').rstrip('.') }}</td><td data-private="money">{{ '%.2f'|format(r.value) }}</td></tr>
+{% else %}<tr><td colspan="3">Sin ventas sugeridas</td></tr>{% endfor %}
+</tbody></table></div></section>
 <section class="panel"><h3>Compras sugeridas</h3>
 <div class="pwa-scroll"><table><thead><tr><th>Token</th><th>USDT disponibles</th><th>USDT con ventas</th></tr></thead><tbody>
 {% for r in payload.buys %}<tr><td>{{ r.token }}</td><td data-private="money">{{ '%.2f'|format(r.value) }}</td><td data-private="money">{{ '%.2f'|format(payload.buy_with_sales[loop.index0].value) }}</td></tr>
