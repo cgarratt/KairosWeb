@@ -4,6 +4,6 @@
 .pwa-home dl,.pwa-home ul{margin:0;padding:0}
 .pwa-home dt{margin-top:12px}
 .pwa-home dd{margin:3px 0 12px;font-weight:650;font-variant-numeric:tabular-nums}
-.pwa-home dd.primary{font-size:clamp(1.5rem,8vw,2.3rem);overflow-wrap:anywhere}
+.pwa-home dd.primary{font-size:clamp(1.5rem,calc(8vw * var(--kairos-text-scale, 1)),2.3rem);overflow-wrap:anywhere}
 .pwa-home li{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);padding:10px 0;font-variant-numeric:tabular-nums}
 .pwa-home li:last-child{border:0}

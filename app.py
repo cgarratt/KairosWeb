@@ -18,9 +18,6 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
 from admin_origin import same_origin_allowed, valid_logout_csrf
-from pwa_passkeys import Passkeys, PasskeyUnavailable, enabled as passkeys_enabled, public_origin as passkey_origin
-from psycopg import Error as PasskeyStorageError
-from webauthn.helpers.exceptions import WebAuthnException
 
 from flask import Flask, Response, jsonify, render_template, request, abort, redirect, g, session, url_for
 from fastmcp import Client
@@ -42,7 +39,7 @@ from kairos_sheets_features import (
 )
 
 BASE = Path(__file__).parent
-APP_VERSION = '4.8.2'  # product release; distinct from Sheets schema_version=5.0.0
+APP_VERSION = '4.8.4'  # product release; distinct from Sheets schema_version=5.0.0
 app = Flask(__name__)
 # A dedicated administrator login is required; NEVER fall back to the Basic web password.
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Strict',
@@ -189,7 +186,7 @@ def _portfolio_authorized():
 def authenticate():
     path = request.path
     # Static assets and Render liveness are public. API values remain private.
-    if path == '/health' or path.startswith('/static/') or path in ('/login', '/logout', '/api/modes', '/pwa/sw.js', '/pwa/passkey/exchange'):
+    if path == '/health' or path.startswith('/static/') or path in ('/login', '/logout', '/api/modes', '/pwa/sw.js'):
         return None
     if not _portfolio_authorized():
         if path == '/pwa' or path.startswith('/pwa/'):
@@ -265,74 +262,6 @@ def _start_portfolio_session(remember):
     session['logout_csrf'] = secrets.token_urlsafe(32)
 
 
-@app.get('/pwa/passkey')
-def pwa_passkey_settings():
-    return render_template('pwa/passkey.html', master=APP_VERSION,
-                           passkey_csrf=session.get('csrf_token', ''))
-
-
-@app.post('/pwa/passkey/exchange')
-def pwa_passkey_exchange():
-    origin = passkey_origin()
-    if not (passkeys_enabled() and app.secret_key and os.getenv('KAIROS_WEB_USER') and os.getenv('KAIROS_WEB_PASSWORD')):
-        return jsonify(message='El acceso con llave todavía no está habilitado.'), 503
-    if request.headers.get('Origin') != origin or request.host.lower() != urlsplit(origin).netloc:
-        return jsonify(message='Origen de acceso inválido.'), 403
-    request.max_content_length = 32768
-    body = request.get_json(silent=True)
-    if not isinstance(body, dict):
-        return jsonify(message='Solicitud inválida.'), 400
-    action, step = body.get('action'), body.get('step')
-    if action not in ('register', 'authenticate', 'revoke') or step not in ('options', 'verify'):
-        return jsonify(message='Solicitud inválida.'), 400
-    managing = action in ('register', 'revoke')
-    if managing and not _portfolio_authorized():
-        return jsonify(message='Inicia sesión para administrar tu llave.'), 401
-    csrf = session.get('csrf_token' if managing else 'portfolio_login_csrf')
-    supplied = request.headers.get('X-Kairos-Csrf', '')
-    if not csrf or not secrets.compare_digest(csrf.encode(), supplied.encode()):
-        return jsonify(message='Recarga la pantalla e inténtalo de nuevo.'), 403
-
-    rate_key = 'pwa-passkey:' + (request.remote_addr or 'unknown')
-    if step == 'options':
-        if not _login_rate_check(rate_key):
-            return jsonify(message='Demasiados intentos. Intenta más tarde.'), 429
-        _login_rate_fail(rate_key)
-    if managing and step == 'options':
-        password = body.get('password')
-        if not isinstance(password, str) or not secrets.compare_digest(
-                password.encode('utf-8'), os.environ['KAIROS_WEB_PASSWORD'].encode('utf-8')):
-            return jsonify(message='Contraseña incorrecta.'), 403
-
-    if action == 'revoke' and step != 'options':
-        return jsonify(message='Solicitud inválida.'), 400
-    binding = session.get('passkey_binding')
-    if step == 'options' and not binding:
-        binding = session['passkey_binding'] = secrets.token_urlsafe(32)
-    if not binding:
-        return jsonify(message='La solicitud caducó. Vuelve a intentarlo.'), 400
-    access = Passkeys(origin, _credential_tag('portfolio'), binding)
-    try:
-        if action == 'revoke':
-            access.revoke()
-        elif step == 'options':
-            return jsonify(access.options(action, os.environ['KAIROS_WEB_USER']))
-        else:
-            access.verify(action, body.get('credential'))
-    except PasskeyUnavailable as exc:
-        return jsonify(message=str(exc)), 400
-    except (WebAuthnException, ValueError, KeyError, TypeError):
-        return jsonify(message='La verificación de la llave de acceso falló.'), 403
-    except PasskeyStorageError as exc:
-        app.logger.error('Passkey storage unavailable class=%s', type(exc).__name__)
-        return jsonify(message='Almacenamiento de llaves temporalmente no disponible.'), 503
-    _login_rate_reset(rate_key)
-    if action == 'authenticate':
-        _start_portfolio_session(body.get('remember') is True)
-        return jsonify(redirect=url_for('pwa_home'))
-    return jsonify(status='OK')
-
-
 @app.route('/logout', methods=['GET', 'POST'])
 def portfolio_logout():
     target = url_for('pwa_home' if request.args.get('next') == 'pwa' else 'integral_portfolio_page')
@@ -358,7 +287,7 @@ def bind_published_sheet():
     independent={'/health','/api/mcp-status','/api/mcp-config-check','/api/mcp-diagnostics',
                  '/api/alerts/unread','/api/alerts/read','/api/alerts/read-all',
                  '/api/history/refresh','/api/market-status','/api/modes','/api/hype-macro','/api/sheets-status', '/api/mcp-refresh', '/api/health/diagnostics'}
-    if request.path in independent or request.path in ('/','/login','/logout','/admin/login','/api/admin/session','/pwa','/pwa/sw.js','/pwa/passkey','/pwa/passkey/exchange') or request.path=='/settings' or request.path.startswith('/static/'):
+    if request.path in independent or request.path in ('/','/login','/logout','/admin/login','/api/admin/session','/pwa','/pwa/sw.js') or request.path=='/settings' or request.path.startswith('/static/'):
         return None
     try:
         valuation_only = request.endpoint in ('pwa_home', 'integral_portfolio_page', 'portfolio', 'spot_refresh')
@@ -1739,8 +1668,7 @@ def balancer_report(d, observed):
 
 @app.context_processor
 def common_nav():
-    return {'spot_source':market_source(), 'nav_modes':[m for m in MODE_DEFS if m['slug'] in ENABLED_MODE_SLUGS], 'portfolio_authenticated':_portfolio_authorized(), 'portfolio_csrf':(session.get('logout_csrf') or session.get('csrf_token','')) if _portfolio_authorized() else '',
-            'passkeys_enabled':passkeys_enabled()}
+    return {'spot_source':market_source(), 'nav_modes':[m for m in MODE_DEFS if m['slug'] in ENABLED_MODE_SLUGS], 'portfolio_authenticated':_portfolio_authorized(), 'portfolio_csrf':(session.get('logout_csrf') or session.get('csrf_token','')) if _portfolio_authorized() else ''}
 
 @app.route('/')
 def home():

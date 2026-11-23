@@ -1,0 +1,38 @@
+:root {
+  font-size: calc(100% * var(--kairos-text-scale, 1));
+}
+:where(button, input, select, textarea) {
+  font-size: 0.833333rem;
+}
+.text-size-controls:not([hidden]) {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+.text-size-controls .tool-icon {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.text-size-controls .tool-icon:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.text-size-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (max-width: 820px) {
+  .navigation-row .global-nav-link span {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: center;
+  }
+}

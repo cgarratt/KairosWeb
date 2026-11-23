@@ -1,0 +1,12 @@
+{
+  "status": "PASS_LOCAL",
+  "health_http": 200,
+  "checks": [
+    "python_and_jinja_compile",
+    "health_version_4_8_3",
+    "pwa_password_login_and_session",
+    "removed_authentication_routes_and_asset"
+  ],
+  "deployed": false,
+  "ios_verified": false
+}

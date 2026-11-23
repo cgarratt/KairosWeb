@@ -7,21 +7,21 @@
 .orders-tools button.active{background:#204f95;color:white;border-color:#204f95}
 .orders-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
 .orders-kpi>div{padding:14px;border-radius:12px;background:var(--soft,#f1f5fb);border:1px solid var(--line,#dbe5f1)}
-.orders-kpi strong{display:block;font-size:20px;margin-top:5px;font-variant-numeric:tabular-nums}
+.orders-kpi strong{display:block;font-size:1.25rem;margin-top:5px;font-variant-numeric:tabular-nums}
 .orders-kpi small{color:var(--muted,#67758d)}
 .orders-table-wrap{overflow-x:auto}.orders-table{min-width:1080px;width:100%;font-variant-numeric:tabular-nums}
 .orders-table td,.orders-table th{padding:10px 9px;text-align:right;white-space:nowrap}
 .orders-table td:first-child,.orders-table th:first-child{text-align:left}
-.order-side{display:inline-block;border-radius:7px;padding:3px 7px;font-weight:800;font-size:11px}
+.order-side{display:inline-block;border-radius:7px;padding:3px 7px;font-weight:800;font-size:0.6875rem}
 .order-side.buy{background:#d8f5e6;color:#0c7653}.order-side.sell{background:#ffe0e7;color:#ac2648}
-.order-state{font-size:11px;font-weight:750}
+.order-state{font-size:0.6875rem;font-weight:750}
 .order-state.near{color:#a7740e}.order-state.hit{color:#128764}
 .order-state.wait{color:var(--muted,#64748b)}
-.orders-origin{font-size:11px;color:var(--muted,#66778c)}
+.orders-origin{font-size:0.6875rem;color:var(--muted,#66778c)}
 .orders-exchange{padding:10px 12px;border:1px solid var(--line,#cddbef);border-radius:12px;margin:12px 0}
 .orders-exchange strong{margin-right:12px}
 .orders-exchange small{color:var(--muted,#64748b)}
-.orders-readonly{font-size:13px;margin-top:10px;line-height:1.6}
+.orders-readonly{font-size:0.8125rem;margin-top:10px;line-height:1.6}
 .orders-table tr[hidden]{display:none}
 .orders-section{padding:12px 0 17px;border-bottom:1px solid var(--line,#d6dfe8)}
 .orders-section h3{margin-bottom:6px}
@@ -32,27 +32,27 @@
 .light-green{background:#1eb77b}.light-amber{background:#eeab36}.light-red{background:#e34a64}.light-muted{background:#8594aa}
 .orders-distance,.order-state{display:inline-flex;align-items:center;font-weight:750;white-space:nowrap}
 .order-state-green{color:#168c63}.order-state-amber{color:#b68529}.order-state-red{color:#dc526a}.order-state-muted{color:var(--muted,#94a3b8)}
-.orders-source{display:inline-flex;border-radius:7px;padding:3px 7px;font-size:11px;font-weight:750;background:rgba(37,108,202,.12);color:#3577ba}
+.orders-source{display:inline-flex;border-radius:7px;padding:3px 7px;font-size:0.6875rem;font-weight:750;background:rgba(37,108,202,.12);color:#3577ba}
 .orders-source.source-balance{background:rgba(153,118,207,.16);color:#9b74c2}
 .orders-table td small.orders-origin{display:block;line-height:1.5}
-.orders-tools label{font-weight:650;font-size:12px}
+.orders-tools label{font-weight:650;font-size:0.75rem}
 .orders-tools select{max-width:180px;min-width:100px}
 #orders-list{min-width:850px}
 :is([data-theme="dark"],[data-theme="black"]) .order-state-green{color:#7ee7bc}:is([data-theme="dark"],[data-theme="black"]) .order-state-amber{color:#ffcf7b}:is([data-theme="dark"],[data-theme="black"]) .orders-source{color:#a2c9fb}:is([data-theme="dark"],[data-theme="black"]) .orders-source.source-balance{color:#dabaff}
 
 .orders-state-panel{border:1px solid var(--line,#cbd8e8);border-radius:14px;padding:16px;margin-top:12px}
-.order-management-help{font-size:13px;line-height:1.6;color:var(--muted,#7991b2)}
+.order-management-help{font-size:0.8125rem;line-height:1.6;color:var(--muted,#7991b2)}
 .orders-manager-dialog [hidden]{display:none!important}
 .orders-save-bar{display:flex;align-items:center;justify-content:flex-end;gap:18px;margin-top:18px}.orders-next-state{min-width:135px}.orders-save-bar button:disabled{opacity:.5;cursor:default}
-.orders-manage{font-size:12px;padding:8px 10px;border-radius:10px;background:var(--soft,#eaf2ff);border:1px solid var(--line,#cbd8e8);color:inherit;cursor:pointer}
+.orders-manage{font-size:0.75rem;padding:8px 10px;border-radius:10px;background:var(--soft,#eaf2ff);border:1px solid var(--line,#cbd8e8);color:inherit;cursor:pointer}
 .orders-manage:hover{border-color:#56a1ed}
 .orders-manager-dialog{max-width:min(560px,92vw);width:90%;max-height:85vh;overflow:auto;padding:22px;border:1px solid var(--line,#3d5874);border-radius:18px;background:var(--panel,#fff);color:inherit;box-shadow:0 20px 80px #0007}
 .orders-manager-dialog::backdrop{background:#0009}
 .orders-manager-dialog form{display:grid;gap:12px}
-.orders-manager-dialog label{display:grid;gap:4px;font-size:13px;font-weight:650}
+.orders-manager-dialog label{display:grid;gap:4px;font-size:0.8125rem;font-weight:650}
 .orders-manager-dialog input{border:1px solid var(--line,#cbd8e8);border-radius:8px;padding:10px;background:var(--soft,#edf3fa);color:inherit;font:inherit}
 .orders-manager-dialog menu{display:flex;justify-content:flex-end;gap:12px;padding:0}
-.order-manager-summary{font-size:13px;color:var(--muted,#7991b2)}
+.order-manager-summary{font-size:0.8125rem;color:var(--muted,#7991b2)}
 .order-workflow-warning{border:1px solid #b98835;border-radius:10px;padding:11px 14px;background:rgba(221,153,45,.08);margin:12px 0}
 @media(max-width:680px){.orders-manager-dialog{width:95%;padding:14px}}
 .order-traffic{display:inline-block;width:16px;height:16px;border-radius:50%;vertical-align:middle;border:1px solid rgba(255,255,255,.3)}.order-traffic.amber{background:#efa93a}.order-traffic.green{background:#1bb874}.order-traffic.blue{background:#3b82f6}.order-traffic.red{background:#e34b57}

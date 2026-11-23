@@ -64,7 +64,8 @@
     ctx.beginPath();
     prices.forEach((price, i) => i ? ctx.lineTo(x(i), y(price)) : ctx.moveTo(x(i), y(price)));
     ctx.stroke();
-    ctx.font = '23px system-ui';
+    const textScale = parseFloat(getComputedStyle(chart).getPropertyValue('--kairos-text-scale')) || 1;
+    ctx.font = (23 * textScale) + "px system-ui";
     ctx.textAlign = 'center';
     ctx.fillStyle = getComputedStyle(chart).color;
     prices.forEach((price, i) => {
@@ -73,5 +74,6 @@
     });
   }
   select.addEventListener('change', draw);
+  window.addEventListener('kairos:text-size', draw);
   draw();
 })();

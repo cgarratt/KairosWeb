@@ -3,34 +3,34 @@
 {% block head %}<style>
 #liquidity-management .liquidity-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:30px;margin-top:24px}
 #liquidity-management .liquidity-panel{min-width:0}
-#liquidity-management .liquidity-panel h3{font-size:17px;margin:0;color:var(--text)}
+#liquidity-management .liquidity-panel h3{font-size:1.0625rem;margin:0;color:var(--text)}
 #liquidity-management .cash-layout{grid-template-columns:210px minmax(0,1fr);align-items:start;gap:22px}
 #liquidity-management .cash-donut{width:200px;height:200px}
 #liquidity-management .cash-center{width:150px;height:150px}
-#liquidity-management .cash-center strong{font-size:25px}
-#liquidity-management .cash-category strong{font-size:20px}
+#liquidity-management .cash-center strong{font-size:1.5625rem}
+#liquidity-management .cash-category strong{font-size:1.25rem}
 @media(max-width:1250px){ #liquidity-management .liquidity-pair{grid-template-columns:1fr}#liquidity-management .cash-layout{grid-template-columns:244px minmax(0,1fr)} }
 @media(max-width:650px){ #liquidity-management .cash-layout{grid-template-columns:1fr}#liquidity-management .cash-donut{justify-self:center} }
 
 .liquidity-panel .cash-layout{display:grid;grid-template-columns:260px minmax(0,1fr);align-items:center;gap:36px;margin-top:22px}
 .liquidity-panel .cash-donut{width:244px;height:244px;border-radius:50%;display:grid;place-items:center}
 .liquidity-panel .cash-center{width:182px;height:182px;border-radius:50%;background:var(--panel);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center}
-.liquidity-panel .cash-center span{color:var(--muted);font-size:12px}
-.liquidity-panel .cash-center strong{font-size:28px;color:var(--text);font-variant-numeric:tabular-nums}
-.liquidity-panel small{font-size:12px;font-weight:400;color:var(--muted)}
+.liquidity-panel .cash-center span{color:var(--muted);font-size:0.75rem}
+.liquidity-panel .cash-center strong{font-size:1.75rem;color:var(--text);font-variant-numeric:tabular-nums}
+.liquidity-panel small{font-size:0.75rem;font-weight:400;color:var(--muted)}
 .liquidity-panel .cash-categories{display:flex;flex-direction:column;gap:0}
 .liquidity-panel .cash-category{display:flex;flex-direction:column;gap:10px;padding:17px 0;border-bottom:1px solid var(--line)}
 .liquidity-panel .cash-category:last-child{border-bottom:0}
-.liquidity-panel .cash-category strong{font-size:23px;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.liquidity-panel .cash-category strong{font-size:1.4375rem;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
 .liquidity-panel .cash-value-row{display:flex;align-items:baseline;justify-content:space-between;gap:14px}
-.liquidity-panel .cash-value-row>span{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.liquidity-panel .cash-value-row>span{font-size:0.8125rem;color:var(--muted);font-variant-numeric:tabular-nums}
 .liquidity-panel .cash-label{display:flex;align-items:center;gap:8px;color:var(--text)}
 .liquidity-panel .cash-label i{width:10px;height:10px;border-radius:3px;flex-shrink:0}
 .liquidity-panel .cash-weekly{background:#7bbce8}.liquidity-panel .cash-balancer{background:#16ab89}.liquidity-panel .cash-trading{background:#efa53f}
-@media(max-width:650px){ .liquidity-panel .cash-layout{grid-template-columns:1fr;gap:12px}.liquidity-panel .cash-donut{justify-self:center;width:222px;height:222px}.liquidity-panel .cash-center{width:164px;height:164px}.liquidity-panel .cash-center strong{font-size:26px}}
+@media(max-width:650px){ .liquidity-panel .cash-layout{grid-template-columns:1fr;gap:12px}.liquidity-panel .cash-donut{justify-self:center;width:222px;height:222px}.liquidity-panel .cash-center{width:164px;height:164px}.liquidity-panel .cash-center strong{font-size:1.625rem}}
 
-.liq-flow{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.liq-step{background:#f5f9ff;border:1px solid #dce7f6;border-radius:15px;padding:15px}.liq-step strong{display:block;font-size:22px;color:#174b9a;margin:7px 0}.liq-step small{color:#586982}.liq-step.red strong{color:#c4465a}.liq-step.green strong{color:#13996c}.mix{display:flex;height:25px;overflow:hidden;border-radius:100px;background:#eef2f7}.mix>div{height:100%}.chart-pair{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}.comparison{display:grid;grid-template-columns:75px 1fr 65px;align-items:center;gap:8px;margin:13px 0}.mini-track{position:relative;height:26px;border-radius:7px;background:#f1f5fa;overflow:hidden}.mini-track .before{position:absolute;top:2px;height:9px;background:#b1c4de;border-radius:6px}.mini-track .after{position:absolute;bottom:2px;height:9px;background:#2778cf;border-radius:6px}.mini-track .target{position:absolute;top:0;bottom:0;border-left:2px dashed #d18a13}.action-pill{font-size:12px;font-weight:800;padding:6px 11px;border-radius:16px;display:inline-block}.action-pill.buy{color:#13805c;background:#e3f7ee}.action-pill.sell{color:#b62d49;background:#ffecf1}.action-pill.watch{color:#835600;background:#fff4da}.liquidity-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}@media(max-width:800px){.liq-flow,.chart-pair{grid-template-columns:1fr 1fr}}@media(max-width:540px){.liq-flow,.chart-pair{grid-template-columns:1fr}}
-@media(max-width:750px){ #custody-balancer .liq-flow{grid-template-columns:1fr!important}}.liq-labels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}.liq-labels>div{display:flex;flex-direction:column;gap:6px;background:#f6f9fe;border:1px solid #dce7f6;border-radius:13px;padding:12px}.liq-labels i{width:13px;height:13px;border-radius:3px}.liq-labels strong{font-size:20px;color:#154a94}.liq-labels small{color:#60758a}.allocation-track{height:26px}@media(max-width:750px){.liq-labels{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:450px){.liq-labels{grid-template-columns:1fr}}
+.liq-flow{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.liq-step{background:#f5f9ff;border:1px solid #dce7f6;border-radius:15px;padding:15px}.liq-step strong{display:block;font-size:1.375rem;color:#174b9a;margin:7px 0}.liq-step small{color:#586982}.liq-step.red strong{color:#c4465a}.liq-step.green strong{color:#13996c}.mix{display:flex;height:25px;overflow:hidden;border-radius:100px;background:#eef2f7}.mix>div{height:100%}.chart-pair{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}.comparison{display:grid;grid-template-columns:75px 1fr 65px;align-items:center;gap:8px;margin:13px 0}.mini-track{position:relative;height:26px;border-radius:7px;background:#f1f5fa;overflow:hidden}.mini-track .before{position:absolute;top:2px;height:9px;background:#b1c4de;border-radius:6px}.mini-track .after{position:absolute;bottom:2px;height:9px;background:#2778cf;border-radius:6px}.mini-track .target{position:absolute;top:0;bottom:0;border-left:2px dashed #d18a13}.action-pill{font-size:0.75rem;font-weight:800;padding:6px 11px;border-radius:16px;display:inline-block}.action-pill.buy{color:#13805c;background:#e3f7ee}.action-pill.sell{color:#b62d49;background:#ffecf1}.action-pill.watch{color:#835600;background:#fff4da}.liquidity-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}@media(max-width:800px){.liq-flow,.chart-pair{grid-template-columns:1fr 1fr}}@media(max-width:540px){.liq-flow,.chart-pair{grid-template-columns:1fr}}
+@media(max-width:750px){ #custody-balancer .liq-flow{grid-template-columns:1fr!important}}.liq-labels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}.liq-labels>div{display:flex;flex-direction:column;gap:6px;background:#f6f9fe;border:1px solid #dce7f6;border-radius:13px;padding:12px}.liq-labels i{width:13px;height:13px;border-radius:3px}.liq-labels strong{font-size:1.25rem;color:#154a94}.liq-labels small{color:#60758a}.allocation-track{height:26px}@media(max-width:750px){.liq-labels{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:450px){.liq-labels{grid-template-columns:1fr}}
 
 /* Custody Option B: one row per token and a 100% post-transfer allocation bar.
    Theme variables ensure legibility in both KairosWeb light/dark modes. */
@@ -38,10 +38,10 @@
 #custody-balancer .custody-list{display:grid;gap:0;margin-top:15px;border:1px solid var(--line,#dce7f6);border-radius:15px;overflow:hidden}
 #custody-balancer .custody-row{display:grid;grid-template-columns:minmax(100px,.65fr) minmax(180px,1.4fr) minmax(240px,1.45fr);gap:20px;padding:18px;align-items:start;border-bottom:1px solid var(--line,#dce7f6)}
 #custody-balancer .custody-row:last-child{border-bottom:0}
-#custody-balancer .custody-name{font-size:17px;font-weight:800}
-#custody-balancer .custody-tier{display:block;color:var(--muted,#61758c);font-size:12px;margin-top:3px}
-#custody-balancer .custody-sub{font-size:12px;color:var(--muted,#61758c);margin:0 0 8px}
-#custody-balancer .custody-transfer{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:2px 0;font-size:14px}
+#custody-balancer .custody-name{font-size:1.0625rem;font-weight:800}
+#custody-balancer .custody-tier{display:block;color:var(--muted,#61758c);font-size:0.75rem;margin-top:3px}
+#custody-balancer .custody-sub{font-size:0.75rem;color:var(--muted,#61758c);margin:0 0 8px}
+#custody-balancer .custody-transfer{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:2px 0;font-size:0.875rem}
 #custody-balancer .custody-transfer strong{font-variant-numeric:tabular-nums}
 #custody-balancer .custody-arrow{color:var(--muted,#61758c)}
 #custody-balancer .custody-plot{display:flex;height:15px;overflow:hidden;background:var(--soft,#e6eef7);border-radius:8px}
@@ -49,13 +49,13 @@
 #custody-balancer .custody-hodl{background:#285cb3}
 #custody-balancer .custody-core{background:#4d9ee7}
 #custody-balancer .custody-exchange{background:#16a588}
-#custody-balancer .custody-pct{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-top:9px;font-variant-numeric:tabular-nums}
+#custody-balancer .custody-pct{display:flex;gap:14px;flex-wrap:wrap;font-size:0.75rem;margin-top:9px;font-variant-numeric:tabular-nums}
 #custody-balancer .custody-pct span{white-space:nowrap}
 #custody-balancer .custody-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
-#custody-balancer .custody-note{font-size:12px;color:var(--muted,#61758c);margin:9px 0 0}
+#custody-balancer .custody-note{font-size:0.75rem;color:var(--muted,#61758c);margin:9px 0 0}
 #custody-balancer .custody-more{margin:16px 0;border:1px solid var(--line,#dce7f6);border-radius:12px;padding:12px 15px}
 #custody-balancer .custody-more summary{cursor:pointer;font-weight:700;color:var(--blue2,#2460aa)}
-#custody-balancer .custody-mini-row{display:flex;gap:14px;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line,#dce7f6);font-size:13px}
+#custody-balancer .custody-mini-row{display:flex;gap:14px;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line,#dce7f6);font-size:0.8125rem}
 #custody-balancer .custody-mini-row:last-child{border-bottom:0}
 #custody-balancer .custody-mini-row span{font-variant-numeric:tabular-nums}
 @media(max-width:850px){ #custody-balancer .custody-row{grid-template-columns:minmax(75px,.55fr) minmax(130px,1fr);gap:12px}#custody-balancer .custody-allocation{grid-column:1/-1}}

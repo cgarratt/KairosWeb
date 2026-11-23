@@ -1,0 +1,12 @@
+{
+  "status": "PASS_LOCAL",
+  "health_http": 200,
+  "checks": [
+    "jinja_templates_and_asset_serving",
+    "password_login_and_health_version_4_8_4",
+    "javascript_text_controls_bounds_persistence_and_storage_fallback",
+    "archive_paths_and_integrity"
+  ],
+  "deployed": false,
+  "ios_verified": false
+}

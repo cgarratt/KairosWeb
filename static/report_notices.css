@@ -29,7 +29,7 @@
   inset: 8px 8px auto auto;
   min-width: 44px;
   min-height: 44px;
-  font-size: 24px;
+  font-size: 1.5rem;
 }
 #spot-refresh[aria-busy="true"] svg { opacity: .55; }
 #spot-observed { margin: 4px 0 12px; white-space: normal; }

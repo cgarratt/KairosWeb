@@ -3,5 +3,3 @@ fastmcp>=2.12,<3
 Gunicorn>=23,<24
 google-auth>=2.35,<3
 requests>=2.31,<3
-webauthn>=2.8,<3
-psycopg[binary]>=3.2,<4

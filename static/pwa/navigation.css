@@ -26,7 +26,7 @@
     display: flex; flex-direction: column; justify-content: center; align-items: center;
     gap: 3px; min-width: 0; min-height: 52px; padding: 3px 0;
     border: 0; border-radius: 0; background: transparent; color: var(--muted);
-    font-size: clamp(9px, 2.65vw, 12px); line-height: 1.2;
+    font-size: clamp(0.5625rem, calc(2.65vw * var(--kairos-text-scale, 1)), 0.75rem); line-height: 1.2;
   }
   .navigation-row .global-nav .global-nav-link.active { color: var(--blue2); box-shadow: inset 0 2px currentColor; }
   .navigation-row .global-nav .global-nav-link:focus-visible { outline-offset: -3px; }
